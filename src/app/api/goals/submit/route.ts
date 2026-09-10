@@ -1,0 +1,73 @@
+import { NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+
+// إنشاء أو تحديث "خطوة هذا الأسبوع". يقبل goalId لتحديث هدف قائم (حالة/تقدّم)،
+// أو بياناته الكاملة لإنشاء هدف جديد.
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => null);
+  const { goalId, childId, weekStart, title, description, category, status, progress } = body ?? {};
+
+  const authed = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await authed.auth.getUser();
+  if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+
+  const admin = createSupabaseAdminClient();
+  const { data: teacher } = await admin.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
+  if (!teacher) return NextResponse.json({ error: "هذا الحساب ليس حساب معلم" }, { status: 403 });
+
+  if (goalId) {
+    // تحديث هدف قائم — تحقق أولًا أنه يخص طالبًا تابعًا لهذا المعلم
+    const { data: existing } = await admin
+      .from("weekly_goals")
+      .select("child_id")
+      .eq("id", goalId)
+      .maybeSingle();
+    if (!existing) return NextResponse.json({ error: "هدف غير موجود" }, { status: 404 });
+
+    const { data: link } = await admin
+      .from("subscriptions")
+      .select("child_id, cohorts(teacher_id)")
+      .eq("child_id", existing.child_id)
+      .eq("status", "active");
+    const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacher.id);
+    if (!belongsToTeacher) return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
+
+    const patch: Record<string, unknown> = {};
+    if (status) {
+      patch.status = status;
+      if (status === "achieved") patch.completed_at = new Date().toISOString();
+    }
+    if (typeof progress === "number") patch.progress = progress;
+
+    const { error } = await admin.from("weekly_goals").update(patch).eq("id", goalId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (!childId || !weekStart || !title) {
+    return NextResponse.json({ error: "بيانات ناقصة لإنشاء هدف جديد" }, { status: 400 });
+  }
+
+  const { data: link } = await admin
+    .from("subscriptions")
+    .select("child_id, cohorts(teacher_id)")
+    .eq("child_id", childId)
+    .eq("status", "active");
+  const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacher.id);
+  if (!belongsToTeacher) return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
+
+  const { error } = await admin.from("weekly_goals").insert({
+    child_id: childId,
+    week_start: weekStart,
+    title,
+    description: description ?? null,
+    category: category ?? null,
+    created_by_teacher_id: teacher.id,
+  });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
+}

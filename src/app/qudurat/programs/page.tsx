@@ -1,0 +1,1 @@
+import Shell from "@/components/Shell";export default function P(){return <Shell><main className="section"><div className="container"><h1 className="title">برامج القدرات.</h1><div className="cards">{['كمي','لفظي','شامل'].map(a=><article className="card" key={a}><h3>{a}</h3><p>معسكر جماعي عن بُعد • المواعيد والأسعار لاحقًا</p></article>)}</div></div></main></Shell>}
