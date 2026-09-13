@@ -13,7 +13,7 @@ const heroStories: HeroStory[] = [
     alt: "طالب يرتب أولوياته الدراسية في بيئة منزلية هادئة",
     objectPosition: "50% 12%",
     h1: ["بعد المدرسة،", "تبدأ خُطى."],
-    lead: "خُطى تساعد الطالب على ترتيب أولوياته، إنجاز مهامه، والاستعداد للغد، مع متابعة واضحة ومطمئنة لولي الأمر.",
+    lead: "يرتّب ما عليه، ينجز بتركيز، ويستعد للغد. وأنت تعرف كيف يتقدّم.",
     ctaLabel: "ابدأ مع خُطى",
     ctaHref: "/start",
     secondaryLabel: "كيف تعمل خُطى؟",
@@ -44,18 +44,18 @@ const heroStories: HeroStory[] = [
     image: "/images/khota-grade-10-12.webp",
     alt: "طالب ثانوي في جلسة تركيز مستقلة",
     objectPosition: "50% 15%",
-    h1: ["تنظيم،", "لا تدريس إضافي."],
-    lead: "جلسات تركيز تساعده على ترتيب مسؤولياته والاستعداد لما هو قادم.",
+    h1: ["تركيز يساعده", "على الإنجاز."],
+    lead: "جلسات منظّمة تساعده على ترتيب مسؤولياته والعمل باستقلالية أكبر.",
     ctaLabel: "استعرض الخطط",
     ctaHref: "/motabaa/plans",
   },
 ];
 
 const gradeBands: GradeBand[] = [
-  { band: "الصفوف 1–3", desc: "متابعة أقرب تساعده على بناء عادات الدراسة خطوة بخطوة.", image: "/images/khota-grade-1-3.webp", objectPosition: "50% 10%" },
-  { band: "الصفوف 4–6", desc: "مساحة أكبر للاستقلالية مع تنظيم المهام والأولويات.", image: "/images/khota-grade-4-6.webp", objectPosition: "50% 14%" },
-  { band: "الصفوف 7–9", desc: "جلسات التركيز تساعده على إدارة مسؤولياته والاستعداد لما هو قادم.", image: "/images/khota-grade-7-9.webp", objectPosition: "50% 8%" },
-  { band: "الصفوف 10–12", desc: "تنظيم أكثر نضجًا للمهام والاختبارات والأهداف الدراسية.", image: "/images/khota-grade-10-12.webp", objectPosition: "50% 18%" },
+  { band: "الصفوف 1–3", title: "يبني عاداته من البداية", desc: "متابعة أقرب تساعده على ترتيب مهامه والبدء بثقة خطوة بخطوة.", image: "/images/khota-grade-1-3.webp", objectPosition: "50% 10%" },
+  { band: "الصفوف 4–6", title: "يتعلّم أن يرتّب بنفسه", desc: "مساحة أكبر للاستقلالية، مع متابعة تحافظ على وضوح المهام والأولويات.", image: "/images/khota-grade-4-6.webp", objectPosition: "50% 14%" },
+  { band: "الصفوف 7–9", title: "مسؤوليات أكثر، وتنظيم أوضح", desc: "جلسات التركيز تساعده على إدارة وقته ومهامه والاستعداد لما هو قادم.", image: "/images/khota-grade-7-9.webp", objectPosition: "50% 8%" },
+  { band: "الصفوف 10–12", title: "استقلالية تناسب المرحلة", desc: "تنظيم أكثر نضجًا للمهام والاختبارات والأهداف، مع مساحة أكبر للعمل المستقل.", image: "/images/khota-grade-10-12.webp", objectPosition: "50% 18%" },
 ];
 
 const progression = [
@@ -85,14 +85,14 @@ export default function Home() {
         <section className="editorial-statement">
           <div className="container">
             <Reveal>
-              <span className="eyebrow">المشكلة</span>
+              <span className="eyebrow">بعد المدرسة</span>
               <h2>
-                مو كل طالب يحتاج
+                المشكلة ليست دائمًا
                 <br />
-                درسًا إضافيًا.
+                في فهم الدرس.
               </h2>
               <p>
-                أحيانًا يحتاج أن يعرف ماذا عليه، ومن أين يبدأ.
+                أحيانًا يحتاج الطالب أن يعرف ما عليه، ومن أين يبدأ، وكيف يكمل حتى ينجز.
               </p>
             </Reveal>
           </div>
@@ -101,7 +101,7 @@ export default function Home() {
         {/* ---------- Scene 03: ماذا تفعل خُطى ---------- */}
         <section className="section soft">
           <div className="container">
-            <Reveal><span className="eyebrow">كيف تفكر خُطى</span></Reveal>
+            <Reveal><span className="eyebrow">في كل جلسة</span></Reveal>
             <Reveal delay={80}>
               <div className="progression" style={{ marginTop: 28 }}>
                 {progression.map(([num, title]) => (
@@ -183,7 +183,7 @@ export default function Home() {
           <div className="container quiet-cinematic-content">
             <Reveal>
               <span className="eyebrow">المعلمون</span>
-              <h2>متابعة بشرية، بطريقة منظمة — لا شرح للدرس من جديد.</h2>
+              <h2>معلم يوجّه الطالب نحو الإنجاز والاستقلالية.</h2>
               <Link className="btn outline" style={{ marginTop: 20, borderColor: "#ffffff55", color: "#fff" }} href="/teachers">
                 تعرّف على طريقة المتابعة ←
               </Link>
@@ -226,9 +226,9 @@ export default function Home() {
         <section className="trust-strip">
           <div className="container">
             <ul>
-              <li>لا نطلب بيانات الدخول إلى المنصات المدرسية.</li>
-              <li>لا نطلب كلمات مرور مدرستي أو توكلنا.</li>
+              <li>لا نطلب كلمات مرور مدرستي أو توكلنا أو أي منصة مدرسية.</li>
               <li>بيانات الأسرة تُستخدم فقط لتقديم خدمة خُطى.</li>
+              <li>لا نشارك بيانات الأسرة لأغراض تسويقية خارجية.</li>
             </ul>
           </div>
         </section>

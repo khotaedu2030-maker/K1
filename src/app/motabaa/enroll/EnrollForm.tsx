@@ -66,8 +66,8 @@ export default function EnrollForm({
 
   return (
     <div className="container">
-      <span className="eyebrow">باقي خطوة واحدة</span>
-      <h1 className="title" style={{ fontSize: 32 }}>باقي خطوة واحدة لإكمال الاشتراك</h1>
+      <span className="eyebrow">إكمال الاشتراك</span>
+      <h1 className="title" style={{ fontSize: 32 }}>خطوة أخيرة قبل الدفع</h1>
 
       <div className="checkout-grid">
         <div className="checkout-summary">
@@ -108,7 +108,7 @@ export default function EnrollForm({
             {loading ? "جارٍ الحفظ..." : "الانتقال للدفع ←"}
           </button>
           <p style={{ color: "var(--gray)", fontSize: 13 }}>
-            الدفع سيُربط بمزوّد دفع فعلي لاحقًا؛ الاشتراك لا يصبح فعّالًا إلا بعد تأكيد الدفع من الخادم.
+            لا يصبح الاشتراك فعّالًا إلا بعد تأكيد الدفع بنجاح.
           </p>
         </div>
       </div>

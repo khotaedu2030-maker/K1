@@ -27,6 +27,11 @@ export default function HeroStoryRail({ stories }: { stories: HeroStory[] }) {
 
   useEffect(() => {
     if (userInteracted) return;
+    // يحترم تفضيل تقليل الحركة فعليًا — لا يكفي إخفاء حركة الانتقال البصرية بـCSS وحدها؛
+    // المستخدم الذي يطلب تقليل الحركة لا يجب أن يتغيّر محتوى القصة تلقائيًا من تحته إطلاقًا.
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
     timerRef.current = setInterval(() => {
       setActive((a: number) => (a + 1) % stories.length);
     }, 6000);

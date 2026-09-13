@@ -41,7 +41,7 @@ img,svg{max-width:100%;height:auto;display:block}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 
 /* ================= Header ================= */
-header{position:sticky;top:0;z-index:var(--z-header);background:#fffffff5;backdrop-filter:blur(10px);border-bottom:1px solid var(--line);transition:box-shadow .3s var(--ease)}
+header{position:sticky;top:0;z-index:var(--z-header);background:#fffffff5;backdrop-filter:blur(10px);border-bottom:1px solid var(--line);transition:box-shadow .3s var(--ease);padding-top:env(safe-area-inset-top)}
 .nav{height:78px;display:flex;align-items:center;gap:32px}
 .brand{margin-left:auto;display:flex;gap:11px;align-items:center;transition:opacity .2s}
 .brand:hover{opacity:.85}
@@ -239,7 +239,7 @@ footer{background:#08131e;color:white;padding:70px 0 24px}
 .hamburger span{width:20px;height:2px;background:var(--n);border-radius:2px}
 .mobile-nav-backdrop{position:fixed;inset:0;background:#0d1b2a77;z-index:var(--z-overlay);backdrop-filter:blur(2px);opacity:0;visibility:hidden;transition:opacity var(--motion-fast) var(--ease-premium),visibility 0s var(--motion-fast)}
 .mobile-nav-backdrop.open{opacity:1;visibility:visible;transition:opacity var(--motion-fast) var(--ease-premium),visibility 0s}
-.mobile-nav-panel{position:fixed;top:0;bottom:0;right:0;width:min(84vw,340px);background:var(--card);z-index:var(--z-drawer);padding:26px;box-shadow:-16px 0 50px rgba(13,27,42,.18);display:flex;flex-direction:column;gap:24px;overflow-y:auto;transform:translateX(100%);visibility:hidden;transition:transform var(--motion-base) var(--ease-premium),visibility 0s var(--motion-base)}
+.mobile-nav-panel{position:fixed;top:0;bottom:0;right:0;width:min(84vw,340px);background:var(--card);z-index:var(--z-drawer);padding:26px;padding-bottom:calc(26px + env(safe-area-inset-bottom));padding-top:calc(26px + env(safe-area-inset-top));box-shadow:-16px 0 50px rgba(13,27,42,.18);display:flex;flex-direction:column;gap:24px;overflow-y:auto;transform:translateX(100%);visibility:hidden;transition:transform var(--motion-base) var(--ease-premium),visibility 0s var(--motion-base)}
 .mobile-nav-panel.open{transform:translateX(0);visibility:visible;transition:transform var(--motion-base) var(--ease-premium),visibility 0s}
 .mobile-nav-panel nav{display:flex;flex-direction:column;gap:4px;font-size:17px}
 .mobile-nav-panel nav a{padding:15px 6px;border-bottom:1px solid var(--line)}
@@ -434,7 +434,7 @@ header.scrolled{box-shadow:0 6px 24px rgba(13,27,42,.06)}
 
 /* ================= Checkout (Enrollment) Two-Column ================= */
 .checkout-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:32px;align-items:start;margin-top:28px}
-.checkout-summary{background:var(--card);color:var(--n);border-radius:var(--radius-lg);padding:28px;position:sticky;top:96px;border:1px solid var(--line);box-shadow:var(--shadow-md)}
+.checkout-summary{background:var(--card);color:var(--n);border-radius:var(--radius-lg);padding:28px;position:sticky;top:96px;top:calc(96px + env(safe-area-inset-top));border:1px solid var(--line);box-shadow:var(--shadow-md)}
 .checkout-summary h3{margin:0 0 16px;font-size:14px;color:var(--t);text-transform:uppercase;letter-spacing:.05em}
 .checkout-row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);font-size:14.5px}
 .checkout-row:last-child{border-bottom:0}
@@ -572,7 +572,7 @@ header.transparent + #main-content > main > .hero-editorial-v28:first-child{marg
 /* ================= /motabaa/plans — Real Structural Redesign ================= */
 .plans-layout{display:grid;grid-template-columns:1fr 380px;gap:40px;align-items:start;margin-top:8px}
 .plans-main{min-width:0}
-.plans-sticky{position:sticky;top:96px;background:var(--card);color:var(--n);border-radius:var(--radius-lg);padding:30px;box-shadow:var(--shadow-md);border:1px solid var(--line)}
+.plans-sticky{position:sticky;top:96px;top:calc(96px + env(safe-area-inset-top));background:var(--card);color:var(--n);border-radius:var(--radius-lg);padding:30px;box-shadow:var(--shadow-md);border:1px solid var(--line)}
 .plans-sticky h3{margin:0 0 18px;font-size:14px;color:var(--t);text-transform:uppercase;letter-spacing:.05em}
 .plans-sticky-row{display:flex;justify-content:space-between;gap:10px;padding:13px 0;border-bottom:1px solid var(--line);font-size:14.5px}
 .plans-sticky-row.pending span:last-child{color:var(--gray);font-style:italic}
@@ -679,13 +679,29 @@ header.transparent + #main-content > main > .hero-editorial-v28:first-child{marg
    ========================================================= */
 
 /* Hero سينمائي: صورة تهيمن على المساحة، النص فوقها بتدرّج قراءة ممتاز — لا بطاقة عائمة تحصر الصورة */
-.hero-editorial-v28{position:relative;min-height:86vh;display:flex;align-items:flex-end;overflow:hidden}
+.hero-editorial-v28{position:relative;min-height:86vh;min-height:86svh;display:flex;align-items:flex-end;overflow:hidden}
 .hero-editorial-v28 .bg{position:absolute;inset:0}
 .hero-editorial-v28 .bg::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(13,27,42,.88) 0%,rgba(13,27,42,.55) 35%,rgba(13,27,42,.08) 65%,transparent 85%)}
 .hero-editorial-v28-content{position:relative;z-index:2;color:#fff;padding:0 0 72px}
 .hero-editorial-v28 h1{font-size:clamp(42px,7vw,88px);line-height:1.05;font-weight:800;margin:0 0 22px}
 .hero-editorial-v28 .lead{color:#e3e9ec;max-width:640px;font-size:19px}
-@media(max-width:850px){.hero-editorial-v28{min-height:78vh}.hero-editorial-v28-content{padding-bottom:44px}}
+@media(max-width:850px){
+  .hero-editorial-v28{min-height:82vh;min-height:82svh}
+  .hero-editorial-v28 .bg::after{
+    background:
+      linear-gradient(90deg,rgba(13,27,42,.18) 0%,rgba(13,27,42,.44) 46%,rgba(13,27,42,.78) 100%),
+      linear-gradient(0deg,rgba(13,27,42,.92) 0%,rgba(13,27,42,.58) 38%,rgba(13,27,42,.18) 72%,rgba(13,27,42,.04) 100%);
+  }
+  .hero-editorial-v28-content{padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+  .hero-editorial-v28 h1{font-size:clamp(32px,8vw,54px);text-shadow:0 2px 18px rgba(13,27,42,.28)}
+  .hero-editorial-v28 .lead{font-size:16px;color:#f2f5f6;text-shadow:0 1px 12px rgba(13,27,42,.32)}
+  .hero-editorial-v28 .actions{gap:10px}
+}
+@media(max-width:480px){
+  /* على الشاشات القصيرة جدًا: زر ثانوي واحد يكفي — لا يُخفى وظيفيًا (لا يزال متاحًا عبر رابط
+     "كيف تعمل خُطى" بالتنقّل وبقسم لاحق بالصفحة)، فقط لا يُكرَّر داخل مساحة الـHero الضيقة. */
+  .hero-editorial-v28 .actions .btn.outline{display:none}
+}
 
 /* Split أفعليًا غير متماثل (60/40 أو 55/45) — بديل .split-screen الثابت 50/50 لبعض المشاهد */
 .split-60{display:grid;grid-template-columns:1.4fr 1fr;min-height:560px}
@@ -700,10 +716,13 @@ header.transparent + #main-content > main > .hero-editorial-v28:first-child{marg
 .progression-item h3{font-size:clamp(19px,2vw,24px);margin:0;line-height:1.35}
 .progression-3{grid-template-columns:repeat(3,1fr)}
 @media(max-width:850px){
-  .progression{grid-template-columns:1fr;gap:28px}
+  .progression{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px}
   .progression-3{grid-template-columns:1fr}
   .progression::before{display:none}
-  .progression-item{padding-inline-end:0;padding-inline-start:20px;border-inline-start:2px solid var(--t)}
+  .progression-item{padding:16px 12px;border-top:1px solid var(--line);border-inline-start:0;min-width:0}
+  .progression-num{margin-bottom:8px}
+  .progression-item h3{font-size:20px}
+  .progression-3 .progression-item{padding-inline-start:20px;border-inline-start:2px solid var(--t);border-top:0}
 }
 
 /* شبكة 2×2 كبيرة للمراحل الأربع — صور فعلية بحجم حقيقي، لا بطاقات صغيرة متطابقة */

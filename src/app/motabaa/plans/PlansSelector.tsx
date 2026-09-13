@@ -69,6 +69,10 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
     setGrade(g);
     setPlanId(null);
     setCohortId(null);
+    // توجيه بصري هادئ لخطوة "اختر الخطة" — block:"nearest" يمنع القفز إن كانت الخطوة ظاهرة أصلًا
+    requestAnimationFrame(() => {
+      document.getElementById("plan-step")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
   }
 
   // مزامنة الاختيار الحالي مع رابط الصفحة — إن رجع المستخدم من صفحة التسجيل بزر الرجوع،
@@ -160,6 +164,9 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
                       onClick={() => {
                         setPlanId(p.id);
                         setCohortId(null);
+                        requestAnimationFrame(() => {
+                          document.getElementById("cohort-step")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                        });
                       }}
                     >
                       <h3 style={{ margin: 0, fontSize: 19 }}>{p.name}</h3>
@@ -190,7 +197,7 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
 
           {/* ---------- الخطوة 3: المجموعة ---------- */}
           <div className="plans-step-block" style={{ marginBottom: 0 }}>
-            <div className="plans-step-head">
+            <div className="plans-step-head" id="cohort-step">
               <span className="plans-step-num">٣</span>
               <h2>اختر المجموعة</h2>
             </div>

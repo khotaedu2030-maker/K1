@@ -1,0 +1,11 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="64" height="64" rx="14" fill="#F7F3ED"/>
+  <defs>
+    <linearGradient id="khota-steps-fav" x1="6" y1="52" x2="52" y2="10" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2CB1A1"/>
+      <stop offset="1" stop-color="#FFB199"/>
+    </linearGradient>
+  </defs>
+  <path d="M6 52H18V44H30V34H42V22H50V14H56" stroke="url(#khota-steps-fav)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M55 4l2.1 4.4 4.9.7-3.5 3.4.8 4.9-4.3-2.3-4.3 2.3.8-4.9-3.5-3.4 4.9-.7L55 4z" fill="#FFD166"/>
+</svg>

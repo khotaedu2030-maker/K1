@@ -11,8 +11,10 @@ const links = [
   ["الرسائل", "/parent/messages"],
   ["التوصيات", "/parent/recommendations"],
   ["الاشتراك", "/parent/subscriptions"],
-  ["المدفوعات", "/parent/payments"],
 ];
+// "المدفوعات" (/parent/payments) أُزيلت من هذه القائمة عمدًا — الصفحة لا تزال "قيد التطوير"
+// فعليًا (تحقّق مباشر من محتواها)، وتفاصيل الاشتراك/السعر المتاحة فعليًا موجودة بالفعل في
+// "الاشتراك" أعلاه. المسار نفسه لم يُحذَف، فقط أُزيل من التنقّل الأساسي لولي الأمر.
 
 export default async function P() {
   const context = await resolveParentContext();
@@ -170,7 +172,7 @@ export default async function P() {
                   <div className="dashcard">
                     <b>ماذا أنجز مؤخرًا؟</b>
                     {tasks && tasks.length > 0 ? (
-                      tasks.map((t, i) => (
+                      tasks.map((t: { title: string; status: string }, i: number) => (
                         <div className="taskline" key={i}>
                           <span className={t.status === "done" ? "ok" : "warn"}>{t.status === "done" ? "✓" : "△"}</span>
                           <span>{t.title}</span>

@@ -17,11 +17,12 @@ async function getData() {
   try {
     const supabase = createSupabaseAdminClient();
 
-    const { data: plans } = await supabase
+    const { data: plans, error: plansError } = await supabase
       .from("plans")
       .select("id,product,name,day_patterns,price_sar,days_per_week,sessions_per_month")
       .in("product", ["motabaa", "focus_room"])
       .order("id");
+    if (plansError) throw plansError;
 
     const { data: cohorts, error: cohortsError } = await supabase.rpc("public_cohorts_catalog", {
       p_product: null,
@@ -33,7 +34,13 @@ async function getData() {
     );
 
     return { plans: (plans ?? []) as PlanRow[], cohorts: relevantCohorts, live: true };
-  } catch {
+  } catch (err) {
+    // نسجّل السبب الحقيقي في سجلات الخادم (اسم/رسالة الخطأ فقط — لا قيم أسرار إطلاقًا) حتى لا
+    // يختفي سبب عطل حقيقي في الإنتاج خلف رسالة عامة. راجع سجلات Vercel Functions لهذا المسار
+    // عند ظهور هذه الحالة — السبب الأشيع: SUPABASE_SERVICE_ROLE_KEY أو NEXT_PUBLIC_SUPABASE_URL
+    // غير مُعرَّفين (أو خاطئين) في إعدادات البيئة على Vercel لهذا المشروع تحديدًا.
+    const message = err instanceof Error ? err.message : "خطأ غير معروف";
+    console.error("[/motabaa/plans] فشل جلب الخطط/المجموعات:", message);
     return { plans: [] as PlanRow[], cohorts: [] as CohortRow[], live: false };
   }
 }
@@ -47,7 +54,7 @@ export default async function P() {
         {!live && (
           <div className="container">
             <p className="badge" style={{ marginBottom: 20 }}>
-              لا يوجد اتصال بمشروع Supabase حاليًا — أضف مفاتيحك في .env.local لعرض الخطط والمجموعات الحقيقية
+              تعذّر تحميل الخطط حاليًا. حاول تحديث الصفحة، أو تواصل معنا إذا استمرت المشكلة.
             </p>
           </div>
         )}
