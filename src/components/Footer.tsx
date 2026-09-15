@@ -35,6 +35,14 @@ export default function Footer() {
             <Link href="/help">الأسئلة الشائعة</Link>
             <Link href="/contact">تواصل معنا</Link>
           </div>
+          <div>
+            <h4>قانوني</h4>
+            <Link href="/privacy">سياسة الخصوصية</Link>
+            <Link href="/terms">الشروط والأحكام</Link>
+            <Link href="/refund-policy">الاسترجاع والاسترداد</Link>
+            <Link href="/complaints">الشكاوى والمقترحات</Link>
+            <Link href="/legal">بيانات مقدّم الخدمة</Link>
+          </div>
         </div>
       </div>
       <div className="container copy">

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { isValidSaudiLocalPhone, normalizeSaudiPhone, SAUDI_PHONE_ERROR } from "@/lib/phone";
 import { formatSessionCount } from "@/lib/plan-display";
 
@@ -66,8 +67,8 @@ export default function EnrollForm({
 
   return (
     <div className="container">
-      <span className="eyebrow">إكمال الاشتراك</span>
-      <h1 className="title" style={{ fontSize: 32 }}>خطوة أخيرة قبل الدفع</h1>
+      <span className="eyebrow">باقي خطوة واحدة</span>
+      <h1 className="title" style={{ fontSize: 32 }}>باقي خطوة واحدة لإكمال الاشتراك</h1>
 
       <div className="checkout-grid">
         <div className="checkout-summary">
@@ -80,7 +81,10 @@ export default function EnrollForm({
           {details.sessionsPerMonth && <div className="checkout-row"><span>عدد الجلسات</span><span>{formatSessionCount(details.sessionsPerMonth)} شهريًا</span></div>}
           {details.cohortTitle && <div className="checkout-row"><span>المجموعة</span><span>{details.cohortTitle}</span></div>}
           {details.time && <div className="checkout-row"><span>الوقت</span><span>{details.time}</span></div>}
-          {details.price && <div className="checkout-row price"><span>السعر</span><span>{details.price}</span></div>}
+          {details.price && <div className="checkout-row price"><span>قيمة الاشتراك لهذه الدورة</span><span>{details.price}</span></div>}
+          <Link href="/refund-policy" target="_blank" style={{ display: "block", marginTop: 14, fontSize: 12.5, color: "var(--gray)" }}>
+            سياسة الاسترجاع والاسترداد ←
+          </Link>
         </div>
 
         <div className="form" style={{ marginTop: 0 }}>
@@ -108,7 +112,7 @@ export default function EnrollForm({
             {loading ? "جارٍ الحفظ..." : "الانتقال للدفع ←"}
           </button>
           <p style={{ color: "var(--gray)", fontSize: 13 }}>
-            لا يصبح الاشتراك فعّالًا إلا بعد تأكيد الدفع بنجاح.
+            الدفع سيُربط بمزوّد دفع فعلي لاحقًا؛ الاشتراك لا يصبح فعّالًا إلا بعد تأكيد الدفع من الخادم.
           </p>
         </div>
       </div>

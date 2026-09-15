@@ -91,7 +91,7 @@ export default async function P() {
               <b>{childName.get(s.child_id)} — {s.plans?.name}</b>
               <div className="taskline"><span>الحالة</span><span className="badge">{statusLabel[s.status] ?? s.status}</span></div>
               {s.start_date && <div className="taskline"><span>تاريخ البداية</span><span>{formatPlainDateArabic(s.start_date)}</span></div>}
-              {s.renewal_date && <div className="taskline"><span>تاريخ التجديد</span><span>{formatPlainDateArabic(s.renewal_date)}</span></div>}
+              {s.renewal_date && <div className="taskline"><span>نهاية الدورة الحالية</span><span>{formatPlainDateArabic(s.renewal_date)}</span></div>}
 
               {(pausesBySub.get(s.id) ?? []).map((p: any) => (
                 <div className="taskline" key={p.id}>

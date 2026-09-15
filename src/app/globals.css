@@ -181,7 +181,7 @@ a.card,button.card{display:block;width:100%}
 
 /* ================= Footer ================= */
 footer{background:#08131e;color:white;padding:70px 0 24px}
-.foot{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:44px}
+.foot{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr 1fr;gap:36px}
 .foot a{display:block;color:#c8d3da;margin:11px 0;transition:color .18s;font-size:14.5px}
 .foot a:hover{color:var(--t)}
 .foot h4{color:#8bd5cc;font-size:12.5px;letter-spacing:.06em;margin-bottom:16px;font-weight:800}
@@ -687,14 +687,9 @@ header.transparent + #main-content > main > .hero-editorial-v28:first-child{marg
 .hero-editorial-v28 .lead{color:#e3e9ec;max-width:640px;font-size:19px}
 @media(max-width:850px){
   .hero-editorial-v28{min-height:82vh;min-height:82svh}
-  .hero-editorial-v28 .bg::after{
-    background:
-      linear-gradient(90deg,rgba(13,27,42,.18) 0%,rgba(13,27,42,.44) 46%,rgba(13,27,42,.78) 100%),
-      linear-gradient(0deg,rgba(13,27,42,.92) 0%,rgba(13,27,42,.58) 38%,rgba(13,27,42,.18) 72%,rgba(13,27,42,.04) 100%);
-  }
   .hero-editorial-v28-content{padding-bottom:calc(32px + env(safe-area-inset-bottom))}
-  .hero-editorial-v28 h1{font-size:clamp(32px,8vw,54px);text-shadow:0 2px 18px rgba(13,27,42,.28)}
-  .hero-editorial-v28 .lead{font-size:16px;color:#f2f5f6;text-shadow:0 1px 12px rgba(13,27,42,.32)}
+  .hero-editorial-v28 h1{font-size:clamp(32px,8vw,54px)}
+  .hero-editorial-v28 .lead{font-size:16px}
   .hero-editorial-v28 .actions{gap:10px}
 }
 @media(max-width:480px){
@@ -716,13 +711,10 @@ header.transparent + #main-content > main > .hero-editorial-v28:first-child{marg
 .progression-item h3{font-size:clamp(19px,2vw,24px);margin:0;line-height:1.35}
 .progression-3{grid-template-columns:repeat(3,1fr)}
 @media(max-width:850px){
-  .progression{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px}
+  .progression{grid-template-columns:1fr;gap:28px}
   .progression-3{grid-template-columns:1fr}
   .progression::before{display:none}
-  .progression-item{padding:16px 12px;border-top:1px solid var(--line);border-inline-start:0;min-width:0}
-  .progression-num{margin-bottom:8px}
-  .progression-item h3{font-size:20px}
-  .progression-3 .progression-item{padding-inline-start:20px;border-inline-start:2px solid var(--t);border-top:0}
+  .progression-item{padding-inline-end:0;padding-inline-start:20px;border-inline-start:2px solid var(--t)}
 }
 
 /* شبكة 2×2 كبيرة للمراحل الأربع — صور فعلية بحجم حقيقي، لا بطاقات صغيرة متطابقة */

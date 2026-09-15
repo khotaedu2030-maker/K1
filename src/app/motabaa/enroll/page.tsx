@@ -46,7 +46,7 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
         details.sessionsPerMonth = sessionsPerMonth;
         details.cohortTitle = formatCohortDisplayName(cohort.title);
         details.time = `${String(cohort.start_time).slice(0, 5)} – ${String(cohort.end_time).slice(0, 5)}`;
-        details.price = priceSar ? `${priceSar} ر.س / شهريًا` : "السعر يُعلن قريبًا";
+        details.price = priceSar ? `${priceSar} ر.س` : "السعر يُعلن قريبًا";
       }
     } catch {
       // بلا اتصال حقيقي بقاعدة البيانات — نكتفي بالملخص الأساسي (الصف فقط)

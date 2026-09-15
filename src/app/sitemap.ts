@@ -1,8 +1,9 @@
 import type { MetadataRoute } from "next";
 
 // صفحات عامة تسويقية فقط — لا مسارات محمية (parent/teacher/admin/student)، ولا API، ولا مسارات
-// قديمة مخفية عمدًا من رحلة KHOTA الحالية (English/قدرات). لا نطاق إنتاج معروف بعد، فالمسارات
-// نسبية — Next.js يحوّلها تلقائيًا حسب النطاق الفعلي وقت التشغيل.
+// قديمة مخفية عمدًا من رحلة KHOTA الحالية (English/قدرات).
+const PRODUCTION_DOMAIN = "https://khota.sa";
+
 const PUBLIC_ROUTES = [
   "/",
   "/start",
@@ -17,12 +18,15 @@ const PUBLIC_ROUTES = [
   "/teach-with-khota",
   "/privacy",
   "/terms",
+  "/refund-policy",
+  "/complaints",
+  "/legal",
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   return PUBLIC_ROUTES.map((route) => ({
-    url: route,
+    url: `${PRODUCTION_DOMAIN}${route}`,
     lastModified: now,
     changeFrequency: route === "/" ? "weekly" : "monthly",
     priority: route === "/" ? 1 : 0.6,

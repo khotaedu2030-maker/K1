@@ -1,48 +1,169 @@
-import Shell from "@/components/Shell";
+import Link from "next/link";
+import LegalPage, { type LegalSection } from "@/components/LegalPage";
+
+export const metadata = {
+  title: "الشروط والأحكام",
+  description: "الشروط والأحكام الناظمة لاستخدام خُطى، مكتوبة بلغة واضحة ومباشرة.",
+};
+
+const sections: LegalSection[] = [
+  {
+    id: "definitions",
+    label: "التعريفات",
+    title: "التعريفات",
+    body: (
+      <ul style={{ margin: 0, paddingInlineStart: 20, display: "grid", gap: 6 }}>
+        <li><b>خُطى / المنصة:</b> خدمة المتابعة التعليمية الرقمية موضوع هذه الشروط.</li>
+        <li><b>ولي الأمر:</b> الشخص المتعاقد مع خُطى والمسؤول عن حساب الطالب.</li>
+        <li><b>الطالب:</b> الابن أو الابنة المستفيد من الخدمة بحساب يديره ولي الأمر.</li>
+        <li><b>الاشتراك:</b> تفعيل خطة معيّنة لطالب واحد ضمن مجموعة محدَّدة.</li>
+        <li><b>الجلسة:</b> اللقاء التعليمي عن بُعد ضمن الخطة المختارة.</li>
+        <li><b>الخطة:</b> أحد برامج المتابعة المعروضة بأسعارها وعدد جلساتها الشهرية.</li>
+      </ul>
+    ),
+  },
+  {
+    id: "nature",
+    label: "طبيعة الخدمة",
+    title: "طبيعة الخدمة",
+    body: (
+      <p style={{ margin: 0 }}>
+        خُطى خدمة متابعة تعليمية رقمية بعد المدرسة، تساعد الطالب على تنظيم مهامه، الإنجاز
+        بتركيز، والاستعداد لليوم الدراسي التالي، مع تمكين ولي الأمر من متابعة التقدّم. لا تمثّل
+        خُطى المدرسة أو جهة إصدار شهادات أكاديمية، ولا تقوم بإنجاز الواجب نيابةً عن الطالب.
+      </p>
+    ),
+  },
+  {
+    id: "eligibility",
+    label: "ولي الأمر",
+    title: "أهلية الاستخدام وولي الأمر",
+    body: (
+      <ul style={{ margin: 0, paddingInlineStart: 20, display: "grid", gap: 6 }}>
+        <li>يتم التعاقد والاشتراك بواسطة ولي الأمر، أو من لديه الصفة والصلاحية النظامية لذلك.</li>
+        <li>ولي الأمر مسؤول عن صحة البيانات المقدَّمة عند التسجيل.</li>
+        <li>تُستخدَم بيانات الطالب بالقدر اللازم فقط لتقديم الخدمة.</li>
+      </ul>
+    ),
+  },
+  {
+    id: "billing",
+    label: "الخطط والاشتراك",
+    title: "الخطط والاشتراك",
+    body: (
+      <>
+        <p style={{ margin: 0 }}>الخطط المتاحة حاليًا:</p>
+        <ul style={{ margin: "8px 0 0", paddingInlineStart: 20, display: "grid", gap: 4 }}>
+          <li>الانطلاقة — 399 ر.س، 8 جلسات شهريًا.</li>
+          <li>الأساسية — 529 ر.س، 12 جلسة شهريًا.</li>
+          <li>المكثفة — 679 ر.س، 16 جلسة شهريًا.</li>
+        </ul>
+        <p style={{ margin: "10px 0 0" }}>
+          تظهر تفاصيل الخطة النهائية والسعر والجدول للمستخدم قبل تأكيد الدفع في كل مرة.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "payment",
+    label: "الدفع",
+    title: "الدفع",
+    body: (
+      <ul style={{ margin: 0, paddingInlineStart: 20, display: "grid", gap: 6 }}>
+        <li>لا يُعتبَر الاشتراك مدفوعًا إلا بعد التحقق الفعلي من عملية الدفع من جهة الخادم ومزوّد الدفع، عند تفعيل بوابة الدفع.</li>
+        <li>السعر النهائي يظهر قبل تنفيذ الدفع، ولا توجد رسوم مخفية.</li>
+        <li>الضرائب — إن انطبقت نظامًا — تُوضَّح للمستخدم قبل الدفع.</li>
+      </ul>
+    ),
+  },
+  {
+    id: "delivery",
+    label: "تقديم الخدمة",
+    title: "تقديم الخدمة والجلسات",
+    body: (
+      <ul style={{ margin: 0, paddingInlineStart: 20, display: "grid", gap: 6 }}>
+        <li>الخدمة رقمية بالكامل — لا يوجد شحن أو توصيل لمنتجات مادية.</li>
+        <li>تُنفَّذ الجلسات عن بُعد وفق الجدول المختار أو المؤكَّد.</li>
+        <li>تظهر تفاصيل المجموعة والموعد قبل إكمال التسجيل متى كانت متاحة.</li>
+        <li>تُستخدَم عبارة "جلسات التركيز" للمراحل ذات العلاقة.</li>
+      </ul>
+    ),
+  },
+  {
+    id: "attendance",
+    label: "الحضور والتعويض",
+    title: "الحضور والغياب والتعويض",
+    body: (
+      <p style={{ margin: 0 }}>
+        الغياب المبرَّر أو الإلغاء من طرف خُطى قد يمنح رصيد تعويض (makeup credit) قابلًا
+        للاستخدام في جلسة بديلة، حسب السياسة المعتمدة في المنصة — الغياب غير المبرَّر لا يمنح
+        تعويضًا تلقائيًا. لا تُسقِط هذه الفقرة أي حق نظامي؛ راجع{" "}
+        <Link href="/refund-policy" style={{ color: "var(--t)", fontWeight: 700 }}>
+          سياسة الاسترجاع والاسترداد
+        </Link>{" "}
+        للحقوق المتعلقة بالاسترداد المالي.
+      </p>
+    ),
+  },
+  {
+    id: "cancel",
+    label: "الإلغاء",
+    title: "الإلغاء ووقف التجديد",
+    body: (
+      <ul style={{ margin: 0, paddingInlineStart: 20, display: "grid", gap: 6 }}>
+        <li>يمكن لولي الأمر طلب عدم الاستمرار للفترات اللاحقة في أي وقت.</li>
+        <li>الإلغاء لا يُسقِط الحقوق النظامية المتعلقة بالاسترداد، الموضَّحة في سياسة الاسترجاع والاسترداد.</li>
+      </ul>
+    ),
+  },
+  {
+    id: "account",
+    label: "مسؤولية الحساب",
+    title: "مسؤولية الحساب",
+    body: (
+      <ul style={{ margin: 0, paddingInlineStart: 20, display: "grid", gap: 6 }}>
+        <li>المحافظة على سرية بيانات الدخول ورمز التحقق وعدم مشاركتها مع الغير.</li>
+        <li>عدم إساءة استخدام المنصة بأي شكل يخالف الغرض منها.</li>
+      </ul>
+    ),
+  },
+  {
+    id: "changes",
+    label: "التعديلات",
+    title: "التعديلات على الشروط",
+    body: (
+      <p style={{ margin: 0 }}>
+        يجوز لخُطى تحديث هذه الشروط عند الحاجة، مع إظهار تاريخ آخر تحديث أسفل الصفحة. لا تُطبَّق
+        التعديلات الجوهرية بأثر رجعي بما ينتقص من حقوق نشأت قبل نفاذها.
+      </p>
+    ),
+  },
+  {
+    id: "law",
+    label: "النظام الواجب التطبيق",
+    title: "النظام الواجب التطبيق",
+    body: <p style={{ margin: 0 }}>تخضع هذه الشروط للأنظمة المعمول بها في المملكة العربية السعودية.</p>,
+  },
+  {
+    id: "links",
+    label: "روابط ذات صلة",
+    title: "روابط ذات صلة",
+    body: (
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <Link href="/privacy" style={{ color: "var(--t)", fontWeight: 700 }}>سياسة الخصوصية</Link>
+        <Link href="/refund-policy" style={{ color: "var(--t)", fontWeight: 700 }}>سياسة الاسترجاع والاسترداد</Link>
+        <Link href="/complaints" style={{ color: "var(--t)", fontWeight: 700 }}>الشكاوى والمقترحات</Link>
+      </div>
+    ),
+  },
+];
 
 export default function P() {
   return (
-    <Shell>
-      <main className="section">
-        <div className="narrow">
-          <span className="eyebrow">خُطى</span>
-          <h1 className="title" style={{ fontSize: 36 }}>الشروط والأحكام</h1>
-          <nav aria-label="أقسام الصفحة" style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 18, borderBottom: "1px solid var(--line)", paddingBottom: 16 }}>
-            <a href="#nature" style={{ color: "var(--t)", fontWeight: 700, fontSize: 14 }}>طبيعة الخدمة</a>
-            <a href="#billing" style={{ color: "var(--t)", fontWeight: 700, fontSize: 14 }}>الاشتراك والدفع</a>
-            <a href="#attendance" style={{ color: "var(--t)", fontWeight: 700, fontSize: 14 }}>الحضور والتعويض</a>
-            <a href="#cancel" style={{ color: "var(--t)", fontWeight: 700, fontSize: 14 }}>إنهاء الاشتراك</a>
-          </nav>
-          <div className="list" style={{ marginTop: 24 }}>
-            <article id="nature">
-              <b>طبيعة الخدمة</b>
-              <p style={{ color: "var(--gray)", marginTop: 6 }}>
-                خُطى منصة متابعة تعليمية بعد المدرسة — نساعد الطالب على تنظيم مهامه وإنجازها
-                بنفسه، ولا نقدّم حلول واجبات أو شرحًا أكاديميًا كاملًا بديلًا عن المدرسة.
-              </p>
-            </article>
-            <article id="billing">
-              <b>الاشتراك والدفع</b>
-              <p style={{ color: "var(--gray)", marginTop: 6 }}>
-                الاشتراك شهري بحسب الخطة المختارة عند التسجيل، ويُفعَّل بعد تأكيد الدفع. وتُعرض آلية التجديد أو الإلغاء بوضوح عند تفعيل وسيلة الدفع المعتمدة.
-              </p>
-            </article>
-            <article id="attendance">
-              <b>الحضور والتعويض</b>
-              <p style={{ color: "var(--gray)", marginTop: 6 }}>
-                الغياب المبرَّر أو الإلغاء من طرف خُطى قد يمنح رصيد تعويض حسب سياسة المنصة —
-                الغياب غير المبرَّر لا يمنح تعويضًا تلقائيًا.
-              </p>
-            </article>
-            <article id="cancel">
-              <b>إنهاء الاشتراك</b>
-              <p style={{ color: "var(--gray)", marginTop: 6 }}>
-                يمكن لولي الأمر طلب إيقاف الاشتراك في أي وقت عبر التواصل معنا.
-              </p>
-            </article>
-          </div>
-        </div>
-      </main>
-    </Shell>
+    <LegalPage
+      title="الشروط والأحكام"
+      intro="نصوص واضحة ومباشرة توضّح علاقتك بخُطى — من الاشتراك حتى الإلغاء."
+      sections={sections}
+    />
   );
 }
