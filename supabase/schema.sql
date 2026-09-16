@@ -250,6 +250,13 @@ create table if not exists payments(
   created_at timestamptz default now()
 );
 
+-- يمنع أكثر من محاولة دفع Paylink واحدة "pending" لنفس الاشتراك في وقت واحد — يغلق Race
+-- Condition بين خطوتي "بحث عن pending" و"إنشاء pending" في /api/payments/paylink/create
+-- (راجع migrations/20260916_paylink_pending_uniqueness.sql لتفاصيل السبب).
+create unique index if not exists uq_paylink_one_pending_per_subscription
+on public.payments (subscription_id)
+where provider = 'paylink' and status = 'pending';
+
 create table if not exists teacher_availability(
   id uuid primary key default gen_random_uuid(),
   teacher_id uuid not null references teachers(id) on delete cascade,

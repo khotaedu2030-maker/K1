@@ -1,4 +1,5 @@
 import Shell from "@/components/Shell";
+import { Suspense } from "react";
 import PaymentClient from "./PaymentClient";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getGradeLabelArabic } from "@/lib/grade-config";
@@ -48,7 +49,9 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
           <span className="eyebrow">الخطوة الأخيرة</span>
           <h1 className="title" style={{ fontSize: 34 }}>أكمل اشتراكك</h1>
           {subscriptionId ? (
-            <PaymentClient subscriptionId={subscriptionId} amountSar={amountSar} summary={summary} />
+            <Suspense fallback={null}>
+              <PaymentClient subscriptionId={subscriptionId} amountSar={amountSar} summary={summary} />
+            </Suspense>
           ) : (
             <p>رابط غير صالح — ابدأ التسجيل من جديد من صفحة الخطط.</p>
           )}
