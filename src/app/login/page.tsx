@@ -79,18 +79,20 @@ export default function LoginPage() {
       return;
     }
 
-    // بعد التحقق، ننشئ/نحدّث صف ولي الأمر — مسموح به عبر سياسة parents_self_insert/update
-    const { error: upsertError } = await supabase
-      .from("parents")
-      .upsert(
-        { user_id: data.user.id, full_name: name, phone: internationalPhone },
-        { onConflict: "user_id" }
-      );
+    // الربط الفعلي بأكمله server-side الآن (لا upsert من المتصفح) — يجد صف ولي الأمر الصحيح
+    // إن أُنشئ أثناء التسجيل قبل OTP بدل إنشاء حساب جديد فارغ. راجع
+    // src/app/api/auth/link-parent/route.ts لتفاصيل سبب هذا التغيير.
+    const linkRes = await fetch("/api/auth/link-parent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fullName: name }),
+    });
 
     setLoading(false);
 
-    if (upsertError) {
-      setError(friendlyAuthError(upsertError.message));
+    if (!linkRes.ok) {
+      const linkData = await linkRes.json().catch(() => ({}));
+      setError(linkData.error || "تعذّر إكمال العملية الآن. حاول مرة أخرى.");
       return;
     }
 

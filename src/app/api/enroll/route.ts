@@ -83,9 +83,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "اكتمل عدد المقاعد في هذه المجموعة" }, { status: 409 });
   }
 
-  // ولي الأمر: نبحث بالجوال، وإلا ننشئ صفًا جديدًا (بدون ربط user_id إلى حين تسجيل الدخول لاحقًا)
-  let { data: parent } = await supabase.from("parents").select("id").eq("phone", phone).maybeSingle();
-  if (!parent) {
+  // ولي الأمر: نجلب كل الصفوف المطابقة لهذا الجوال (لا maybeSingle مع تجاهل الخطأ — كان هذا
+  // يفشل صامتًا عند وجود أكثر من صف مكرَّر بنفس الجوال، فيُنشئ صفًا ثالثًا بدل استخدام الموجود).
+  const { data: matchingParents, error: parentsFetchError } = await supabase
+    .from("parents")
+    .select("id, user_id, created_at")
+    .eq("phone", phone)
+    .order("created_at", { ascending: true });
+
+  if (parentsFetchError) {
+    console.error(`[enroll] خطأ استعلام مؤقت أثناء البحث عن ولي الأمر بالجوال:`, parentsFetchError.message);
+    return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
+  }
+
+  let parent: { id: string };
+  if (!matchingParents || matchingParents.length === 0) {
     const { data: newParent, error: parentError } = await supabase
       .from("parents")
       .insert({ full_name: parentName, phone })
@@ -93,6 +105,17 @@ export async function POST(req: Request) {
       .single();
     if (parentError) return NextResponse.json({ error: parentError.message }, { status: 500 });
     parent = newParent;
+  } else if (matchingParents.length === 1) {
+    parent = matchingParents[0];
+  } else {
+    // أكثر من صف بنفس الجوال (تكرار قديم) — لا نُنشئ صفًا ثالثًا أبدًا. الصف المرتبط بـuser_id
+    // فعليًا هو الأولى دائمًا (حساب حقيقي مُصادَق)، وإلا الأقدم (الأرجح أن يحمل بيانات تسجيل
+    // حقيقية سابقة). التنظيف الفعلي للتكرار يتم عبر /api/auth/link-parent عند الدخول.
+    const linked = matchingParents.find((p: { id: string; user_id: string | null; created_at: string }) => p.user_id !== null);
+    parent = linked ?? matchingParents[0];
+    console.error(
+      `[enroll] تكرار ولي أمر بنفس الجوال (${matchingParents.length} صفوف) — استُخدِم ${parent.id} كصف أساسي للتسجيل. يتطلب مراجعة/دمج.`
+    );
   }
 
   const { data: child, error: childError } = await supabase
