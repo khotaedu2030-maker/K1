@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { resolveParentContext } from "@/lib/pilot-parent";
 import { toPaylinkSaudiMobile } from "@/lib/phone";
-import { createPaylinkInvoice, getPaylinkInvoice } from "@/lib/paylink";
+import { createPaylinkInvoice, getPaylinkInvoice, getPaylinkTransactionsByOrderNumber } from "@/lib/paylink";
 import { verifyAndActivatePaylinkPayment } from "@/lib/paylink-verify";
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
@@ -14,22 +14,52 @@ type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 // المستدعي بإنشاء محاولة جديدة بأمان (الصف القديم صار failed).
 async function checkExistingPending(
   admin: AdminClient,
-  existingPending: { id: string; provider_ref: string | null },
+  existingPending: { id: string; provider_ref: string | null; created_at: string },
   options: { allowContinue: boolean; nullRefMessage: string }
 ): Promise<NextResponse | null> {
-  if (!existingPending.provider_ref) {
-    console.error(
-      `[paylink-create] سجل دفع pending (${existingPending.id}) بلا provider_ref؛ يتطلب مصالحة أو انتظار.`
-    );
-    return NextResponse.json({ error: options.nullRefMessage }, { status: 503 });
+  let providerRef = existingPending.provider_ref;
+
+  if (!providerRef) {
+    // لا provider_ref محفوظ — إما addInvoice نجح فعليًا سابقًا لدى Paylink لكن فشل حفظ المرجع
+    // عندنا (حالة موثَّقة أدناه بعد addInvoice)، أو لا تزال قيد الإنشاء الآن بالفعل. نصالح عبر
+    // Paylink مباشرة بدل الرفض الفوري القديم.
+    const txResult = await getPaylinkTransactionsByOrderNumber(existingPending.id);
+    if (!txResult.ok) {
+      // فشل استعلام المصالحة نفسه (اتصال/خطأ من Paylink) — لا نخمّن حالة الفاتورة، نُبقيها
+      // pending وننتظر محاولة لاحقة، فقط لا فاتورة ثانية.
+      console.error(`[paylink-create] فشل استعلام مصالحة provider_ref-null لسجل ${existingPending.id}: ${txResult.error}`);
+      return NextResponse.json({ error: options.nullRefMessage }, { status: 503 });
+    }
+
+    const transaction = txResult.transactions[0];
+    const foundTransactionNo = transaction ? String((transaction as Record<string, unknown>).transactionNo ?? "") : "";
+
+    if (foundTransactionNo) {
+      // معاملة موجودة فعليًا لدى Paylink — نحفظ مرجعها الآن، ثم نكمل بنفس منطق
+      // Paid/Pending/Canceled أدناه بلا إنشاء فاتورة ثانية.
+      await admin.from("payments").update({ provider_ref: foundTransactionNo }).eq("id", existingPending.id);
+      providerRef = foundTransactionNo;
+    } else {
+      // لا معاملة مؤكَّدة لدى Paylink بعد استعلام ناجح (رجع فارغًا فعليًا، لا فشل) — القرار
+      // يعتمد على عمر سجل الدفع نفسه.
+      const ageMs = Date.now() - new Date(existingPending.created_at).getTime();
+      if (ageMs < 24 * 60 * 60 * 1000) {
+        // حديث بما يكفي ليكون addInvoice قيد المعالجة الآن فعليًا — لا نُعلِّمه failed بتسرّع.
+        return NextResponse.json({ error: options.nullRefMessage }, { status: 503 });
+      }
+      // أقدم من 24 ساعة، وتأكَّدنا فعليًا (استعلام ناجح لا فشل) من عدم وجود معاملة — آمن الآن.
+      await admin.from("payments").update({ status: "failed" }).eq("id", existingPending.id);
+      if (options.allowContinue) return null; // يُكمِل المستدعي لإنشاء محاولة جديدة بأمان.
+      return NextResponse.json({ error: "انتهت صلاحية محاولة دفع سابقة، حاول مرة أخرى" }, { status: 503 });
+    }
   }
 
-  const invoiceCheck = await getPaylinkInvoice(existingPending.provider_ref);
+  const invoiceCheck = await getPaylinkInvoice(providerRef);
   if (!invoiceCheck.ok) {
     // فشل التحقق من الفاتورة القديمة (اتصال/خطأ من Paylink) — قد تكون لا تزال قابلة للدفع
     // فعليًا. لا نخاطر بإنشاء فاتورة ثانية قد تسمح بدفع مزدوج — نرفض بدل المتابعة بصمت.
     console.error(
-      `[paylink-create] فشل التحقق من فاتورة pending سابقة (${existingPending.provider_ref}): ${invoiceCheck.error}`
+      `[paylink-create] فشل التحقق من فاتورة pending سابقة (${providerRef}): ${invoiceCheck.error}`
     );
     return NextResponse.json({ error: "تعذّر التحقق من محاولة دفع سابقة، حاول مرة أخرى" }, { status: 503 });
   }
@@ -37,7 +67,7 @@ async function checkExistingPending(
   const status = String(invoiceCheck.invoice.orderStatus ?? "").trim().toLowerCase();
   if (status === "paid") {
     // دُفعت فعليًا بمحاولة سابقة — نُشغِّل التحقق/التفعيل الآن بدل إنشاء فاتورة مكرَّرة.
-    const verifyResult = await verifyAndActivatePaylinkPayment(existingPending.provider_ref);
+    const verifyResult = await verifyAndActivatePaylinkPayment(providerRef);
     if (verifyResult.ok) return NextResponse.json({ alreadyPaid: true });
     return NextResponse.json({ error: verifyResult.error }, { status: verifyResult.status });
   }
@@ -51,12 +81,14 @@ async function checkExistingPending(
     );
   }
   // لا تزال Pending/Processing فعليًا لدى Paylink — نُعيد نفس رابط الدفع، لا فاتورة جديدة.
+  // (حتى لو كان سجل payment أو subscription نفسه أقدم من 24 ساعة — فاتورة Paylink فعلية لا
+  // تزال قابلة للدفع أولى دائمًا من انتهاء صلاحية مبني على عمر سجلنا المحلي وحده.)
   const paymentUrl = invoiceCheck.invoice.url;
   if (typeof paymentUrl === "string" && paymentUrl) {
     return NextResponse.json({ paymentUrl });
   }
   console.error(
-    `[paylink-create] الفاتورة السابقة (${existingPending.provider_ref}) لا تزال Pending لدى Paylink لكن بلا رابط دفع صالح بالاستجابة.`
+    `[paylink-create] الفاتورة السابقة (${providerRef}) لا تزال Pending لدى Paylink لكن بلا رابط دفع صالح بالاستجابة.`
   );
   return NextResponse.json({ error: "تعذّر استكمال محاولة دفع سابقة، تواصل معنا" }, { status: 503 });
 }
@@ -80,7 +112,7 @@ export async function POST(req: Request) {
 
   const { data: subscription } = await admin
     .from("subscriptions")
-    .select("id, parent_id, plan_id, status")
+    .select("id, parent_id, plan_id, status, created_at")
     .eq("id", subscriptionId)
     .maybeSingle();
 
@@ -95,6 +127,48 @@ export async function POST(req: Request) {
   // فيها active) تُرفَض بلا إنشاء أي فاتورة جديدة.
   if (subscription.status !== "pending_payment") {
     return NextResponse.json({ error: "لا يمكن بدء دفع جديد لهذا الاشتراك في حالته الحالية" }, { status: 409 });
+  }
+
+  // ---------------------------------------------------------------------
+  // فحص أي محاولة دفع "pending" سابقة *قبل* فحص انتهاء صلاحية الاشتراك نفسه: إن كانت لهذه
+  // المحاولة فاتورة Paylink صالحة (لا تزال Pending فعليًا لدى Paylink)، نُعيدها للمستخدم حتى
+  // لو كان الاشتراك نفسه أقدم من 24 ساعة — إلغاء المقعد يجب أن يتبع حالة الفاتورة الفعلية لدى
+  // Paylink، لا عمر سجل الاشتراك وحده. فقط إن لم توجد فاتورة صالحة نمرّ لفحص انتهاء الصلاحية.
+  // Fail-closed بالكامل: أي فشل مؤقت هنا (استعلام قاعدة البيانات، أو الاتصال بـPaylink) يمنع
+  // إنشاء فاتورة جديدة فورًا (503) بدل المخاطرة بفاتورتين مفتوحتين لنفس الاشتراك.
+  // ---------------------------------------------------------------------
+  const { data: existingPendingRows, error: existingPendingError } = await admin
+    .from("payments")
+    .select("id, provider_ref, created_at")
+    .eq("subscription_id", subscription.id)
+    .eq("provider", "paylink")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (existingPendingError) {
+    console.error(`[paylink-create] فشل استعلام البحث عن دفعة pending سابقة للاشتراك ${subscription.id}:`, existingPendingError.message);
+    return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى خلال دقائق" }, { status: 503 });
+  }
+
+  const existingPending = existingPendingRows?.[0] ?? null;
+
+  if (existingPending) {
+    const existingResult = await checkExistingPending(admin, existingPending, {
+      allowContinue: true,
+      nullRefMessage: "توجد محاولة دفع سابقة قيد المعالجة لهذا الاشتراك. حاول مرة أخرى خلال دقائق، أو تواصل معنا إذا استمرت المشكلة.",
+    });
+    if (existingResult) return existingResult;
+    // existingResult === null: الفاتورة القديمة تبيّن أنها ملغاة/منتهية فعليًا لدى Paylink،
+    // عُلِّمت failed — نُكمل لفحص انتهاء صلاحية الاشتراك نفسه ثم إنشاء محاولة جديدة إن لم ينتهِ.
+  }
+
+  // انتهاء صلاحية حجز المقعد بعد 24 ساعة — لا نصل هنا إلا إن لم توجد فاتورة Paylink صالحة
+  // (Pending فعليًا) لهذا الاشتراك. يتوافق مع إلغاء Paylink التلقائي لفواتير Pending بنفس المدة.
+  const ageMs = Date.now() - new Date(subscription.created_at).getTime();
+  if (ageMs > 24 * 60 * 60 * 1000) {
+    await admin.from("subscriptions").update({ status: "expired" }).eq("id", subscription.id).eq("status", "pending_payment");
+    return NextResponse.json({ error: "انتهت صلاحية محاولة التسجيل، اختر المجموعة من جديد." }, { status: 409 });
   }
 
   const { data: plan } = await admin
@@ -133,37 +207,6 @@ export async function POST(req: Request) {
   }
 
   // ---------------------------------------------------------------------
-  // منع تعدد الفواتير المفتوحة: هل توجد محاولة دفع "pending" سابقة لنفس الاشتراك؟
-  // Fail-closed بالكامل: أي فشل مؤقت هنا (استعلام قاعدة البيانات، أو الاتصال بـPaylink)
-  // يمنع إنشاء فاتورة جديدة فورًا (503) بدل المخاطرة بفاتورتين مفتوحتين لنفس الاشتراك —
-  // وهو ما قد يسمح بدفع مزدوج فعلي، حتى لو كان معنى ذلك أن المستخدم يحتاج المحاولة لاحقًا.
-  // ---------------------------------------------------------------------
-  const { data: existingPendingRows, error: existingPendingError } = await admin
-    .from("payments")
-    .select("id, provider_ref")
-    .eq("subscription_id", subscription.id)
-    .eq("provider", "paylink")
-    .eq("status", "pending")
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  if (existingPendingError) {
-    console.error(`[paylink-create] فشل استعلام البحث عن دفعة pending سابقة للاشتراك ${subscription.id}:`, existingPendingError.message);
-    return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى خلال دقائق" }, { status: 503 });
-  }
-
-  const existingPending = existingPendingRows?.[0] ?? null;
-
-  if (existingPending) {
-    const result = await checkExistingPending(admin, existingPending, {
-      allowContinue: true,
-      nullRefMessage: "توجد محاولة دفع سابقة قيد المعالجة لهذا الاشتراك. حاول مرة أخرى خلال دقائق، أو تواصل معنا إذا استمرت المشكلة.",
-    });
-    if (result) return result;
-    // result === null: الفاتورة القديمة تبيّن أنها ملغاة، عُلِّمت failed، نُكمل لإنشاء محاولة جديدة أدناه.
-  }
-
-  // ---------------------------------------------------------------------
   // إنشاء سجل الدفع أولًا (pending) — معرّفه (payments.id) هو orderNumber الذي يُرسَل لـPaylink.
   // هذا يضمن مرجعًا فريدًا لكل محاولة دفع بلا أي تعديل schema.
   // ---------------------------------------------------------------------
@@ -177,7 +220,7 @@ export async function POST(req: Request) {
       provider: "paylink",
       provider_ref: null,
     })
-    .select("id")
+    .select("id, created_at")
     .single();
 
   if (pendingError) {
@@ -189,7 +232,7 @@ export async function POST(req: Request) {
       console.error(`[paylink-create] Unique violation عند إنشاء payment pending للاشتراك ${subscription.id} — سباق حقيقي، جارٍ إعادة الفحص.`);
       const { data: conflictRows, error: conflictError } = await admin
         .from("payments")
-        .select("id, provider_ref")
+        .select("id, provider_ref, created_at")
         .eq("subscription_id", subscription.id)
         .eq("provider", "paylink")
         .eq("status", "pending")
@@ -232,9 +275,66 @@ export async function POST(req: Request) {
   });
 
   if (!invoiceResult.ok) {
-    // لا نترك السجل pending بلا داعٍ — نُعلِّمه failed فورًا.
-    await admin.from("payments").update({ status: "failed" }).eq("id", newPayment.id);
-    return NextResponse.json({ error: invoiceResult.error }, { status: 502 });
+    if (!invoiceResult.ambiguous) {
+      // فشل واضح غير غامض (400/401/403 أو غياب حقول بالاستجابة) — الفاتورة لم تُنشَأ فعليًا.
+      await admin.from("payments").update({ status: "failed" }).eq("id", newPayment.id);
+      return NextResponse.json({ error: invoiceResult.error }, { status: 502 });
+    }
+
+    // حالة غامضة (502/503/504 أو خطأ اتصال): قد تكون الفاتورة أُنشئت فعليًا لدى Paylink رغم
+    // عدم استلامنا ردًّا واضحًا. لا نُعلِّم failed مباشرة — نصالح أولًا عبر
+    // getTransactionsOfOrderNumber(orderNumber = newPayment.id)، ولا ننشئ فاتورة ثانية إطلاقًا
+    // حتى تُحسَم هذه المصالحة.
+    console.error(`[paylink-create] فشل addInvoice غامض لسجل الدفع ${newPayment.id} — جارٍ المصالحة عبر getTransactionsOfOrderNumber.`);
+    const txResult = await getPaylinkTransactionsByOrderNumber(newPayment.id);
+
+    if (!txResult.ok) {
+      // فشل استعلام المصالحة نفسه — لا نخمّن حالة الفاتورة، نُبقيها pending وننتظر محاولة
+      // لاحقة (Retry لاحق سيعيد نفس المصالحة عبر checkExistingPending). صفر فاتورة ثانية.
+      console.error(`[paylink-create] فشل استعلام getTransactionsOfOrderNumber لسجل ${newPayment.id}: ${txResult.error}`);
+      return NextResponse.json({ error: "بوابة الدفع غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل." }, { status: 503 });
+    }
+
+    const transaction = txResult.transactions[0];
+    const foundTransactionNo = transaction ? String((transaction as Record<string, unknown>).transactionNo ?? "") : "";
+
+    if (!foundTransactionNo) {
+      // استعلام ناجح لكن فارغ فعليًا — لا معاملة لدى Paylink بهذا orderNumber. القرار يعتمد
+      // على عمر سجل الدفع (المُنشأ للتو بهذا الطلب نفسه، فعمره دائمًا صغير جدًا عمليًا هنا،
+      // لكن الفحص صريح لضمان صحة المنطق دون افتراض ضمني).
+      const ageMs = Date.now() - new Date(newPayment.created_at).getTime();
+      if (ageMs < 24 * 60 * 60 * 1000) {
+        return NextResponse.json({ error: "بوابة الدفع غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل." }, { status: 503 });
+      }
+      await admin.from("payments").update({ status: "failed" }).eq("id", newPayment.id);
+      return NextResponse.json({ error: "بوابة الدفع غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل." }, { status: 502 });
+    }
+
+    // معاملة موجودة فعليًا لدى Paylink — نحفظ مرجعها فورًا، ثم نتحقق من حالتها الحقيقية.
+    await admin.from("payments").update({ provider_ref: foundTransactionNo }).eq("id", newPayment.id);
+
+    const invoiceCheck = await getPaylinkInvoice(foundTransactionNo);
+    if (!invoiceCheck.ok) {
+      // لا نستطيع تأكيد الحالة الآن — لا نُعلِّم failed (قد تكون فاتورة حقيقية قابلة للدفع)،
+      // نطلب من المستخدم المحاولة مرة أخرى (طلب لاحق سيجد provider_ref المحفوظ ويصالح مجددًا).
+      return NextResponse.json({ error: "تعذّر تأكيد حالة الدفع، حاول مرة أخرى خلال لحظات" }, { status: 503 });
+    }
+
+    const reconciledStatus = String(invoiceCheck.invoice.orderStatus ?? "").trim().toLowerCase();
+    if (reconciledStatus === "paid") {
+      const verifyResult = await verifyAndActivatePaylinkPayment(foundTransactionNo);
+      if (verifyResult.ok) return NextResponse.json({ alreadyPaid: true });
+      return NextResponse.json({ error: verifyResult.error }, { status: verifyResult.status });
+    }
+    if (reconciledStatus && reconciledStatus !== "paid" && reconciledStatus !== "pending" && reconciledStatus !== "processing") {
+      await admin.from("payments").update({ status: "failed" }).eq("id", newPayment.id);
+      return NextResponse.json({ error: "بوابة الدفع غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل." }, { status: 502 });
+    }
+    const reconciledUrl = invoiceCheck.invoice.url;
+    if (typeof reconciledUrl === "string" && reconciledUrl) {
+      return NextResponse.json({ paymentUrl: reconciledUrl });
+    }
+    return NextResponse.json({ error: "تعذّر تأكيد حالة الدفع، حاول مرة أخرى خلال لحظات" }, { status: 503 });
   }
 
   // تحديث السجل نفسه بـprovider_ref — لا إنشاء سجل جديد إطلاقًا.

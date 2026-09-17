@@ -43,7 +43,7 @@ export default function P() {
             href="/motabaa"
             style={{ display: "block", marginTop: 22, color: "var(--gray)", fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 4 }}
           >
-            أو تعرّف أولًا على طريقة عمل خُطى
+            أو تعرّف على كيف تعمل خُطى أولًا
           </Link>
         </div>
       </main>

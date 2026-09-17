@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ChangeEvent, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 
-// العودة لحساب ولي الأمر ليست ضغطة واحدة — نطلب رمز تحقق يُرسل لجوال ولي الأمر المسجَّل قبل
-// إنهاء جلسة مساحة الطالب فعليًا.
+// العودة لحساب ولي الأمر ليست ضغطة واحدة — نطلب رمز تحقق يُرسل لبريد ولي الأمر الإلكتروني
+// المسجَّل قبل إنهاء جلسة مساحة الطالب فعليًا.
 export default function ExitStudentMode() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -24,7 +24,7 @@ export default function ExitStudentMode() {
       setError(data.error ?? "تعذّر إرسال الرمز.");
       return;
     }
-    setMasked(data.maskedPhone);
+    setMasked(data.maskedEmail);
     setStep("otp");
   }
 
@@ -56,11 +56,11 @@ export default function ExitStudentMode() {
 
   return (
     <div className="student-exit-modal-backdrop" onClick={() => !loading && setOpen(false)}>
-      <div className="student-exit-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="student-exit-modal" onClick={(e: MouseEvent) => e.stopPropagation()}>
         {step === "confirm" ? (
           <>
             <h3>عودة لحساب ولي الأمر</h3>
-            <p>سنرسل رمز تحقق لجوال ولي الأمر للتأكد أنه هو من يعود للحساب.</p>
+            <p>سنرسل رمز تحقق لبريد ولي الأمر الإلكتروني للتأكد أنه هو من يعود للحساب.</p>
             {error && <p style={{ color: "var(--p)" }}>{error}</p>}
             <div className="actions">
               <button className="btn" disabled={loading} onClick={requestOtp}>
@@ -73,7 +73,7 @@ export default function ExitStudentMode() {
           <>
             <h3>أدخل الرمز</h3>
             <p>أرسلنا رمزًا إلى {masked}</p>
-            <input dir="ltr" value={code} onChange={(e) => setCode(e.target.value)} />
+            <input dir="ltr" value={code} onChange={(e: ChangeEvent<HTMLInputElement>) => setCode(e.target.value)} />
             {error && <p style={{ color: "var(--p)" }}>{error}</p>}
             <div className="actions">
               <button className="btn" disabled={loading || !code} onClick={verify}>

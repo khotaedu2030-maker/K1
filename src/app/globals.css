@@ -591,9 +591,14 @@ header.transparent + #main-content > main > .hero-editorial-v28:first-child{marg
 .grade-tile b{display:block;font-size:15px;font-weight:800}
 
 .plan-tile{position:relative;border:1.5px solid var(--line);background:var(--card);border-radius:var(--radius-lg);padding:30px 26px;cursor:pointer;transition:transform var(--motion-fast) var(--ease-premium),box-shadow var(--motion-fast) var(--ease-premium),border-color var(--motion-fast) var(--ease-premium);text-align:right;display:block;width:100%}
+/* إصلاح مُستهدَف: :focus-visible يبقى فعّالًا بالكامل لتنقّل الكيبورد (لا إلغاء عام) — هذا
+   يمنع فقط بقاء إطار المؤشّر الأزرق/التركوازي عالقًا بصريًا بعد نقرة ماوس على هذه العناصر
+   تحديدًا. لا علاقة له بقاعدة :focus-visible العامة أعلى الملف. */
+.plan-tile:focus:not(:focus-visible),
+.group-tile:focus:not(:focus-visible),
+.grade-tile:focus:not(:focus-visible){outline:none}
 .plan-tile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md)}
 .plan-tile.on{border-color:var(--n);box-shadow:var(--shadow-lg);transform:translateY(-3px)}
-.plan-tile.on::after{content:"";position:absolute;top:0;inset-inline:0;height:3px;border-radius:var(--radius-lg) var(--radius-lg) 0 0;background:var(--t)}
 .plan-tile.recommended::before{content:"الأكثر اختيارًا";position:absolute;top:-12px;inset-inline-start:20px;background:var(--g);color:var(--n);font-size:11px;font-weight:800;padding:5px 12px;border-radius:99px}
 .plan-freq-dots{display:flex;gap:5px;margin:10px 0}
 .plan-freq-dots span{width:9px;height:9px;border-radius:50%;background:var(--line)}
@@ -822,3 +827,10 @@ header.transparent + #main-content > main > .hero-editorial-v28:first-child{marg
   .stages-tabs{flex-direction:row;overflow-x:auto;gap:10px;padding-bottom:6px}
   .stages-tab{flex-shrink:0}
 }
+
+/* جدول لوحة الإدارة — نمط واحد بسيط يُعاد استخدامه لأي جدول بيانات إداري لاحق */
+.admin-table{width:100%;border-collapse:collapse;font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden}
+.admin-table th{background:var(--bg);color:var(--gray);font-weight:700;text-align:start;padding:12px 14px;font-size:12.5px;border-bottom:1px solid var(--line)}
+.admin-table td{padding:12px 14px;border-bottom:1px solid var(--line);color:var(--n)}
+.admin-table tr:last-child td{border-bottom:none}
+.admin-table select{padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);font-family:inherit;font-size:13px}

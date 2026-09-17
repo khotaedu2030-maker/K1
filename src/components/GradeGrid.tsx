@@ -3,7 +3,6 @@ import Link from "next/link";
 
 export type GradeBand = {
   band: string;
-  title?: string;
   desc: string;
   image: string;
   objectPosition: string;
@@ -28,7 +27,7 @@ export default function GradeGrid({ bands, showTitleLine = false }: { bands: Gra
           </div>
           <div className="grade-panel-content">
             <b>{g.band}</b>
-            {showTitleLine && g.title ? <h3>{g.title}</h3> : null}
+            {showTitleLine ? <h3>{g.desc.split("،")[0]}</h3> : null}
             <p>{g.desc}</p>
           </div>
         </Link>

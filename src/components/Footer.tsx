@@ -34,6 +34,7 @@ export default function Footer() {
             <h4>الدعم</h4>
             <Link href="/help">الأسئلة الشائعة</Link>
             <Link href="/contact">تواصل معنا</Link>
+            <Link href="/staff/login">دخول فريق خُطى</Link>
           </div>
           <div>
             <h4>قانوني</h4>

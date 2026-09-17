@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Shell from "@/components/Shell";
 import Reveal from "@/components/Reveal";
+import TeacherApplyForm from "./TeacherApplyForm";
 
 export default function P() {
   return (
@@ -28,14 +29,7 @@ export default function P() {
         <section className="section">
           <div className="narrow">
             <Reveal>
-              <div className="form">
-                <label>الاسم<input /></label>
-                <label>الجوال<input dir="ltr" /></label>
-                <label>المرحلة / التخصص<input /></label>
-                <label>سنوات الخبرة<input /></label>
-                <label>رابط السيرة الذاتية<input dir="ltr" /></label>
-                <button className="btn">إرسال الطلب</button>
-              </div>
+              <TeacherApplyForm />
             </Reveal>
           </div>
         </section>

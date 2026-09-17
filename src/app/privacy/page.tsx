@@ -1,3 +1,4 @@
+import Link from "next/link";
 import LegalPage, { type LegalSection } from "@/components/LegalPage";
 import { legalProfile } from "@/lib/legal-profile";
 
@@ -166,7 +167,8 @@ const sections: LegalSection[] = [
       </p>
     ) : (
       <p style={{ margin: 0 }}>
-        ستتاح قناة مخصصة لاستفسارات الخصوصية عند تفعيل قنوات الدعم الرسمية لخُطى.
+        لأي استفسار متعلق بالخصوصية، تواصل معنا عبر{" "}
+        <Link href="/contact" style={{ color: "var(--t)", fontWeight: 700 }}>صفحة التواصل</Link>.
       </p>
     ),
   },

@@ -563,9 +563,9 @@ begin
     raise exception 'cohort_not_open';
   end if;
 
-  select count(*) into v_taken
-    from subscriptions
-    where cohort_id = p_cohort_id and status in ('active', 'pending_payment');
+  -- المقاعد المحتسَبة عبر الدالة المركزية الواحدة cohort_occupied_seats (تعريفها أسفل هذا
+  -- الملف، بعد جدول payments) — لا تكرار لمنطق الاحتساب هنا.
+  v_taken := public.cohort_occupied_seats(p_cohort_id);
 
   if v_taken >= v_cohort.capacity then
     raise exception 'cohort_full';
@@ -735,6 +735,39 @@ create policy "student_session_self_read" on student_mode_sessions for select us
 -- ملاحظة معمارية لمستقبل Child PIN: هذا الجدول لا يفترض آلية الدخول (OTP ولي الأمر اليوم) —
 -- أي آلية دخول مستقبلية (PIN مثلًا) يمكنها إنشاء صف هنا بنفس الشكل دون أي تغيير على /student/*.
 
+-- دالة مركزية واحدة لحساب "المقاعد المحتسَبة فعليًا" — active، أو pending_payment مع (الاشتراك
+-- حديث خلال 24 ساعة، أو محاولة دفع Paylink pending حديثة خلال 24 ساعة حتى لو الاشتراك نفسه
+-- أقدم). تستخدمها كل الدوال أدناه بدل تكرار هذا الشرط في أربعة أماكن منفصلة.
+create or replace function public.cohort_occupied_seats(p_cohort_id uuid)
+returns integer
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select count(*)::integer
+  from subscriptions s
+  where s.cohort_id = p_cohort_id
+    and (
+      s.status = 'active'
+      or (
+        s.status = 'pending_payment'
+        and (
+          s.created_at >= now() - interval '24 hours'
+          or exists (
+            select 1 from payments p
+            where p.subscription_id = s.id
+              and p.provider = 'paylink'
+              and p.status = 'pending'
+              and p.created_at >= now() - interval '24 hours'
+          )
+        )
+      )
+    );
+$$;
+revoke all on function public.cohort_occupied_seats(uuid) from public, anon, authenticated;
+grant execute on function public.cohort_occupied_seats(uuid) to service_role;
+
 -- دالة آمنة لحساب المقاعد المتاحة في مجموعة، دون كشف صفوف الاشتراكات نفسها
 create or replace function public.cohort_available_seats(p_cohort_id uuid)
 returns integer
@@ -742,12 +775,9 @@ language sql
 security definer
 set search_path = public
 as $$
-  select c.capacity - count(s.id)
+  select c.capacity - public.cohort_occupied_seats(c.id)
   from cohorts c
-  left join subscriptions s
-    on s.cohort_id = c.id and s.status in ('active','pending_payment')
-  where c.id = p_cohort_id
-  group by c.capacity;
+  where c.id = p_cohort_id;
 $$;
 grant execute on function public.cohort_available_seats(uuid) to anon, authenticated;
 
@@ -773,13 +803,85 @@ set search_path = public
 as $$
   select
     c.id, c.product, c.plan_id, c.grade_band, c.title, c.days_of_week, c.start_time, c.end_time, c.capacity,
-    (c.capacity - count(s.id) filter (where s.status in ('active','pending_payment')))::integer as seats_available
+    (c.capacity - public.cohort_occupied_seats(c.id))::integer as seats_available
   from cohorts c
-  left join subscriptions s on s.cohort_id = c.id
-  where c.status = 'open' and (p_product is null or c.product = p_product)
-  group by c.id;
+  where c.status = 'open' and (p_product is null or c.product = p_product);
 $$;
 grant execute on function public.public_cohorts_catalog(text) to anon, authenticated;
+
+-- RPC إداري ذرّي: يستبدل نمط "JS يحسب occupied ثم update منفصل" (نافذة سباق نظرية) بمعاملة
+-- واحدة — SELECT...FOR UPDATE يقفل صف المجموعة، ثم يحسب المقاعد ويرفض/يحدِّث داخل نفس القفل.
+-- service_role فقط. المعاملات *_provided تميّز "لم يُرسَل" عن "أُرسِل كـnull فعليًا" (إزالة
+-- meeting_url/teacher_id عمدًا هو NULL صالح، مختلف عن "لا تغيّر هذا الحقل").
+create or replace function public.admin_update_cohort_operations_atomic(
+  p_cohort_id uuid,
+  p_capacity smallint default null,
+  p_status text default null,
+  p_teacher_id uuid default null,
+  p_teacher_id_provided boolean default false,
+  p_meeting_url text default null,
+  p_meeting_url_provided boolean default false
+)
+returns table(
+  old_capacity smallint,
+  new_capacity smallint,
+  old_status text,
+  new_status text,
+  old_teacher_id uuid,
+  new_teacher_id uuid,
+  old_meeting_url text,
+  new_meeting_url text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cohort record;
+  v_occupied integer;
+  v_final_capacity smallint;
+  v_final_status text;
+  v_final_teacher_id uuid;
+  v_final_meeting_url text;
+begin
+  select * into v_cohort from cohorts where id = p_cohort_id for update;
+  if v_cohort is null then
+    raise exception 'cohort_not_found';
+  end if;
+
+  v_final_capacity := coalesce(p_capacity, v_cohort.capacity);
+  v_final_status := coalesce(p_status, v_cohort.status);
+  v_final_teacher_id := case when p_teacher_id_provided then p_teacher_id else v_cohort.teacher_id end;
+  v_final_meeting_url := case when p_meeting_url_provided then p_meeting_url else v_cohort.meeting_url end;
+
+  if p_status is not null and p_status not in ('open', 'closed') then
+    raise exception 'invalid_status';
+  end if;
+  if p_capacity is not null and (p_capacity < 1 or p_capacity > 20) then
+    raise exception 'invalid_capacity';
+  end if;
+
+  v_occupied := public.cohort_occupied_seats(p_cohort_id);
+  if v_final_capacity < v_occupied then
+    raise exception 'capacity_below_occupied';
+  end if;
+
+  update cohorts set
+    capacity = v_final_capacity,
+    status = v_final_status,
+    teacher_id = v_final_teacher_id,
+    meeting_url = v_final_meeting_url
+  where id = p_cohort_id;
+
+  return query select
+    v_cohort.capacity, v_final_capacity,
+    v_cohort.status, v_final_status,
+    v_cohort.teacher_id, v_final_teacher_id,
+    v_cohort.meeting_url, v_final_meeting_url;
+end;
+$$;
+revoke all on function public.admin_update_cohort_operations_atomic(uuid, smallint, text, uuid, boolean, text, boolean) from public, anon, authenticated;
+grant execute on function public.admin_update_cohort_operations_atomic(uuid, smallint, text, uuid, boolean, text, boolean) to service_role;
 
 -- =========================================================
 -- Row Level Security — مفعّلة على كل الجداول من الآن (fail-closed)
@@ -943,3 +1045,47 @@ create policy "independence_of_teacher_students" on independence_assessments for
 -- لا سياسات INSERT/UPDATE من المتصفح على أي من هذه الجداول عمدًا — الكتابة عبر
 -- /api/assessment/submit و /api/goals/submit فقط (service_role، بعد تحقق أن المعلم فعلًا
 -- يملك هذا الطالب ضمن مجموعاته)، بنفس نمط /api/session-report/submit الحالي.
+
+-- طلبات الانضمام كمعلم من /teach-with-khota — Teacher application ≠ teacher access. لا يُنشأ
+-- حساب معلم تلقائيًا؛ سجل طلب يراجعه الفريق يدويًا. RLS مفعَّلة بلا أي policy عامة —
+-- الإدراج/القراءة فقط عبر service_role (src/app/api/teacher-applications، src/app/admin/teacher-applications).
+create table if not exists teacher_applications(
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null,
+  email text not null,
+  phone text not null,
+  specialization text not null,
+  years_experience smallint,
+  cv_url text,
+  status text not null default 'new' check (status in ('new','reviewing','shortlisted','rejected','accepted')),
+  created_at timestamptz default now()
+);
+alter table teacher_applications enable row level security;
+
+-- رسائل نموذج التواصل العام (/contact) — RLS مفعَّلة بلا policy عامة، service_role فقط
+-- (src/app/api/contact). Supabase هو مصدر الحقيقة لحفظ الرسالة؛ إشعار البريد الاختياري
+-- (Resend، إن وُجد RESEND_API_KEY) لا يُفشِل الحفظ أبدًا إن فشل هو نفسه.
+create table if not exists contact_requests(
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null,
+  email text not null,
+  phone text,
+  message text not null,
+  status text not null default 'new' check (status in ('new','reviewing','closed')),
+  created_at timestamptz default now()
+);
+alter table contact_requests enable row level security;
+
+-- سجل تدقيق خفيف لتغييرات الإدارة الحساسة (سعة المجموعة، حالة التسجيل، إسناد المعلم) —
+-- RLS مفعَّلة بلا policy عامة، service_role فقط عبر src/app/api/admin/**.
+create table if not exists admin_actions(
+  id uuid primary key default gen_random_uuid(),
+  admin_user_id uuid not null references auth.users(id),
+  action text not null,
+  entity_type text not null,
+  entity_id text not null,
+  old_value jsonb,
+  new_value jsonb,
+  created_at timestamptz default now()
+);
+alter table admin_actions enable row level security;

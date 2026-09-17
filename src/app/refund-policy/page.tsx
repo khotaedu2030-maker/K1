@@ -1,3 +1,4 @@
+import Link from "next/link";
 import LegalPage, { type LegalSection } from "@/components/LegalPage";
 
 export const metadata = {
@@ -81,7 +82,8 @@ const sections: LegalSection[] = [
     title: "كيف تقدّم طلب الاسترداد",
     body: (
       <p style={{ margin: 0 }}>
-        تُقدَّم طلبات الاسترجاع والاسترداد عبر قناة الدعم الرسمية لخُطى عند تفعيلها، مع توضيح
+        تُقدَّم طلبات الاسترجاع والاسترداد عبر{" "}
+        <Link href="/contact" style={{ color: "var(--t)", fontWeight: 700 }}>صفحة التواصل</Link>، مع توضيح
         رغبتك في فسخ الاشتراك أو استرداد مبلغ، وإرفاق المعلومات اللازمة لتحديد اشتراكك (اسم
         ولي الأمر واسم الطالب المسجَّل، والخطة).
       </p>

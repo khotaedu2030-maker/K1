@@ -1,3 +1,4 @@
+import Link from "next/link";
 import LegalPage, { type LegalSection } from "@/components/LegalPage";
 
 export const metadata = {
@@ -23,7 +24,8 @@ const sections: LegalSection[] = [
     title: "كيف تُقدَّم الشكوى",
     body: (
       <p style={{ margin: 0 }}>
-        تُقدَّم طلبات الشكاوى والمقترحات عبر قناة الدعم الرسمية لخُطى عند تفعيلها.
+        تُقدَّم طلبات الشكاوى والمقترحات عبر{" "}
+        <Link href="/contact" style={{ color: "var(--t)", fontWeight: 700 }}>صفحة التواصل</Link>.
       </p>
     ),
   },
@@ -45,8 +47,7 @@ const sections: LegalSection[] = [
     title: "كيف تُعالَج الشكوى",
     body: (
       <p style={{ margin: 0 }}>
-        تُراجَع كل شكوى، ويصل إشعار بنتيجة معالجتها عبر وسيلة التواصل المسجَّلة في حسابك متى
-        كانت قناة الدعم مفعَّلة.
+        تُراجَع كل شكوى، ويصل إشعار بنتيجة معالجتها عبر وسيلة التواصل المسجَّلة في حسابك.
       </p>
     ),
   },
@@ -67,7 +68,7 @@ export default function P() {
   return (
     <LegalPage
       title="الشكاوى والمقترحات"
-      intro="نوضح هنا آلية تقديم الشكاوى والمقترحات وحقوقك عند تفعيل قنوات الدعم الرسمية لخُطى."
+      intro="نوضح هنا آلية تقديم الشكاوى والمقترحات وحقوقك."
       sections={sections}
     />
   );

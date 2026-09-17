@@ -26,7 +26,7 @@ export default async function P() {
           <div className="narrow">
             <span className="badge">تسجيل الدخول مطلوب</span>
             <h1 className="title" style={{ fontSize: 32, marginTop: 16 }}>لوحة ولي الأمر</h1>
-            <p className="lead">سجّل الدخول برقم جوالك لمتابعة أبنائك.</p>
+            <p className="lead">سجّل الدخول ببريدك الإلكتروني لمتابعة أبنائك.</p>
             <Link className="btn" href="/login">تسجيل الدخول ←</Link>
           </div>
         </main>

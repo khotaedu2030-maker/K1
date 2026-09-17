@@ -1,18 +1,51 @@
 import { NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { parseAndValidateGrade, resolveGradeBand } from "@/lib/grade-config";
+import { normalizeSaudiStoredPhoneInput, SAUDI_PHONE_ERROR } from "@/lib/phone";
 
-// إنشاء اشتراك جديد بحالة pending_payment — الخطوة الوحيدة المسموح بها لإنشاء اشتراك،
-// وتتم بالكامل على الخادم بمفتاح service_role (يتجاوز RLS بثقة، بعد تحقق يدوي كامل من
-// المدخلات هنا). لا نثق بـ grade أو cohortId القادمين من العميل بمعزل عن التحقق الفعلي —
-// خصوصًا أن Multi-stage الآن يعني أن grade 11 مع cohort لصفوف 1-3 طلب صالح شكليًا (رقمان
-// صحيحان)، لكن غير صحيح منطقيًا، ويجب أن يُرفض صراحةً قبل إنشاء أي سجل.
+// إنشاء اشتراك جديد بحالة pending_payment — يتطلب الآن جلسة Supabase Auth حقيقية (Email OTP
+// مُتحقَّق فعليًا) قبل أي شيء آخر. لا يعود ممكنًا لمستخدم غير متحقق حجز مقعد — هذا هو الإصلاح
+// الجوهري لهذه الجولة: كان هذا المسار عامًا بالكامل سابقًا، ينشئ child + pending_payment قبل
+// أي تحقق OTP إطلاقًا.
 export async function POST(req: Request) {
+  const authed = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await authed.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "يجب تسجيل الدخول أولًا" }, { status: 401 });
+  }
+
+  // البريد الموثوق الوحيد لهوية الحساب هو user.email من الجلسة المُصادَقة نفسها — لا نثق
+  // بأي email قادم من body كمصدر هوية. لكن لا نتجاهل تعارضًا صامتًا: إن أرسل العميل بريدًا
+  // مختلفًا فعليًا عن بريد الجلسة (مثلًا كتب بريدًا آخر بالنموذج قبل أن يلاحظ أنه مسجَّل دخول
+  // ببريد مختلف)، نرفض بوضوح بدل المتابعة ببريد الجلسة بصمت.
+  const email = (user.email ?? "").trim().toLowerCase();
+  if (!email) {
+    console.error(`[enroll] مستخدم مصادَق (${user.id}) بلا بريد إلكتروني في الجلسة.`);
+    return NextResponse.json({ error: "تعذّر تحديد البريد الإلكتروني من الجلسة" }, { status: 500 });
+  }
+
   const body = await req.json().catch(() => null);
   const { parentName, phone, childName, grade, cohortId } = body ?? {};
 
+  const bodyEmail = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (bodyEmail && bodyEmail !== email) {
+    console.error(`[enroll] عدم تطابق بريد: body=${bodyEmail} جلسة=${email} للمستخدم ${user.id}.`);
+    return NextResponse.json({ error: "البريد المدخل لا يطابق الحساب المسجل دخوله." }, { status: 409 });
+  }
+
   if (!parentName || !phone || !childName || !cohortId) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  }
+
+  // Server-side validation/normalization فعلي — لا نعتمد على أن العميل التزم بالتطبيع فعليًا
+  // (التعليقات القديمة كانت تفترض ذلك بلا فرض حقيقي). نقبل فقط 05XXXXXXXX أو +9665XXXXXXXX،
+  // ونُوحِّد دائمًا لصيغة التخزين +9665XXXXXXXX قبل أي استخدام لاحق — بحث/تعارض/إدراج.
+  const normalizedPhone = normalizeSaudiStoredPhoneInput(phone);
+  if (!normalizedPhone) {
+    return NextResponse.json({ error: SAUDI_PHONE_ERROR }, { status: 400 });
   }
 
   const parsedGrade = parseAndValidateGrade(grade);
@@ -83,39 +116,101 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "اكتمل عدد المقاعد في هذه المجموعة" }, { status: 409 });
   }
 
-  // ولي الأمر: نجلب كل الصفوف المطابقة لهذا الجوال (لا maybeSingle مع تجاهل الخطأ — كان هذا
-  // يفشل صامتًا عند وجود أكثر من صف مكرَّر بنفس الجوال، فيُنشئ صفًا ثالثًا بدل استخدام الموجود).
-  const { data: matchingParents, error: parentsFetchError } = await supabase
-    .from("parents")
-    .select("id, user_id, created_at")
-    .eq("phone", phone)
-    .order("created_at", { ascending: true });
+  // ---------------------------------------------------------------------
+  // هوية ولي الأمر — تُحسَم بالكامل قبل إنشاء أي child أو subscription.
+  // ---------------------------------------------------------------------
+  let parent: { id: string };
 
-  if (parentsFetchError) {
-    console.error(`[enroll] خطأ استعلام مؤقت أثناء البحث عن ولي الأمر بالجوال:`, parentsFetchError.message);
+  const { data: byUser, error: byUserError } = await supabase
+    .from("parents")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (byUserError) {
+    console.error(`[enroll] خطأ استعلام أثناء البحث بـuser_id للمستخدم ${user.id}:`, byUserError.message);
     return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
   }
 
-  let parent: { id: string };
-  if (!matchingParents || matchingParents.length === 0) {
-    const { data: newParent, error: parentError } = await supabase
-      .from("parents")
-      .insert({ full_name: parentName, phone })
-      .select("id")
-      .single();
-    if (parentError) return NextResponse.json({ error: parentError.message }, { status: 500 });
-    parent = newParent;
-  } else if (matchingParents.length === 1) {
-    parent = matchingParents[0];
+  if (byUser) {
+    parent = byUser;
   } else {
-    // أكثر من صف بنفس الجوال (تكرار قديم) — لا نُنشئ صفًا ثالثًا أبدًا. الصف المرتبط بـuser_id
-    // فعليًا هو الأولى دائمًا (حساب حقيقي مُصادَق)، وإلا الأقدم (الأرجح أن يحمل بيانات تسجيل
-    // حقيقية سابقة). التنظيف الفعلي للتكرار يتم عبر /api/auth/link-parent عند الدخول.
-    const linked = matchingParents.find((p: { id: string; user_id: string | null; created_at: string }) => p.user_id !== null);
-    parent = linked ?? matchingParents[0];
-    console.error(
-      `[enroll] تكرار ولي أمر بنفس الجوال (${matchingParents.length} صفوف) — استُخدِم ${parent.id} كصف أساسي للتسجيل. يتطلب مراجعة/دمج.`
-    );
+    const { data: byEmail, error: byEmailError } = await supabase
+      .from("parents")
+      .select("id, user_id")
+      .eq("email", email)
+      .maybeSingle();
+    if (byEmailError) {
+      console.error(`[enroll] خطأ استعلام أثناء البحث بالبريد للمستخدم ${user.id}:`, byEmailError.message);
+      return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
+    }
+
+    if (byEmail && byEmail.user_id && byEmail.user_id !== user.id) {
+      // صف موجود بنفس البريد لكن مرتبط بحساب مستخدم آخر فعليًا — تعارض حقيقي، لا دمج تلقائي.
+      console.error(`[enroll] تعارض: البريد ${email} مرتبط بالفعل بمستخدم آخر (${byEmail.user_id}) غير الحالي (${user.id}).`);
+      return NextResponse.json({ error: "هذا البريد مرتبط بحساب آخر بالفعل. تواصل معنا للمساعدة." }, { status: 409 });
+    }
+
+    if (byEmail && !byEmail.user_id) {
+      // صف موجود بلا user_id (نادر بعد تصلّب هذا المسار، لكن ممكن من بيانات أقدم) — اربطه الآن.
+      const { error: linkError } = await supabase.from("parents").update({ user_id: user.id }).eq("id", byEmail.id).is("user_id", null);
+      if (linkError) {
+        console.error(`[enroll] فشل ربط parent موجود (${byEmail.id}) بالمستخدم ${user.id}:`, linkError.message);
+        return NextResponse.json({ error: "تعذّر إكمال إعداد الحساب" }, { status: 500 });
+      }
+      parent = byEmail;
+    } else {
+      // لا صف بهذا البريد ولا بهذا الحساب — جسر التوافق مع بيانات قديمة (Legacy) قبل Email
+      // OTP: نبحث بالجوال المطبَّع قبل إنشاء صف جديد، تحديدًا عن صف "يتيم" بلا user_id وبلا
+      // email إطلاقًا (تسجيل قديم فعلي لم يُربَط بأي حساب مصادقة بعد). البريد يبقى الهوية
+      // الأساسية — هذا الجسر فقط لتفادي إنشاء صف مكرِّر لشخص مسجَّل قديمًا بجواله فقط.
+      const { data: byPhone, error: byPhoneError } = await supabase
+        .from("parents")
+        .select("id, user_id, email")
+        .eq("phone", normalizedPhone);
+      if (byPhoneError) {
+        console.error(`[enroll] خطأ استعلام أثناء جسر الجوال القديم للمستخدم ${user.id}:`, byPhoneError.message);
+        return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
+      }
+
+      const phoneRows = byPhone ?? [];
+      if (phoneRows.length > 1) {
+        // أكثر من صف بنفس الجوال (تكرار قديم) — لا نُنشئ صفًا ثالثًا، نرفض ونُسجِّل للمراجعة.
+        console.error(`[enroll] تكرار جوال قديم (${phoneRows.length} صفوف) للجوال ${normalizedPhone} — يتطلب مراجعة يدوية قبل تسجيل المستخدم ${user.id}.`);
+        return NextResponse.json({ error: "هذا الرقم مرتبط بأكثر من حساب. تواصل معنا للمساعدة." }, { status: 409 });
+      }
+
+      const phoneMatch = phoneRows[0];
+      if (phoneMatch && (phoneMatch.user_id || phoneMatch.email)) {
+        // الصف الموجود ليس يتيمًا فعليًا (مرتبط بحساب آخر أو ببريد آخر بالفعل) — تعارض حقيقي،
+        // لا ربط تلقائي آمن هنا.
+        console.error(`[enroll] تعارض: الجوال ${normalizedPhone} مرتبط بصف غير يتيم (${phoneMatch.id}) — لا يمكن ربطه تلقائيًا بالمستخدم ${user.id}.`);
+        return NextResponse.json({ error: "هذا الرقم مرتبط بحساب آخر بالفعل. تواصل معنا للمساعدة." }, { status: 409 });
+      }
+
+      if (phoneMatch) {
+        // صف يتيم فعليًا (بلا user_id وبلا email) — ربطه الآن بدل إنشاء صف جديد.
+        const { error: bridgeError } = await supabase
+          .from("parents")
+          .update({ user_id: user.id, email })
+          .eq("id", phoneMatch.id)
+          .is("user_id", null)
+          .is("email", null);
+        if (bridgeError) {
+          console.error(`[enroll] فشل جسر الجوال القديم لصف ${phoneMatch.id} للمستخدم ${user.id}:`, bridgeError.message);
+          return NextResponse.json({ error: "تعذّر إكمال إعداد الحساب" }, { status: 500 });
+        }
+        parent = phoneMatch;
+      } else {
+        // لا صف بهذا البريد ولا بهذا الجوال ولا بهذا الحساب إطلاقًا — إنشاء مباشر.
+        const { data: newParent, error: parentError } = await supabase
+          .from("parents")
+          .insert({ user_id: user.id, full_name: parentName, phone: normalizedPhone, email })
+          .select("id")
+          .single();
+        if (parentError) return NextResponse.json({ error: parentError.message }, { status: 500 });
+        parent = newParent;
+      }
+    }
   }
 
   const { data: child, error: childError } = await supabase

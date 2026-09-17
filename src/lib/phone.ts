@@ -23,6 +23,25 @@ export function normalizeSaudiPhone(phone: string): string {
   return `+966${local.slice(1)}`;
 }
 
+// خاص بالتحقق/التطبيع server-side لرقم جوال قادم من body طلب API (مثل /api/enroll) — حيث لا
+// يجوز الوثوق بأن العميل التزم فعليًا بتطبيع normalizeSaudiPhone الذي يحدث في الواجهة فقط.
+// يقبل الصيغتين المحتملتين فعليًا لرقم مُطبَّع (محلي 05XXXXXXXX، أو دولي +9665XXXXXXXX سبق
+// تطبيعه من نداء سابق) ويُوحِّدهما دائمًا لصيغة التخزين +9665XXXXXXXX — أي صيغة أخرى تُرفَض
+// صراحةً (fail-closed)، لا تخمين. منفصلة تمامًا عن normalizeSaudiPhone (تلك تبقى للواجهة فقط،
+// تقبل محلي حصرًا وترمي استثناءً بدل إرجاع null — لا تغيير عليها هنا).
+export function normalizeSaudiStoredPhoneInput(phone: string): string | null {
+  const digits = phone.replace(/\D/g, "");
+
+  if (SAUDI_LOCAL_PHONE_REGEX.test(digits)) {
+    return `+966${digits.slice(1)}`;
+  }
+  if (/^9665\d{8}$/.test(digits)) {
+    return `+${digits}`;
+  }
+
+  return null;
+}
+
 // خاص ببوابة الدفع Paylink فقط — لا علاقة له بـAuth/OTP/enroll، ولا يُستخدَم فيها. الجوال
 // يُخزَّن دائمًا بصيغة +966XXXXXXXXX (عبر normalizeSaudiPhone أعلاه)، لكن Paylink يتوقّع الصيغة
 // المحلية 05XXXXXXXX. يقبل الصيغتين المخزَّنتين المحتملتين (محلية أو دولية) ويرفض غيرهما

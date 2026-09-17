@@ -157,15 +157,20 @@ export default function PaymentClient({
         </button>
 
         {process.env.NODE_ENV !== "production" && (
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed var(--line)" }}>
-            <span className="badge">تأكيد يدوي — بيئة التطوير فقط</span>
-            <p style={{ color: "var(--gray)", fontSize: 13, marginTop: 8 }}>
-              هذا الزر بديل تطويري لتجاوز بوابة الدفع الفعلية أثناء الاختبار المحلي فقط — غير متاح في الإنتاج.
-            </p>
-            <button className="btn outline" disabled={loading || !canConfirm} onClick={confirm} style={{ marginTop: 10 }}>
-              {loading ? "جارٍ التأكيد..." : "تأكيد الدفع (تجريبي)"}
-            </button>
-          </div>
+          <details style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed var(--line)" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13, color: "var(--gray)" }}>
+              أدوات اختبار المطور
+            </summary>
+            <div style={{ marginTop: 12 }}>
+              <span className="badge">تأكيد يدوي — بيئة التطوير فقط</span>
+              <p style={{ color: "var(--gray)", fontSize: 13, marginTop: 8 }}>
+                هذا الزر بديل تطويري لتجاوز بوابة الدفع الفعلية أثناء الاختبار المحلي فقط — غير متاح في الإنتاج.
+              </p>
+              <button className="btn outline" disabled={loading || !canConfirm} onClick={confirm} style={{ marginTop: 10 }}>
+                {loading ? "جارٍ التأكيد..." : "تأكيد الدفع (تجريبي)"}
+              </button>
+            </div>
+          </details>
         )}
       </div>
     </div>

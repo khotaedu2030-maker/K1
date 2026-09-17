@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { isValidSaudiLocalPhone, normalizeSaudiPhone, SAUDI_PHONE_ERROR } from "@/lib/phone";
 import { formatSessionCount } from "@/lib/plan-display";
+import { supabase } from "@/lib/supabase";
 
 type EnrollDetails = {
   grade: string;
@@ -28,6 +29,7 @@ export default function EnrollForm({
 }) {
   const router = useRouter();
   const [parentName, setParentName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [childName, setChildName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,6 +38,11 @@ export default function EnrollForm({
   async function submit() {
     setError(null);
 
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !normalizedEmail.includes("@")) {
+      setError("أدخل بريدًا إلكترونيًا صحيحًا.");
+      return;
+    }
     if (!isValidSaudiLocalPhone(phone)) {
       setError(SAUDI_PHONE_ERROR);
       return;
@@ -43,15 +50,36 @@ export default function EnrollForm({
 
     setLoading(true);
 
-    // نفس صيغة +966 المخزَّنة عند تسجيل الدخول — يضمن مطابقة رقم الجوال بصيغة واحدة موحَّدة
-    // في جدول parents بصرف النظر عن نقطة الدخول (تسجيل أو دخول لاحق)، دون أي تغيير في منطق
-    // /api/enroll نفسه (لا يزال يستقبل ويخزّن قيمة phone كما هي).
+    // نفس صيغة +966 المخزَّنة — يضمن مطابقة رقم الجوال بصيغة واحدة موحَّدة في جدول parents.
     const internationalPhone = normalizeSaudiPhone(phone);
+    const payload = { parentName, email: normalizedEmail, phone: internationalPhone, childName, grade, cohortId };
+
+    // /api/enroll يتطلب الآن جلسة Supabase Auth حقيقية — لا يُستدعى مباشرة بلا جلسة إطلاقًا،
+    // منعًا لحجز مقعد قبل أي تحقق OTP فعلي. إن لم تكن هناك جلسة، نُخزِّن بيانات النموذج مؤقتًا
+    // (لا شيء حسّاس ماليًا هنا) ونمرّ عبر تسجيل الدخول أولًا، ثم /motabaa/enroll/complete
+    // يستكمل الاستدعاء الفعلي بعد التحقق الناجح.
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+      sessionStorage.setItem("khota_pending_enrollment", JSON.stringify(payload));
+      setLoading(false);
+      router.push(`/login?next=${encodeURIComponent("/motabaa/enroll/complete")}&email=${encodeURIComponent(normalizedEmail)}`);
+      return;
+    }
+
+    // جلسة موجودة فعليًا — إن كان بريد الحساب المسجَّل دخوله مختلفًا عن البريد المكتوب بالنموذج،
+    // لا نستدعي /api/enroll إطلاقًا (سيرفضه server-side بـ409 على أي حال، لكن نمنع المحاولة
+    // ونوضّح السبب للمستخدم مباشرة بدل رسالة خطأ عامة).
+    const sessionEmail = (sessionData.session.user.email ?? "").trim().toLowerCase();
+    if (sessionEmail && sessionEmail !== normalizedEmail) {
+      setLoading(false);
+      setError(`أنت مسجَّل دخولك ببريد مختلف (${sessionEmail}). استخدم هذا البريد نفسه أعلاه، أو سجّل الخروج أولًا.`);
+      return;
+    }
 
     const res = await fetch("/api/enroll", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ parentName, phone: internationalPhone, childName, grade, cohortId }),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
@@ -90,7 +118,11 @@ export default function EnrollForm({
         <div className="form" style={{ marginTop: 0 }}>
           <label>
             اسم ولي الأمر
-            <input value={parentName} onChange={(e) => setParentName(e.target.value)} />
+            <input value={parentName} onChange={(e: ChangeEvent<HTMLInputElement>) => setParentName(e.target.value)} />
+          </label>
+          <label>
+            البريد الإلكتروني
+            <input dir="ltr" type="email" autoComplete="email" value={email} onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
           </label>
           <label>
             رقم الجوال
@@ -100,19 +132,19 @@ export default function EnrollForm({
               maxLength={10}
               placeholder="05XXXXXXXX"
               value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
             />
           </label>
           <label>
             اسم الطفل
-            <input value={childName} onChange={(e) => setChildName(e.target.value)} />
+            <input value={childName} onChange={(e: ChangeEvent<HTMLInputElement>) => setChildName(e.target.value)} />
           </label>
           {error && <p role="alert" style={{ color: "var(--p)" }}>{error}</p>}
-          <button className="btn" disabled={!parentName || !phone || !childName || loading} onClick={submit}>
-            {loading ? "جارٍ الحفظ..." : "الانتقال للدفع ←"}
+          <button className="btn" disabled={!parentName || !email || !phone || !childName || loading} onClick={submit}>
+            {loading ? "جارٍ الحفظ..." : "المتابعة ←"}
           </button>
           <p style={{ color: "var(--gray)", fontSize: 13 }}>
-            الدفع سيُربط بمزوّد دفع فعلي لاحقًا؛ الاشتراك لا يصبح فعّالًا إلا بعد تأكيد الدفع من الخادم.
+            سنطلب تأكيد بريدك الإلكتروني برمز تحقق قبل إتمام الدفع، والاشتراك لا يصبح فعّالًا إلا بعد تأكيد الدفع من الخادم.
           </p>
         </div>
       </div>

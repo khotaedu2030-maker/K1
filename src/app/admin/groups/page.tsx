@@ -5,6 +5,18 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { formatSeatCount } from "@/lib/plan-display";
 
+// حالة التسجيل المعروضة مشتقة دائمًا، لا تُختار يدويًا: closed تعني مغلق يدويًا، seats<=0 مع
+// open تعني "مكتملة" تلقائيًا، وإلا "متاحة" — لا قيمة "full" منفصلة تُخزَّن أو تُختار من الإدارة.
+function registrationLabel(status: string, seatsAvailable: number): string {
+  if (status === "full") return "⚠ حالة قديمة (full) — تحتاج تصحيح: اختر \"متاح للتسجيل\" لتحديثها";
+  if (status === "closed") return "التسجيل مغلق";
+  if (seatsAvailable <= 0) return "مكتملة";
+  return "متاحة";
+}
+
+type CohortRow = { id: string; title: string; capacity: number; status: string; meeting_url: string | null; teacher_id: string | null };
+type CohortRowWithCount = CohortRow & { activeCount: number };
+
 export default async function P() {
   const authed = await createSupabaseServerClient();
   const {
@@ -31,24 +43,24 @@ export default async function P() {
   const { data: cohorts } = await admin
     .from("cohorts")
     .select("id, title, capacity, status, meeting_url, teacher_id")
-    .neq("status", "closed");
+    .in("status", ["open", "closed", "full"]); // "full" هنا Legacy فقط — القيمة الجديدة "مكتملة"
+    // مشتقة دائمًا من السعة الفعلية، لا تُخزَّن. نعرض أي صف قديم لا يزال full ليتمكّن الأدمن من
+    // إصلاحه مباشرة (اختيار "متاح للتسجيل" يُصحِّحه فورًا) بدل أن يختفي بلا إمكانية إدارة.
   const { data: teachers } = await admin.from("teachers").select("id, full_name").eq("active", true);
 
   const rows = await Promise.all(
-    (cohorts ?? []).map(async (c) => {
-      // الطلاب النشطون فعليًا فقط — وليس إجمالي الاشتراكات التاريخية لهذه المجموعة
-      const { count } = await admin
-        .from("subscriptions")
-        .select("*", { count: "exact", head: true })
-        .eq("cohort_id", c.id)
-        .eq("status", "active");
-      return { ...c, activeCount: count ?? 0 };
+    (cohorts ?? []).map(async (c: CohortRow) => {
+      // نفس دالة الاحتساب المركزية الواحدة (cohort_occupied_seats) المستخدَمة في كل مكان آخر
+      // فعليًا (cohort_available_seats، public_cohorts_catalog، enroll_subscription_atomic،
+      // admin_update_cohort_operations_atomic) — لا صيغة مكرَّرة هنا قد تنحرف عنها لاحقًا.
+      const { data: occupiedCount } = await admin.rpc("cohort_occupied_seats", { p_cohort_id: c.id });
+      return { ...c, activeCount: occupiedCount ?? 0 };
     })
   );
 
-  const missingOps = rows.filter((r) => !r.meeting_url || !r.teacher_id);
-  const singleStudentCohorts = rows.filter((r) => r.activeCount === 1);
-  const otherCohorts = rows.filter((r) => r.activeCount !== 1);
+  const missingOps = rows.filter((r: CohortRowWithCount) => !r.meeting_url || !r.teacher_id);
+  const singleStudentCohorts = rows.filter((r: CohortRowWithCount) => r.activeCount === 1);
+  const otherCohorts = rows.filter((r: CohortRowWithCount) => r.activeCount !== 1);
 
   return (
     <Shell>
@@ -63,15 +75,18 @@ export default async function P() {
               <p style={{ color: "var(--gray)", marginTop: 8 }}>
                 مجموعات بلا رابط جلسة و/أو معلم مُسنَد — لن تعمل جلساتها الفعلية بدون إكمالها.
               </p>
-              {missingOps.map((c) => (
+              {missingOps.map((c: CohortRowWithCount) => (
                 <div key={c.id} style={{ borderBottom: "1px solid var(--line)", padding: "12px 0" }}>
                   <div className="taskline" style={{ borderBottom: 0, padding: 0 }}>
                     <span>{c.title}</span>
+                    <span>{registrationLabel(c.status, c.capacity - c.activeCount)}</span>
                   </div>
                   <CohortOperationsForm
                     cohortId={c.id}
                     currentMeetingUrl={c.meeting_url}
                     currentTeacherId={c.teacher_id}
+                    currentCapacity={c.capacity}
+                    currentStatus={c.status}
                     teachers={teachers ?? []}
                   />
                 </div>
@@ -85,7 +100,7 @@ export default async function P() {
               <p style={{ color: "var(--gray)", marginTop: 8 }}>
                 هذه مجموعات تستحق دراسة (دمج، إعادة جدولة، أو تعديل) — لا يوجد إجراء تلقائي، القرار للإدارة.
               </p>
-              {singleStudentCohorts.map((c) => (
+              {singleStudentCohorts.map((c: CohortRowWithCount) => (
                 <div className="taskline" key={c.id}>
                   <span>{c.title}</span>
                   <span>طالب واحد / سعة {c.capacity}</span>
@@ -96,16 +111,20 @@ export default async function P() {
 
           <div className="dashcard" style={{ marginTop: 20 }}>
             <b>كل المجموعات النشطة</b>
-            {otherCohorts.map((c) => (
+            {otherCohorts.map((c: CohortRowWithCount) => (
               <div key={c.id} style={{ borderBottom: "1px solid var(--line)", padding: "12px 0" }}>
                 <div className="taskline" style={{ borderBottom: 0, padding: 0 }}>
                   <span>{c.title}</span>
-                  <span>{c.activeCount} من {formatSeatCount(c.capacity)}</span>
+                  <span>
+                    المسجلون: {c.activeCount} من {formatSeatCount(c.capacity)} — {registrationLabel(c.status, c.capacity - c.activeCount)}
+                  </span>
                 </div>
                 <CohortOperationsForm
                   cohortId={c.id}
                   currentMeetingUrl={c.meeting_url}
                   currentTeacherId={c.teacher_id}
+                  currentCapacity={c.capacity}
+                  currentStatus={c.status}
                   teachers={teachers ?? []}
                 />
               </div>

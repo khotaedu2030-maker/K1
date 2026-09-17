@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Shell from "@/components/Shell";
+import ContactForm from "./ContactForm";
 
 export default function P() {
   return (
@@ -13,27 +14,7 @@ export default function P() {
             سؤال عن الخطط، حالة خاصة لطفلك، أو ملاحظة عن جلسة.
           </p>
 
-          <div className="form" style={{ marginTop: 30 }}>
-            <label>
-              الاسم
-              <input />
-            </label>
-            <label>
-              الجوال
-              <input dir="ltr" />
-            </label>
-            <label>
-              موضوع الرسالة
-              <textarea rows={4} />
-            </label>
-            <p style={{ color: "var(--gray)", fontSize: 13, margin: 0 }}>
-              لا ترسل بيانات البطاقة أو كلمات المرور أو رموز التحقق عبر هذا النموذج أو أي قناة تواصل أخرى.
-            </p>
-            <p style={{ color: "var(--n)", fontSize: 13, fontWeight: 700, margin: 0 }}>
-              قناة الدعم الإلكترونية عبر هذا النموذج غير مفعَّلة بعد. سيتم تفعيلها قريبًا.
-            </p>
-            <button className="btn" disabled title="غير متاح حاليًا">إرسال</button>
-          </div>
+          <ContactForm />
         </div>
         <div className="split-visual step-frame flip">
           <Image

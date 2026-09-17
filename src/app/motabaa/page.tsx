@@ -31,11 +31,11 @@ export default function P() {
             <Reveal>
               <span className="eyebrow" style={{ color: "var(--g)" }}>خُطى متابعة</span>
               <h1 style={{ fontSize: "clamp(34px,5.5vw,66px)" }}>
-                متابعة واضحة بعد المدرسة.
+                شخص يتابع دراسة طفلك...
                 <br />
-                ووقت أهدأ للأسرة مساءً.
+                حتى لا تبدأ معه من الصفر كل مساء.
               </h1>
-              <p className="lead">متابعة منظّمة للابتدائي، وجلسات تركيز للمتوسط والثانوي — عن بُعد.</p>
+              <p className="lead">متابعة وتأسيس للمرحلة الابتدائية، وجلسات تركيز للمتوسط والثانوي — عن بُعد.</p>
               <div className="actions">
                 <Link className="btn" href="/motabaa/plans">استعرض الخطط ←</Link>
               </div>
@@ -47,8 +47,8 @@ export default function P() {
           <div className="container">
             <Reveal>
               <span className="eyebrow">بعد المدرسة</span>
-              <h2>يبدأ وقتٌ أوضح للإنجاز.</h2>
-              <p>مهام ومراجعة واستعداد لليوم التالي، ضمن خطوات ثابتة تساعد الطالب على معرفة ما عليه وإنجازه.</p>
+              <h2>يبدأ وقت خُطى، لا وقت الفوضى.</h2>
+              <p>واجبات، مراجعة، واستعداد لليوم التالي — خُطى تنظّم هذا كله بمنهجية واحدة ثابتة في كل جلسة.</p>
             </Reveal>
           </div>
         </section>
@@ -56,8 +56,8 @@ export default function P() {
         <EditorialSplit image="/images/khota-live-session.webp" alt="طالب في جلسة تركيز" objectPosition="42% 20%">
           <Reveal>
             <span className="eyebrow">الجلسة</span>
-            <h2 style={{ fontSize: "clamp(26px,3.2vw,40px)" }}>الطالب يعمل، والمعلم يوجّه.</h2>
-            <p className="lead">يبدأ الطالب بأولوياته، يعمل باستقلالية، ويتدخل المعلم عندما يحتاج توجيهًا حقيقيًا.</p>
+            <h2 style={{ fontSize: "clamp(26px,3.2vw,40px)" }}>يعمل، لا يُشاهَد وهو يعمل.</h2>
+            <p className="lead">معلم يوجّه دون أن يحل محله — يبني عادة الإنجاز المستقل خطوة بخطوة.</p>
           </Reveal>
         </EditorialSplit>
 
@@ -66,7 +66,7 @@ export default function P() {
         <EditorialSplit image="/images/khota-parent-experience.webp" alt="ولي أمر يطّلع على تقرير طفله" objectPosition="35% 25%" reverse contentBg="var(--card)">
           <Reveal>
             <span className="eyebrow">ولي الأمر</span>
-            <h2 style={{ fontSize: "clamp(26px,3.2vw,40px)" }}>صورة واضحة بعد كل جلسة.</h2>
+            <h2 style={{ fontSize: "clamp(26px,3.2vw,40px)" }}>تقرير، لا تخمين.</h2>
             <p className="lead">بعد كل جلسة تصلك بطاقة مختصرة: ماذا أُنجز، وماذا يحتاج غدًا.</p>
           </Reveal>
         </EditorialSplit>
