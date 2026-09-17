@@ -113,9 +113,9 @@ export default async function AdminOverviewPage() {
             <p className="admin-empty-state" style={{ marginTop: 12 }}>لا توجد جلسات مجدولة اليوم.</p>
           ) : (
             <div style={{ marginTop: 10 }}>
-              {d.todaySessions.slice(0, 8).map((s: { id: string; starts_at: string; status: string; cohorts: { title: string } | null }) => (
+              {d.todaySessions.slice(0, 8).map((s: { id: string; starts_at: string; status: string; cohorts: { title: string }[] }) => (
                 <div className="taskline" key={s.id}>
-                  <span>{new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })} — {s.cohorts?.title ?? "—"}</span>
+                  <span>{new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })} — {s.cohorts[0]?.title ?? "—"}</span>
                   <span>{s.status}</span>
                 </div>
               ))}

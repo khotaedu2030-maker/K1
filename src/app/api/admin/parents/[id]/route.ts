@@ -31,12 +31,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   return NextResponse.json({
     parent,
-    children: (children ?? []).map((c: { id: string; first_name: string; grade: number; subscriptions: { status: string; cohorts: { title: string } | null }[] | null }) => ({
+    children: (children ?? []).map((c: { id: string; first_name: string; grade: number; subscriptions: { status: string; cohorts: { title: string }[] }[] | null }) => ({
       id: c.id,
       firstName: c.first_name,
       grade: c.grade,
       subscriptionStatus: c.subscriptions?.[0]?.status ?? null,
-      cohortTitle: c.subscriptions?.[0]?.cohorts?.title ?? null,
+      cohortTitle: c.subscriptions?.[0]?.cohorts?.[0]?.title ?? null,
       makeupAvailable: makeupByChild.get(c.id) ?? 0,
     })),
     recentPayments: payments ?? [],
