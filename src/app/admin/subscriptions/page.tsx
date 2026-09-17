@@ -1,28 +1,18 @@
-import Link from "next/link";
-import Shell from "@/components/Shell";
+import AdminShell from "@/components/AdminShell";
 import ReviewButtons from "./ReviewButtons";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export default async function P() {
-  const authed = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await authed.auth.getUser();
-  const { data: adminRow } = user
-    ? await authed.from("admins").select("id").eq("user_id", user.id).maybeSingle()
-    : { data: null };
+  const adminIdentity = await getAdminIdentity();
 
-  if (!adminRow) {
+  if (!adminIdentity) {
     return (
-      <Shell>
-        <main className="placeholder-page">
-          <div className="narrow">
-            <span className="badge">غير مصرَّح</span>
-            <Link className="btn outline" href="/">← الرئيسية</Link>
-          </div>
-        </main>
-      </Shell>
+      <div className="placeholder-page">
+        <div className="narrow">
+          <span className="badge">غير مصرَّح</span>
+        </div>
+      </div>
     );
   }
 
@@ -34,29 +24,26 @@ export default async function P() {
     .order("created_at", { ascending: true });
 
   return (
-    <Shell>
-      <main className="section">
-        <div className="container">
-          <span className="eyebrow">لوحة الإدارة</span>
-          <h1 className="title" style={{ fontSize: 34 }}>طلبات تجميد الاشتراك</h1>
+    <AdminShell adminName={adminIdentity.full_name}>
+      <div className="admin-page-head">
+        <h1>طلبات تجميد الاشتراك</h1>
+      </div>
 
-          {(!requestedPauses || requestedPauses.length === 0) && (
-            <p className="lead" style={{ marginTop: 20 }}>لا توجد طلبات بانتظار المراجعة.</p>
-          )}
+      {(!requestedPauses || requestedPauses.length === 0) && (
+        <p className="admin-empty-state">لا توجد طلبات بانتظار المراجعة.</p>
+      )}
 
-          {(requestedPauses ?? []).map((p: any) => (
-            <div className="session-row" key={p.id}>
-              <div>
-                <b>{p.subscriptions?.children?.first_name ?? "طالب"}</b>
-                <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
-                  {p.start_date} → {p.end_date} {p.reason ? `• ${p.reason}` : ""}
-                </p>
-              </div>
-              <ReviewButtons pauseId={p.id} />
-            </div>
-          ))}
+      {(requestedPauses ?? []).map((p: any) => (
+        <div className="session-row" key={p.id}>
+          <div>
+            <b>{p.subscriptions?.children?.first_name ?? "طالب"}</b>
+            <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
+              {p.start_date} → {p.end_date} {p.reason ? `• ${p.reason}` : ""}
+            </p>
+          </div>
+          <ReviewButtons pauseId={p.id} />
         </div>
-      </main>
-    </Shell>
+      ))}
+    </AdminShell>
   );
 }

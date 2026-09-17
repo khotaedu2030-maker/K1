@@ -1,5 +1,8 @@
-// إعداد مركزي واحد لساعات الهدوء المؤسسية — لا نكرّر "8:00 مساءً" داخل عدة ملفات. أي تعديل
-// لاحق (توقيت مختلف، ربط SLA/Notifications) يبدأ ويتم من هنا فقط.
+// إعداد مركزي واحد لساعات الهدوء المؤسسية — القيم أدناه هي الافتراضي الآمن فقط (يُستخدَم قبل
+// تطبيق migration الإعدادات أو إن فشل الاستعلام). المصدر الفعلي عند التشغيل هو
+// platform_settings عبر src/lib/platform-settings.ts.
+import { getRuntimeSettings } from "@/lib/platform-settings";
+
 export const QUIET_HOURS = {
   timezone: "Asia/Riyadh",
   startHour: 20, // 8:00 مساءً
@@ -9,7 +12,8 @@ export const QUIET_HOURS = {
 export const QUIET_HOURS_MESSAGE =
   "تم استلام رسالتك، وسيتم الرد خلال ساعات التواصل.";
 
-export function isQuietHoursNow(date: Date = new Date()): boolean {
+export async function isQuietHoursNow(date: Date = new Date()): Promise<boolean> {
+  const settings = await getRuntimeSettings();
   const hour = Number(
     new Intl.DateTimeFormat("en-US", {
       hour: "2-digit",
@@ -18,7 +22,8 @@ export function isQuietHoursNow(date: Date = new Date()): boolean {
     }).format(date)
   );
 
-  const { startHour, endHour } = QUIET_HOURS;
+  const startHour = settings.quietHoursStart;
+  const endHour = settings.quietHoursEnd;
   // يدعم النطاق العابر لمنتصف الليل (مثل 20 → 8)
   if (startHour > endHour) {
     return hour >= startHour || hour < endHour;

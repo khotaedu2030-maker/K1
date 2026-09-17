@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { PAUSE_POLICY } from "@/lib/policies";
+import { getRuntimeSettings } from "@/lib/platform-settings";
 
 // طلب تجميد اشتراك — Workflow بحالة صريحة (requested → approved/rejected)، وليس تعديلًا مباشرًا
 // لولي الأمر على الاشتراك. كل قواعد الأهلية من src/lib/policies.ts فقط.
@@ -51,8 +51,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "تاريخ النهاية قبل تاريخ البداية" }, { status: 400 });
   }
   const durationDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
-  if (durationDays > PAUSE_POLICY.MAX_PAUSE_DAYS) {
-    return NextResponse.json({ error: `أقصى مدة تجميد ${PAUSE_POLICY.MAX_PAUSE_DAYS} أيام` }, { status: 400 });
+  // الحد الأقصى الفعلي: platform_settings.pause_max_days إن كانت الهجرة مُطبَّقة، وإلا
+  // الافتراضي المطابق لـPAUSE_POLICY.MAX_PAUSE_DAYS الحالي.
+  const settings = await getRuntimeSettings();
+  if (durationDays > settings.pauseMaxDays) {
+    return NextResponse.json({ error: `أقصى مدة تجميد ${settings.pauseMaxDays} أيام` }, { status: 400 });
   }
 
   const { data: existingPauses } = await admin
@@ -61,7 +64,7 @@ export async function POST(req: Request) {
     .eq("subscription_id", subscriptionId)
     .in("status", ["requested", "approved", "active"]);
 
-  const overlaps = (existingPauses ?? []).some((p) => {
+  const overlaps = (existingPauses ?? []).some((p: { start_date: string; end_date: string }) => {
     const pStart = new Date(p.start_date);
     const pEnd = new Date(p.end_date);
     return start <= pEnd && end >= pStart;

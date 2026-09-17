@@ -1,6 +1,5 @@
-import Link from "next/link";
-import Shell from "@/components/Shell";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import AdminShell from "@/components/AdminShell";
+import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { SCORECARD_POLICY } from "@/lib/policies";
 
@@ -28,25 +27,16 @@ const statusMeta: Record<string, { label: string; color: string }> = {
 };
 
 export default async function P() {
-  const authed = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await authed.auth.getUser();
-  const { data: adminRow } = user
-    ? await authed.from("admins").select("full_name").eq("user_id", user.id).maybeSingle()
-    : { data: null };
+  const adminIdentity = await getAdminIdentity();
 
-  if (!adminRow) {
+  if (!adminIdentity) {
     return (
-      <Shell>
-        <main className="placeholder-page">
-          <div className="narrow">
-            <span className="badge">غير مصرَّح</span>
-            <h1 className="title" style={{ fontSize: 32, marginTop: 16 }}>هذه الصفحة لحسابات الإدارة فقط</h1>
-            <Link className="btn outline" href="/">← الرئيسية</Link>
-          </div>
-        </main>
-      </Shell>
+      <div className="placeholder-page">
+        <div className="narrow">
+          <span className="badge">غير مصرَّح</span>
+          <h1 className="title" style={{ fontSize: 32, marginTop: 16 }}>هذه الصفحة لحسابات الإدارة فقط</h1>
+        </div>
+      </div>
     );
   }
 
@@ -57,15 +47,15 @@ export default async function P() {
   windowStart.setDate(windowStart.getDate() - WINDOW_DAYS);
 
   const rows = await Promise.all(
-    (teachers ?? []).map(async (t) => {
+    (teachers ?? []).map(async (t: { id: string; full_name: string }) => {
       const { data: sessions } = await admin
         .from("sessions")
         .select("id, status, cancelled_by, ends_at")
         .eq("teacher_id", t.id)
         .gte("session_date", windowStart.toISOString().slice(0, 10));
 
-      const completed = (sessions ?? []).filter((s) => s.status === "completed");
-      const teacherCancelled = (sessions ?? []).filter((s) => s.status === "cancelled" && s.cancelled_by === "teacher");
+      const completed = (sessions ?? []).filter((s: { status: string; cancelled_by: string | null }) => s.status === "completed");
+      const teacherCancelled = (sessions ?? []).filter((s: { status: string; cancelled_by: string | null }) => s.status === "cancelled" && s.cancelled_by === "teacher");
       const commitmentDenominator = completed.length + teacherCancelled.length;
       const commitmentRate = commitmentDenominator > 0 ? completed.length / commitmentDenominator : null;
 
@@ -86,11 +76,11 @@ export default async function P() {
       const timelinessRate = completed.length > 0 ? onTimeCount / completed.length : null;
 
       const { data: cohorts } = await admin.from("cohorts").select("id").eq("teacher_id", t.id);
-      const cohortIds = (cohorts ?? []).map((c) => c.id);
+      const cohortIds = (cohorts ?? []).map((c: { id: string }) => c.id);
       const { data: activeSubs } = cohortIds.length
         ? await admin.from("subscriptions").select("child_id").in("cohort_id", cohortIds).eq("status", "active")
         : { data: [] };
-      const activeStudents = new Set((activeSubs ?? []).map((s) => s.child_id)).size;
+      const activeStudents = new Set((activeSubs ?? []).map((s: { child_id: string }) => s.child_id)).size;
 
       const status = deriveStatus(commitmentRate, timelinessRate, completed.length);
 
@@ -107,47 +97,44 @@ export default async function P() {
   );
 
   return (
-    <Shell>
-      <main className="section">
-        <div className="container">
-          <span className="eyebrow">لوحة الإدارة</span>
-          <h1 className="title" style={{ fontSize: 34 }}>جودة المعلمين</h1>
-          <p className="lead">
-            آخر {WINDOW_DAYS} يومًا. لا يوجد ترتيب علني بين المعلمين — هذه أداة دعم قرار داخلي فقط.
-          </p>
+    <AdminShell adminName={adminIdentity.full_name}>
+      <div className="admin-page-head">
+        <h1>جودة المعلمين</h1>
+      </div>
+      <p style={{ color: "var(--gray)", marginBottom: 20 }}>
+        آخر {WINDOW_DAYS} يومًا. لا يوجد ترتيب علني بين المعلمين — هذه أداة دعم قرار داخلي فقط.
+      </p>
 
-          <div style={{ marginTop: 24 }}>
-            {rows.map((r) => (
-              <div className="dashcard" key={r.id} style={{ marginBottom: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <b>{r.name}</b>
-                  <span className="badge" style={{ color: statusMeta[r.status].color }}>
-                    {statusMeta[r.status].label}
-                  </span>
-                </div>
-                <div className="kpi" style={{ marginTop: 14 }}>
-                  <div>
-                    <strong>{r.commitmentRate !== null ? `${Math.round(r.commitmentRate * 100)}%` : "—"}</strong>
-                    <span>الالتزام بالجلسات</span>
-                  </div>
-                  <div>
-                    <strong>{r.timelinessRate !== null ? `${Math.round(r.timelinessRate * 100)}%` : "—"}</strong>
-                    <span>دقة تسليم التقرير</span>
-                  </div>
-                  <div>
-                    <strong>{r.assignedCohorts}</strong>
-                    <span>مجموعات مسندة</span>
-                  </div>
-                  <div>
-                    <strong>{r.activeStudents}</strong>
-                    <span>طلاب نشطون</span>
-                  </div>
-                </div>
+      <div>
+        {rows.map((r: { id: string; name: string; commitmentRate: number | null; timelinessRate: number | null; assignedCohorts: number; activeStudents: number; status: string }) => (
+          <div className="dashcard" key={r.id} style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <b>{r.name}</b>
+              <span className="badge" style={{ color: statusMeta[r.status].color }}>
+                {statusMeta[r.status].label}
+              </span>
+            </div>
+            <div className="kpi" style={{ marginTop: 14 }}>
+              <div>
+                <strong>{r.commitmentRate !== null ? `${Math.round(r.commitmentRate * 100)}%` : "—"}</strong>
+                <span>الالتزام بالجلسات</span>
               </div>
-            ))}
+              <div>
+                <strong>{r.timelinessRate !== null ? `${Math.round(r.timelinessRate * 100)}%` : "—"}</strong>
+                <span>دقة تسليم التقرير</span>
+              </div>
+              <div>
+                <strong>{r.assignedCohorts}</strong>
+                <span>مجموعات مسندة</span>
+              </div>
+              <div>
+                <strong>{r.activeStudents}</strong>
+                <span>طلاب نشطون</span>
+              </div>
+            </div>
           </div>
-        </div>
-      </main>
-    </Shell>
+        ))}
+      </div>
+    </AdminShell>
   );
 }

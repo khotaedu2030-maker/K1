@@ -1,5 +1,6 @@
 import "server-only";
 import { ABSENCE_POLICY, isAbsenceReasonCreditEligible, isMonthlyCapApplicable, type AttendanceReason, type CreditSourceType } from "@/lib/policies";
+import { getRuntimeSettings } from "@/lib/platform-settings";
 
 // نقطة الإصدار المركزية الوحيدة لأي رصيد تعويضي في النظام — سواء من غياب طالب فردي (عبر تقرير
 // المعلم) أو إلغاء جلسة كاملة (معلم/منصة). كل الاستدعاءات الأخرى تمر من هنا، لا تُكرَّر منطق
@@ -35,7 +36,10 @@ export async function issueMakeupCreditIfEligible(
       .eq("source_type", "student_absence")
       .gte("issued_at", startOfMonth.toISOString());
 
-    if ((count ?? 0) >= ABSENCE_POLICY.MONTHLY_STUDENT_CAUSED_MAKEUP_LIMIT) {
+    // السقف الشهري الفعلي: platform_settings.makeup_monthly_limit إن كانت الهجرة مُطبَّقة،
+    // وإلا القيمة الافتراضية المطابقة لـABSENCE_POLICY.MONTHLY_STUDENT_CAUSED_MAKEUP_LIMIT.
+    const settings = await getRuntimeSettings();
+    if ((count ?? 0) >= settings.makeupMonthlyLimit) {
       return { issued: false, skippedReason: "monthly_cap_reached" };
     }
   }

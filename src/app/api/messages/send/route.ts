@@ -38,6 +38,6 @@ export async function POST(req: Request) {
 
   await admin.from("message_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
 
-  const quiet = isQuietHoursNow();
+  const quiet = await isQuietHoursNow();
   return NextResponse.json({ ok: true, quietHours: quiet, quietHoursMessage: quiet ? QUIET_HOURS_MESSAGE : null });
 }

@@ -1,5 +1,14 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import {
+  riyadhWallClockToUtcInstant,
+  getRiyadhCalendarDate,
+  addRiyadhCalendarMonths,
+  addRiyadhCalendarDays,
+  compareRiyadhCalendarDates,
+  formatRiyadhCalendarDate,
+  getRiyadhWeekdayFromCalendarDate,
+} from "@/lib/riyadh-time";
 
 // منطق تفعيل الاشتراك بعد دفع مؤكَّد — مشترك بين Webhook/Callback الدفع الحقيقي (Paylink)
 // ومسار "تأكيد يدوي" Dev-only. آلة حالة صريحة على subscription.status:
@@ -137,9 +146,13 @@ export async function activateSubscriptionAfterPayment(
 
   // 1) توليد جلسات الشهر الأول أولًا — upsert idempotent (ignoreDuplicates)، آمن تمامًا عند
   // retry أو عند وصول Webhook وCallback متزامنَين لنفس العملية.
-  const startDate = new Date();
-  const renewalDate = new Date(startDate);
-  renewalDate.setMonth(renewalDate.getMonth() + 1);
+  //
+  // كل هذا القسم يعمل على تواريخ تقويمية صرفة بالرياض (RiyadhCalendarDate) فقط، لا كائنات
+  // Date محلية — "اليوم" نفسه يُستخرَج بتقويم الرياض الفعلي (لا UTC الخام ولا منطقة بيئة
+  // التشغيل)، والتقدُّم يومًا بيوم حساب حسابي صرف عبر Date.UTC()/getUTC*، لا setDate/getDate
+  // المحليَّين. يمنع هذا أي انزياح يوم كامل قرب حدود منتصف الليل إن اختلف تقويم UTC عن الرياض.
+  const startCal = getRiyadhCalendarDate(new Date());
+  const renewalCal = addRiyadhCalendarMonths(startCal, 1);
 
   const sessionsToInsert: {
     cohort_id: string;
@@ -151,31 +164,26 @@ export async function activateSubscriptionAfterPayment(
     status: string;
   }[] = [];
 
-  const cursor = new Date(startDate);
-  cursor.setHours(0, 0, 0, 0);
-  const endWindow = new Date(renewalDate);
-
   const [startH, startM] = String(cohort.start_time).slice(0, 5).split(":").map(Number);
   const [endH, endM] = String(cohort.end_time).slice(0, 5).split(":").map(Number);
 
-  while (cursor <= endWindow) {
-    if ((cohort.days_of_week as number[]).includes(cursor.getDay())) {
-      const starts = new Date(cursor);
-      starts.setHours(startH, startM, 0, 0);
-      const ends = new Date(cursor);
-      ends.setHours(endH, endM, 0, 0);
+  let cursorCal = startCal;
+  while (compareRiyadhCalendarDates(cursorCal, renewalCal) <= 0) {
+    if ((cohort.days_of_week as number[]).includes(getRiyadhWeekdayFromCalendarDate(cursorCal))) {
+      const starts = riyadhWallClockToUtcInstant(cursorCal, startH, startM);
+      const ends = riyadhWallClockToUtcInstant(cursorCal, endH, endM);
 
       sessionsToInsert.push({
         cohort_id: cohort.id,
         teacher_id: cohort.teacher_id,
-        session_date: cursor.toISOString().slice(0, 10),
+        session_date: formatRiyadhCalendarDate(cursorCal),
         starts_at: starts.toISOString(),
         ends_at: ends.toISOString(),
         meeting_url: cohort.meeting_url,
         status: "scheduled",
       });
     }
-    cursor.setDate(cursor.getDate() + 1);
+    cursorCal = addRiyadhCalendarDays(cursorCal, 1);
   }
 
   if (sessionsToInsert.length > 0) {
@@ -191,8 +199,8 @@ export async function activateSubscriptionAfterPayment(
     .from("subscriptions")
     .update({
       status: "active",
-      start_date: startDate.toISOString().slice(0, 10),
-      renewal_date: renewalDate.toISOString().slice(0, 10),
+      start_date: formatRiyadhCalendarDate(startCal),
+      renewal_date: formatRiyadhCalendarDate(renewalCal),
     })
     .eq("id", subscription.id)
     .eq("status", "pending_payment");

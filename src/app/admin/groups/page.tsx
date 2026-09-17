@@ -1,7 +1,7 @@
-import Link from "next/link";
-import Shell from "@/components/Shell";
+import AdminShell from "@/components/AdminShell";
 import CohortOperationsForm from "./CohortOperationsForm";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import CreateCohortForm from "./CreateCohortForm";
+import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { formatSeatCount } from "@/lib/plan-display";
 
@@ -18,24 +18,15 @@ type CohortRow = { id: string; title: string; capacity: number; status: string; 
 type CohortRowWithCount = CohortRow & { activeCount: number };
 
 export default async function P() {
-  const authed = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await authed.auth.getUser();
-  const { data: adminRow } = user
-    ? await authed.from("admins").select("id").eq("user_id", user.id).maybeSingle()
-    : { data: null };
+  const adminIdentity = await getAdminIdentity();
 
-  if (!adminRow) {
+  if (!adminIdentity) {
     return (
-      <Shell>
-        <main className="placeholder-page">
-          <div className="narrow">
-            <span className="badge">غير مصرَّح</span>
-            <Link className="btn outline" href="/">← الرئيسية</Link>
-          </div>
-        </main>
-      </Shell>
+      <div className="placeholder-page">
+        <div className="narrow">
+          <span className="badge">غير مصرَّح</span>
+        </div>
+      </div>
     );
   }
 
@@ -47,6 +38,11 @@ export default async function P() {
     // مشتقة دائمًا من السعة الفعلية، لا تُخزَّن. نعرض أي صف قديم لا يزال full ليتمكّن الأدمن من
     // إصلاحه مباشرة (اختيار "متاح للتسجيل" يُصحِّحه فورًا) بدل أن يختفي بلا إمكانية إدارة.
   const { data: teachers } = await admin.from("teachers").select("id, full_name").eq("active", true);
+  const { data: motabaaPlans } = await admin
+    .from("plans")
+    .select("id, name, days_per_week")
+    .eq("product", "motabaa")
+    .eq("active", true);
 
   const rows = await Promise.all(
     (cohorts ?? []).map(async (c: CohortRow) => {
@@ -63,75 +59,76 @@ export default async function P() {
   const otherCohorts = rows.filter((r: CohortRowWithCount) => r.activeCount !== 1);
 
   return (
-    <Shell>
-      <main className="section">
-        <div className="container">
-          <span className="eyebrow">لوحة الإدارة</span>
-          <h1 className="title" style={{ fontSize: 34 }}>المجموعات</h1>
+    <AdminShell adminName={adminIdentity.full_name}>
+      <div className="admin-page-head">
+        <h1>المجموعات</h1>
+      </div>
 
-          {missingOps.length > 0 && (
-            <div className="dashcard" style={{ marginTop: 20, borderColor: "var(--g)" }}>
-              <span className="badge" style={{ color: "var(--n)" }}>يحتاج بيانات تشغيلية</span>
-              <p style={{ color: "var(--gray)", marginTop: 8 }}>
-                مجموعات بلا رابط جلسة و/أو معلم مُسنَد — لن تعمل جلساتها الفعلية بدون إكمالها.
-              </p>
-              {missingOps.map((c: CohortRowWithCount) => (
-                <div key={c.id} style={{ borderBottom: "1px solid var(--line)", padding: "12px 0" }}>
-                  <div className="taskline" style={{ borderBottom: 0, padding: 0 }}>
-                    <span>{c.title}</span>
-                    <span>{registrationLabel(c.status, c.capacity - c.activeCount)}</span>
-                  </div>
-                  <CohortOperationsForm
-                    cohortId={c.id}
-                    currentMeetingUrl={c.meeting_url}
-                    currentTeacherId={c.teacher_id}
-                    currentCapacity={c.capacity}
-                    currentStatus={c.status}
-                    teachers={teachers ?? []}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+      <div style={{ marginBottom: 20 }}>
+        <CreateCohortForm teachers={teachers ?? []} plans={motabaaPlans ?? []} />
+      </div>
 
-          {singleStudentCohorts.length > 0 && (
-            <div className="dashcard" style={{ marginTop: 20, borderColor: "var(--p)" }}>
-              <span className="badge" style={{ color: "var(--p)" }}>تنبيه — طالب نشط واحد فقط</span>
-              <p style={{ color: "var(--gray)", marginTop: 8 }}>
-                هذه مجموعات تستحق دراسة (دمج، إعادة جدولة، أو تعديل) — لا يوجد إجراء تلقائي، القرار للإدارة.
-              </p>
-              {singleStudentCohorts.map((c: CohortRowWithCount) => (
-                <div className="taskline" key={c.id}>
-                  <span>{c.title}</span>
-                  <span>طالب واحد / سعة {c.capacity}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="dashcard" style={{ marginTop: 20 }}>
-            <b>كل المجموعات النشطة</b>
-            {otherCohorts.map((c: CohortRowWithCount) => (
-              <div key={c.id} style={{ borderBottom: "1px solid var(--line)", padding: "12px 0" }}>
-                <div className="taskline" style={{ borderBottom: 0, padding: 0 }}>
-                  <span>{c.title}</span>
-                  <span>
-                    المسجلون: {c.activeCount} من {formatSeatCount(c.capacity)} — {registrationLabel(c.status, c.capacity - c.activeCount)}
-                  </span>
-                </div>
-                <CohortOperationsForm
-                  cohortId={c.id}
-                  currentMeetingUrl={c.meeting_url}
-                  currentTeacherId={c.teacher_id}
-                  currentCapacity={c.capacity}
-                  currentStatus={c.status}
-                  teachers={teachers ?? []}
-                />
+      {missingOps.length > 0 && (
+        <div className="dashcard" style={{ marginBottom: 20, borderColor: "var(--g)" }}>
+          <span className="badge" style={{ color: "var(--n)" }}>يحتاج بيانات تشغيلية</span>
+          <p style={{ color: "var(--gray)", marginTop: 8 }}>
+            مجموعات بلا رابط جلسة و/أو معلم مُسنَد — لن تعمل جلساتها الفعلية بدون إكمالها.
+          </p>
+          {missingOps.map((c: CohortRowWithCount) => (
+            <div key={c.id} style={{ borderBottom: "1px solid var(--line)", padding: "12px 0" }}>
+              <div className="taskline" style={{ borderBottom: 0, padding: 0 }}>
+                <span>{c.title}</span>
+                <span>{registrationLabel(c.status, c.capacity - c.activeCount)}</span>
               </div>
-            ))}
-          </div>
+              <CohortOperationsForm
+                cohortId={c.id}
+                currentMeetingUrl={c.meeting_url}
+                currentTeacherId={c.teacher_id}
+                currentCapacity={c.capacity}
+                currentStatus={c.status}
+                teachers={teachers ?? []}
+              />
+            </div>
+          ))}
         </div>
-      </main>
-    </Shell>
+      )}
+
+      {singleStudentCohorts.length > 0 && (
+        <div className="dashcard" style={{ marginBottom: 20, borderColor: "var(--p)" }}>
+          <span className="badge" style={{ color: "var(--p)" }}>تنبيه — طالب نشط واحد فقط</span>
+          <p style={{ color: "var(--gray)", marginTop: 8 }}>
+            هذه مجموعات تستحق دراسة (دمج، إعادة جدولة، أو تعديل) — لا يوجد إجراء تلقائي، القرار للإدارة.
+          </p>
+          {singleStudentCohorts.map((c: CohortRowWithCount) => (
+            <div className="taskline" key={c.id}>
+              <span>{c.title}</span>
+              <span>طالب واحد / سعة {c.capacity}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="dashcard">
+        <b>كل المجموعات النشطة</b>
+        {otherCohorts.map((c: CohortRowWithCount) => (
+          <div key={c.id} style={{ borderBottom: "1px solid var(--line)", padding: "12px 0" }}>
+            <div className="taskline" style={{ borderBottom: 0, padding: 0 }}>
+              <span>{c.title}</span>
+              <span>
+                المسجلون: {c.activeCount} من {formatSeatCount(c.capacity)} — {registrationLabel(c.status, c.capacity - c.activeCount)}
+              </span>
+            </div>
+            <CohortOperationsForm
+              cohortId={c.id}
+              currentMeetingUrl={c.meeting_url}
+              currentTeacherId={c.teacher_id}
+              currentCapacity={c.capacity}
+              currentStatus={c.status}
+              teachers={teachers ?? []}
+            />
+          </div>
+        ))}
+      </div>
+    </AdminShell>
   );
 }
