@@ -9,9 +9,13 @@ const GRADES = [4, 5, 6];
 export default function CreateCohortForm({
   teachers,
   plans,
+  cycles,
+  defaultCapacity,
 }: {
   teachers: { id: string; full_name: string }[];
   plans: { id: string; name: string; days_per_week: number | null }[];
+  cycles?: { id: string; name: string; enabled_grade_bands: string[] | null }[];
+  defaultCapacity?: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -19,7 +23,7 @@ export default function CreateCohortForm({
   const [grade, setGrade] = useState<number | "">("");
   const [planId, setPlanId] = useState("");
   const [teacherId, setTeacherId] = useState("");
-  const [capacity, setCapacity] = useState("4");
+  const [capacity, setCapacity] = useState(String(defaultCapacity ?? 4));
   const [days, setDays] = useState<number[]>([]);
   const [startTime, setStartTime] = useState("16:30");
   const [endTime, setEndTime] = useState("17:30");

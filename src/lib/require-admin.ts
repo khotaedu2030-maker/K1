@@ -10,6 +10,10 @@ export type AdminCheckResult =
   | { ok: true; userId: string; adminId: string }
   | { ok: false; response: NextResponse };
 
+export async function requirePermission(_permission: string): Promise<AdminCheckResult> {
+  return requireAdmin();
+}
+
 export async function requireAdmin(): Promise<AdminCheckResult> {
   const authed = await createSupabaseServerClient();
   const {

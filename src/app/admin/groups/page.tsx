@@ -14,7 +14,22 @@ function registrationLabel(status: string, seatsAvailable: number): string {
   return "متاحة";
 }
 
-type CohortRow = { id: string; title: string; capacity: number; status: string; meeting_url: string | null; teacher_id: string | null };
+// Phase 2 — عرض واضح للدورة المرتبطة، أو تصنيف صريح للبيانات القديمة بلا دورة (nullable عمدًا،
+// لا backfill تلقائي).
+function cycleLabel(cycleName: string | null | undefined): string {
+  return cycleName ?? "بيانات سابقة / غير مصنَّفة";
+}
+
+type CohortRow = {
+  id: string;
+  title: string;
+  capacity: number;
+  status: string;
+  meeting_url: string | null;
+  teacher_id: string | null;
+  cycle_id: string | null;
+  cycles: { name: string }[] | null;
+};
 type CohortRowWithCount = CohortRow & { activeCount: number };
 
 export default async function P() {
@@ -33,8 +48,8 @@ export default async function P() {
   const admin = createSupabaseAdminClient();
   const { data: cohorts } = await admin
     .from("cohorts")
-    .select("id, title, capacity, status, meeting_url, teacher_id")
-    .in("status", ["open", "closed", "full"]); // "full" هنا Legacy فقط — القيمة الجديدة "مكتملة"
+    .select("id, title, capacity, status, meeting_url, teacher_id, cycle_id, cycles(name)")
+    .in("status", ["open", "closed", "full"]) as { data: CohortRow[] | null };
     // مشتقة دائمًا من السعة الفعلية، لا تُخزَّن. نعرض أي صف قديم لا يزال full ليتمكّن الأدمن من
     // إصلاحه مباشرة (اختيار "متاح للتسجيل" يُصحِّحه فورًا) بدل أن يختفي بلا إمكانية إدارة.
   const { data: teachers } = await admin.from("teachers").select("id, full_name").eq("active", true);
@@ -43,6 +58,17 @@ export default async function P() {
     .select("id, name, days_per_week")
     .eq("product", "motabaa")
     .eq("active", true);
+  const { data: allCycles } = await admin.from("cycles").select("id, name, enabled_grade_bands").order("created_at", { ascending: false });
+  // فلترة عرضية فقط (تجربة مستخدم) — الدورات التي لا تشمل المرحلة 4-6 لا تُعرَض كخيار أصلًا،
+  // لكن الحماية الفعلية الوحيدة المُعتمَد عليها أمنيًا هي التحقق server-side بـ/api/admin/cohorts.
+  const cycles = (allCycles ?? []).filter((c: { enabled_grade_bands: string[] | null }) => ((c.enabled_grade_bands as string[] | null) ?? []).includes("4-6"));
+
+  // Phase 3 — سعة افتراضية عند إنشاء مجموعة جديدة تُقرَأ من الإعدادات، لا مُشفَّرة. القيمة 4
+  // تبقى الافتراضي الآمن لو الجدول/الصف غير متاح بعد (يطابق السلوك المُشفَّر سابقًا حرفيًا).
+  // Phase 9 Step 9.2A — يقرأ admin_platform_settings، لا platform_settings (جدول إنتاج قديم
+  // منفصل غير مرتبط، بصيغة key/value — راجع migrations/20261002_phase9_production_reconciliation.sql).
+  const { data: settingsRow } = await admin.from("admin_platform_settings").select("default_capacity_4_6").eq("id", true).maybeSingle();
+  const defaultCapacity = settingsRow?.default_capacity_4_6 ?? 4;
 
   const rows = await Promise.all(
     (cohorts ?? []).map(async (c: CohortRow) => {
@@ -65,7 +91,7 @@ export default async function P() {
       </div>
 
       <div style={{ marginBottom: 20 }}>
-        <CreateCohortForm teachers={teachers ?? []} plans={motabaaPlans ?? []} />
+        <CreateCohortForm teachers={teachers ?? []} plans={motabaaPlans ?? []} cycles={cycles ?? []} defaultCapacity={defaultCapacity} />
       </div>
 
       {missingOps.length > 0 && (
@@ -118,6 +144,7 @@ export default async function P() {
                 المسجلون: {c.activeCount} من {formatSeatCount(c.capacity)} — {registrationLabel(c.status, c.capacity - c.activeCount)}
               </span>
             </div>
+            <div style={{ fontSize: 12, color: "var(--gray)", marginBottom: 8 }}>الدورة: {cycleLabel(c.cycles?.[0]?.name ?? null)}</div>
             <CohortOperationsForm
               cohortId={c.id}
               currentMeetingUrl={c.meeting_url}

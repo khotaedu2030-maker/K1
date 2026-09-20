@@ -2,3 +2,10 @@
 node_modules/
 .env*
 !.env.example
+
+# Local generated artifacts
+.next/
+node_modules/
+.env*
+!.env.example
+tsconfig.tsbuildinfo
