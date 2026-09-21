@@ -25,7 +25,7 @@ export async function requireAdmin(): Promise<AdminCheckResult> {
   }
 
   const admin = createSupabaseAdminClient();
-  const { data: adminRow } = await admin.from("admins").select("id").eq("user_id", user.id).maybeSingle();
+  const { data: adminRow } = await admin.from("admins").select("id").eq("user_id", user.id).eq("active", true).maybeSingle();
   if (!adminRow) {
     return { ok: false, response: NextResponse.json({ error: "هذا الحساب ليس حساب إدارة" }, { status: 403 }) };
   }

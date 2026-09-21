@@ -30,7 +30,7 @@ export async function authorizeMessageThreadAccess(userId: string, threadId: str
   if (thread.teacher_user_id === userId) {
     // "المعلم" يجب أن يكون لا يزال معلم إحدى المجموعات التي للطفل فيها اشتراك فعّال حاليًا —
     // ينتهي هذا تلقائيًا عند انتهاء الاشتراك، انتقال الطفل لمجموعة أخرى، أو تغيّر معلم المجموعة.
-    const { data: teacher } = await admin.from("teachers").select("id").eq("user_id", userId).maybeSingle();
+    const { data: teacher } = await admin.from("teachers").select("id").eq("user_id", userId).eq("active", true).maybeSingle();
     let stillTeaches = false;
     if (teacher) {
       const { data: activeLinks } = await admin

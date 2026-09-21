@@ -67,7 +67,9 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" }) {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({ email: value });
+    const { error } = await supabase.auth.signInWithOtp(
+      mode === "staff" ? { email: value, options: { shouldCreateUser: false } } : { email: value }
+    );
     setLoading(false);
     if (error) {
       setError(friendlyAuthError(error.message));
@@ -93,8 +95,22 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" }) {
       return;
     }
 
-    const roleRes = await fetch("/api/auth/resolve-role", { method: "POST" });
-    const roleData = await roleRes.json().catch(() => ({ role: "none" }));
+    const roleRes = await fetch("/api/auth/resolve-role", { method: "POST" }).catch(() => null);
+    if (!roleRes || !roleRes.ok) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      if (mode === "staff") setStaffBlocked("none");
+      else setError("تعذّر التحقق من صلاحية الحساب الآن. حاول مرة أخرى.");
+      return;
+    }
+    const roleData = await roleRes.json().catch(() => null);
+    if (!roleData || !["parent", "teacher", "admin", "none"].includes(roleData.role)) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      if (mode === "staff") setStaffBlocked("none");
+      else setError("تعذّر التحقق من صلاحية الحساب الآن. حاول مرة أخرى.");
+      return;
+    }
     const role = roleData.role as "parent" | "teacher" | "admin" | "none";
 
     if (mode === "staff") {
@@ -109,6 +125,7 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" }) {
         router.push(isAllowedNextForRole("teacher", nextParam) ? nextParam : "/teacher");
         return;
       }
+      await supabase.auth.signOut();
       setStaffBlocked(role === "parent" ? "parent" : "none");
       return;
     }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { requireTeacher } from "@/lib/require-teacher";
 import { issueMakeupCreditIfEligible } from "@/lib/makeup-credits";
 import type { AttendanceReason } from "@/lib/policies";
 
@@ -36,26 +36,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
   }
 
-  const authed = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await authed.auth.getUser();
-  if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+  const teacherCheck = await requireTeacher();
+  if (!teacherCheck.ok) return teacherCheck.response;
 
   const admin = createSupabaseAdminClient();
 
-  const { data: teacher } = await admin.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
-  if (!teacher) return NextResponse.json({ error: "هذا الحساب ليس حساب معلم" }, { status: 403 });
-
   const { data: session } = await admin.from("sessions").select("id, teacher_id, cohort_id, status").eq("id", sessionId).maybeSingle();
-  if (!session || session.teacher_id !== teacher.id) {
+  if (!session || session.teacher_id !== teacherCheck.teacherId) {
     return NextResponse.json({ error: "هذه الجلسة لا تخص حسابك" }, { status: 403 });
   }
 
   const pulseRows = entries.map((e) => ({
     session_id: sessionId,
     child_id: e.childId,
-    teacher_id: teacher.id,
+    teacher_id: teacherCheck.teacherId,
     tasks_completed: e.subjectsCompleted,
     independence_rating: e.independenceRating,
     focus_rating: e.focusRating,
@@ -78,7 +72,7 @@ export async function POST(req: Request) {
     .filter((e) => e.needsSpecialist)
     .map((e) => ({
       child_id: e.childId,
-      teacher_id: teacher.id,
+      teacher_id: teacherCheck.teacherId,
       subject: e.specialistSubject ?? null,
       reason: e.teacherNote || "لاحظ المعلم أن الطالب يحتاج دعمًا إضافيًا في هذه الجلسة.",
       status: "open",
@@ -104,7 +98,7 @@ export async function POST(req: Request) {
     child_id: e.childId,
     status: e.attended ? "present" : "absent",
     reason: !e.attended ? e.absenceReason ?? "unexcused" : null,
-    marked_by: teacher.id,
+    marked_by: teacherCheck.teacherId,
   }));
   await admin.from("attendance").upsert(attendanceRows, { onConflict: "session_id,child_id" });
 
@@ -125,7 +119,7 @@ export async function POST(req: Request) {
       sourceSessionId: sessionId,
       sourceType: "student_absence",
       reason: e.absenceReason ?? "unexcused",
-      issuedBy: user.id,
+      issuedBy: teacherCheck.userId,
     });
   }
 

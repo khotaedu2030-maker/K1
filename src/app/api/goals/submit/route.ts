@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { requireTeacher } from "@/lib/require-teacher";
 
 // إنشاء أو تحديث "خطوة هذا الأسبوع". يقبل goalId لتحديث هدف قائم (حالة/تقدّم)،
 // أو بياناته الكاملة لإنشاء هدف جديد.
@@ -8,15 +8,10 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const { goalId, childId, weekStart, title, description, category, status, progress } = body ?? {};
 
-  const authed = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await authed.auth.getUser();
-  if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+  const teacherCheck = await requireTeacher();
+  if (!teacherCheck.ok) return teacherCheck.response;
 
   const admin = createSupabaseAdminClient();
-  const { data: teacher } = await admin.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
-  if (!teacher) return NextResponse.json({ error: "هذا الحساب ليس حساب معلم" }, { status: 403 });
 
   if (goalId) {
     // تحديث هدف قائم — تحقق أولًا أنه يخص طالبًا تابعًا لهذا المعلم
@@ -32,7 +27,7 @@ export async function POST(req: Request) {
       .select("child_id, cohorts(teacher_id)")
       .eq("child_id", existing.child_id)
       .eq("status", "active");
-    const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacher.id);
+    const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacherCheck.teacherId);
     if (!belongsToTeacher) return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
 
     const patch: Record<string, unknown> = {};
@@ -56,7 +51,7 @@ export async function POST(req: Request) {
     .select("child_id, cohorts(teacher_id)")
     .eq("child_id", childId)
     .eq("status", "active");
-  const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacher.id);
+  const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacherCheck.teacherId);
   if (!belongsToTeacher) return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
 
   const { error } = await admin.from("weekly_goals").insert({
@@ -65,7 +60,7 @@ export async function POST(req: Request) {
     title,
     description: description ?? null,
     category: category ?? null,
-    created_by_teacher_id: teacher.id,
+    created_by_teacher_id: teacherCheck.teacherId,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

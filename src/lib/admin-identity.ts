@@ -15,6 +15,6 @@ export async function getAdminIdentity(): Promise<AdminIdentity | null> {
   if (!user) return null;
 
   const admin = createSupabaseAdminClient();
-  const { data } = await admin.from("admins").select("id, user_id, full_name").eq("user_id", user.id).maybeSingle();
+  const { data } = await admin.from("admins").select("id, user_id, full_name").eq("user_id", user.id).eq("active", true).maybeSingle();
   return data ?? null;
 }
