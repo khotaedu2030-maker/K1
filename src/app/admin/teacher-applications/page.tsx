@@ -1,5 +1,6 @@
 import AdminShell from "@/components/AdminShell";
 import StatusSelect from "./StatusSelect";
+import ActivateTeacherButton from "./ActivateTeacherButton";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -22,6 +23,11 @@ export default async function P() {
     .from("teacher_applications")
     .select("id, full_name, email, phone, specialization, years_experience, cv_url, status, created_at")
     .order("created_at", { ascending: false });
+  const applicationIds = (applications ?? []).map((application) => application.id);
+  const { data: linkedTeachers } = applicationIds.length
+    ? await admin.from("teachers").select("application_id").in("application_id", applicationIds)
+    : { data: [] as { application_id: string | null }[] };
+  const activatedApplicationIds = new Set((linkedTeachers ?? []).map((teacher) => teacher.application_id).filter(Boolean));
 
   return (
     <AdminShell adminName={adminIdentity.full_name}>
@@ -41,6 +47,7 @@ export default async function P() {
               <th>السيرة</th>
               <th>التاريخ</th>
               <th>الحالة</th>
+              <th>تفعيل المعلم</th>
             </tr>
           </thead>
           <tbody>
@@ -54,6 +61,7 @@ export default async function P() {
                 <td>{a.cv_url ? <a href={a.cv_url} target="_blank" rel="noreferrer">رابط</a> : "—"}</td>
                 <td>{new Date(a.created_at).toLocaleDateString("ar-SA")}</td>
                 <td><StatusSelect applicationId={a.id} currentStatus={a.status} /></td>
+                <td>{a.status === "accepted" ? <ActivateTeacherButton applicationId={a.id} alreadyActivated={activatedApplicationIds.has(a.id)} /> : "—"}</td>
               </tr>
             ))}
           </tbody>
