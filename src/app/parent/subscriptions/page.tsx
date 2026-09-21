@@ -16,6 +16,7 @@ const statusLabel: Record<string, string> = {
   paused: "مجمَّد",
   cancelled: "ملغى",
   expired: "منتهٍ",
+  completed: "مكتمل",
 };
 const pauseStatusLabel: Record<string, string> = {
   requested: "قيد المراجعة",

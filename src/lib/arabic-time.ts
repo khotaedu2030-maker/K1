@@ -80,7 +80,7 @@ export function toParentFacingProgramName(title: string | null | undefined): str
 
 const SESSION_STATUS_LABEL_AR: Record<string, string> = {
   scheduled: "مجدولة",
-  completed: "اكتملت",
+  completed: "مكتمل",
   cancelled: "أُلغيت",
 };
 
