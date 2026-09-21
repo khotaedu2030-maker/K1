@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-identity";
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 type ParentRow = { id: string; user_id: string | null };
@@ -61,7 +62,7 @@ export async function POST() {
     return NextResponse.json({ error: "يجب تسجيل الدخول أولًا" }, { status: 401 });
   }
 
-  const email = (user.email ?? "").trim().toLowerCase();
+  const email = normalizeParentEmail(user.email ?? "");
   if (!email) {
     console.error(`[link-parent] مستخدم مصادَق (${user.id}) بلا بريد إلكتروني في الجلسة.`);
     return NextResponse.json({ error: "تعذّر تحديد البريد الإلكتروني من الجلسة" }, { status: 500 });
@@ -86,7 +87,7 @@ export async function POST() {
     const { data: otherRows, error: otherError } = await admin
       .from("parents")
       .select("id, user_id")
-      .eq("email", email)
+      .ilike("email", exactParentEmailPattern(email))
       .neq("id", existingByUser.id);
     if (otherError) {
       console.error(`[link-parent] خطأ استعلام أثناء فحص duplicates إضافية للمستخدم ${user.id}:`, otherError.message);
@@ -112,7 +113,7 @@ export async function POST() {
   const { data: candidates, error: candidatesError } = await admin
     .from("parents")
     .select("id, user_id")
-    .eq("email", email)
+    .ilike("email", exactParentEmailPattern(email))
     .order("created_at", { ascending: true });
   if (candidatesError) {
     console.error(`[link-parent] خطأ استعلام أثناء البحث بالبريد للمستخدم ${user.id}:`, candidatesError.message);
@@ -150,7 +151,7 @@ export async function POST() {
 
   const { data: linkedRow, error: linkError } = await admin
     .from("parents")
-    .update({ user_id: user.id })
+    .update({ user_id: user.id, email })
     .eq("id", canonical.id)
     .is("user_id", null)
     .select("id")

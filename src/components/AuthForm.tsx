@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, type ChangeEvent } from "react";
+import { Suspense, useEffect, useState, type ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -41,7 +41,7 @@ function isAllowedNextForRole(role: "admin" | "teacher" | "parent", path: string
 // الوحيد بين "parent" و"staff" هو ما يحدث بعد resolve-role: staff يرفض صراحةً أي دور غير
 // admin/teacher (لا يُعامَل Parent هنا كفريق عمل ولا يُستدعى له link-parent إطلاقًا)، وparent
 // يحتفظ بالسلوك الكامل الحالي (بما فيه مسار "none" ورحلة enroll/complete).
-function AuthFormInner({ mode }: { mode: "parent" | "staff" }) {
+function AuthFormInner({ mode }: { mode: "parent" | "staff" | "signup" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextParam = safeNextPath(searchParams.get("next"));
@@ -53,6 +53,19 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [staffBlocked, setStaffBlocked] = useState<null | "parent" | "none">(null);
+  const [parentName, setParentName] = useState("");
+  const [phone, setPhone] = useState("");
+
+  useEffect(() => {
+    if (mode !== "signup") return;
+    try {
+      const pending = JSON.parse(sessionStorage.getItem("khota_pending_enrollment") ?? "null") as { parentName?: string; phone?: string } | null;
+      if (pending?.parentName) setParentName(pending.parentName);
+      if (pending?.phone) setPhone(pending.phone);
+    } catch {
+      // Pending enrollment data is optional and never trusted as identity.
+    }
+  }, [mode]);
 
   function normalizedEmail() {
     return email.trim().toLowerCase();
@@ -68,11 +81,13 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" }) {
 
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp(
-      mode === "staff" ? { email: value, options: { shouldCreateUser: false } } : { email: value }
+      mode === "signup"
+        ? { email: value, options: { shouldCreateUser: true } }
+        : { email: value, options: { shouldCreateUser: false } }
     );
     setLoading(false);
     if (error) {
-      setError(friendlyAuthError(error.message));
+      setError(mode === "parent" ? "تعذّر تسجيل الدخول بهذا البريد. إن لم يكن لديك حساب، أنشئ حسابًا." : friendlyAuthError(error.message));
       return;
     }
     setStep("otp");
@@ -127,6 +142,32 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" }) {
       }
       await supabase.auth.signOut();
       setStaffBlocked(role === "parent" ? "parent" : "none");
+      return;
+    }
+
+    if (mode === "signup") {
+      if (role === "admin" || role === "teacher") {
+        await supabase.auth.signOut();
+        setLoading(false);
+        setError("هذا البريد مخصص لحساب فريق خُطى. استخدم دخول فريق خُطى.");
+        return;
+      }
+      const setupRes = role === "parent"
+        ? await fetch("/api/auth/link-parent", { method: "POST" })
+        : await fetch("/api/auth/complete-parent-signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fullName: parentName, phone }),
+          });
+      const setupData = await setupRes.json().catch(() => ({}));
+      if (!setupRes.ok) {
+        await supabase.auth.signOut();
+        setLoading(false);
+        setError(setupData.error ?? "تعذّر إعداد حساب ولي الأمر.");
+        return;
+      }
+      setLoading(false);
+      router.push(isAllowedNextForRole("parent", nextParam) ? nextParam : "/parent");
       return;
     }
 
@@ -188,8 +229,24 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" }) {
     );
   }
 
+  const accountLink = mode === "signup"
+    ? `/login${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`
+    : `/signup${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`;
+
   return (
     <div className="form">
+      {mode === "signup" && (
+        <>
+          <label>
+            اسم ولي الأمر
+            <input value={parentName} onChange={(e: ChangeEvent<HTMLInputElement>) => setParentName(e.target.value)} />
+          </label>
+          <label>
+            رقم الجوال
+            <input dir="ltr" inputMode="numeric" maxLength={10} placeholder="05XXXXXXXX" value={phone} onChange={(e: ChangeEvent<HTMLInputElement>) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} />
+          </label>
+        </>
+      )}
       {step === "email" && (
         <>
           <label>
@@ -203,8 +260,8 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" }) {
             />
           </label>
           {error && <p role="alert" style={{ color: "var(--p)" }}>{error}</p>}
-          <button className="btn" disabled={loading} onClick={sendOtp}>
-            {loading ? "جارٍ الإرسال..." : "إرسال رمز التحقق"}
+          <button className="btn" disabled={loading || (mode === "signup" && (!parentName || !phone))} onClick={sendOtp}>
+            {loading ? "جارٍ الإرسال..." : mode === "signup" ? "إنشاء الحساب وإرسال الرمز" : "إرسال رمز التحقق"}
           </button>
         </>
       )}
@@ -222,11 +279,19 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" }) {
           </button>
         </>
       )}
+      {mode !== "staff" && (
+        <p style={{ color: "var(--gray)", fontSize: 13 }}>
+          {mode === "signup" ? "لديك حساب؟ " : "ليس لديك حساب؟ "}
+          <a href={accountLink} style={{ color: "var(--t)", fontWeight: 700 }}>
+            {mode === "signup" ? "تسجيل الدخول" : "إنشاء حساب"}
+          </a>
+        </p>
+      )}
     </div>
   );
 }
 
-export default function AuthForm({ mode }: { mode: "parent" | "staff" }) {
+export default function AuthForm({ mode }: { mode: "parent" | "staff" | "signup" }) {
   return (
     <Suspense fallback={null}>
       <AuthFormInner mode={mode} />

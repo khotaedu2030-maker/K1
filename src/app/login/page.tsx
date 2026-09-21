@@ -24,7 +24,7 @@ export default function LoginPage() {
           <div className="step-motif" style={{ marginBottom: 16 }}><span /><span /><span /><span /></div>
           <span className="eyebrow">KHOTA</span>
           <h1 className="title" style={{ fontSize: 40 }}>تسجيل الدخول</h1>
-          <p className="lead">أدخل بريدك الإلكتروني للوصول إلى حسابك ومتابعة تقدّم طفلك.</p>
+          <p className="lead">أدخل بريد حسابك الحالي للوصول إلى حسابك ومتابعة تقدّم طفلك.</p>
 
           <AuthForm mode="parent" />
 
