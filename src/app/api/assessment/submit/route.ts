@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { requireTeacher } from "@/lib/require-teacher";
 import {
   calculateIndependenceScore,
   validateIndependenceInputs,
@@ -55,23 +55,17 @@ export async function POST(req: Request) {
   }
 
   // ---------- التحقق من الهوية والصلاحية ----------
-  const authed = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await authed.auth.getUser();
-  if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+  const teacherCheck = await requireTeacher();
+  if (!teacherCheck.ok) return teacherCheck.response;
 
   const admin = createSupabaseAdminClient();
-
-  const { data: teacher } = await admin.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
-  if (!teacher) return NextResponse.json({ error: "هذا الحساب ليس حساب معلم" }, { status: 403 });
 
   const { data: link } = await admin
     .from("subscriptions")
     .select("child_id, cohorts(teacher_id)")
     .eq("child_id", childId)
     .eq("status", "active");
-  const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacher.id);
+  const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacherCheck.teacherId);
   if (!belongsToTeacher) {
     return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
   }
@@ -79,7 +73,7 @@ export async function POST(req: Request) {
   // ---------- الكتابة كمعاملة ذرّية واحدة ----------
   const { data: assessmentId, error } = await admin.rpc("submit_assessment", {
     p_child_id: childId,
-    p_teacher_id: teacher.id,
+    p_teacher_id: teacherCheck.teacherId,
     p_assessment_type: assessmentType,
     p_reading_level: readingLevel ?? null,
     p_writing_spelling_level: writingSpellingLevel ?? null,
@@ -98,7 +92,8 @@ export async function POST(req: Request) {
 
   if (error) {
     // فشل أي جزء من المعاملة الثلاثية يعني ROLLBACK تلقائي كامل داخل الدالة — لا كتابات جزئية.
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[assessment] submit RPC failed:", error.message);
+    return NextResponse.json({ error: "تعذّر حفظ التقييم" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, assessmentId, independenceTotal });

@@ -33,7 +33,7 @@ type CohortRow = {
 type CohortRowWithCount = CohortRow & { activeCount: number };
 
 export default async function P() {
-  const adminIdentity = await getAdminIdentity();
+  const adminIdentity = await getAdminIdentity("cohort.manage");
 
   if (!adminIdentity) {
     return (
@@ -61,14 +61,19 @@ export default async function P() {
   const { data: allCycles } = await admin.from("cycles").select("id, name, enabled_grade_bands").order("created_at", { ascending: false });
   // فلترة عرضية فقط (تجربة مستخدم) — الدورات التي لا تشمل المرحلة 4-6 لا تُعرَض كخيار أصلًا،
   // لكن الحماية الفعلية الوحيدة المُعتمَد عليها أمنيًا هي التحقق server-side بـ/api/admin/cohorts.
-  const cycles = (allCycles ?? []).filter((c: { enabled_grade_bands: string[] | null }) => ((c.enabled_grade_bands as string[] | null) ?? []).includes("4-6"));
+  const cycles = allCycles ?? [];
 
   // Phase 3 — سعة افتراضية عند إنشاء مجموعة جديدة تُقرَأ من الإعدادات، لا مُشفَّرة. القيمة 4
   // تبقى الافتراضي الآمن لو الجدول/الصف غير متاح بعد (يطابق السلوك المُشفَّر سابقًا حرفيًا).
   // Phase 9 Step 9.2A — يقرأ admin_platform_settings، لا platform_settings (جدول إنتاج قديم
   // منفصل غير مرتبط، بصيغة key/value — راجع migrations/20261002_phase9_production_reconciliation.sql).
-  const { data: settingsRow } = await admin.from("admin_platform_settings").select("default_capacity_4_6").eq("id", true).maybeSingle();
-  const defaultCapacity = settingsRow?.default_capacity_4_6 ?? 4;
+  const { data: settingsRow } = await admin.from("admin_platform_settings").select("default_capacity_1_3, default_capacity_4_6, default_capacity_7_9, default_capacity_10_12").eq("id", true).maybeSingle();
+  const defaultCapacities = {
+    "1-3": settingsRow?.default_capacity_1_3 ?? 3,
+    "4-6": settingsRow?.default_capacity_4_6 ?? 4,
+    "7-9": settingsRow?.default_capacity_7_9 ?? 5,
+    "10-12": settingsRow?.default_capacity_10_12 ?? 5,
+  };
 
   const rows = await Promise.all(
     (cohorts ?? []).map(async (c: CohortRow) => {
@@ -91,7 +96,7 @@ export default async function P() {
       </div>
 
       <div style={{ marginBottom: 20 }}>
-        <CreateCohortForm teachers={teachers ?? []} plans={motabaaPlans ?? []} cycles={cycles ?? []} defaultCapacity={defaultCapacity} />
+        <CreateCohortForm teachers={teachers ?? []} plans={motabaaPlans ?? []} cycles={cycles ?? []} defaultCapacities={defaultCapacities} />
       </div>
 
       {missingOps.length > 0 && (

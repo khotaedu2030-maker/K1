@@ -3,6 +3,8 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { parseAndValidateGrade, resolveGradeBand } from "@/lib/grade-config";
 import { normalizeSaudiStoredPhoneInput, SAUDI_PHONE_ERROR } from "@/lib/phone";
+import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-identity";
+import { getRuntimeSettings } from "@/lib/platform-settings";
 
 // إنشاء اشتراك جديد بحالة pending_payment — يتطلب الآن جلسة Supabase Auth حقيقية (Email OTP
 // مُتحقَّق فعليًا) قبل أي شيء آخر. لا يعود ممكنًا لمستخدم غير متحقق حجز مقعد — هذا هو الإصلاح
@@ -21,7 +23,7 @@ export async function POST(req: Request) {
   // بأي email قادم من body كمصدر هوية. لكن لا نتجاهل تعارضًا صامتًا: إن أرسل العميل بريدًا
   // مختلفًا فعليًا عن بريد الجلسة (مثلًا كتب بريدًا آخر بالنموذج قبل أن يلاحظ أنه مسجَّل دخول
   // ببريد مختلف)، نرفض بوضوح بدل المتابعة ببريد الجلسة بصمت.
-  const email = (user.email ?? "").trim().toLowerCase();
+  const email = normalizeParentEmail(user.email ?? "");
   if (!email) {
     console.error(`[enroll] مستخدم مصادَق (${user.id}) بلا بريد إلكتروني في الجلسة.`);
     return NextResponse.json({ error: "تعذّر تحديد البريد الإلكتروني من الجلسة" }, { status: 500 });
@@ -62,6 +64,10 @@ export async function POST(req: Request) {
   }
 
   const supabase = createSupabaseAdminClient();
+  const runtimeSettings = await getRuntimeSettings();
+  if (!runtimeSettings.registrationEnabled) {
+    return NextResponse.json({ error: "التسجيل مغلق حاليًا. حاول مرة أخرى لاحقًا." }, { status: 403 });
+  }
 
   // المجموعة: يجب أن تكون موجودة، مفتوحة فعليًا (وليس draft/closed/full)، ومطابقة لصف الطالب
   // فعلًا — وليس فقط موجودة بأي حالة. تغيير cohortId يدويًا لصف من مرحلة مختلفة يُرفض هنا.
@@ -137,7 +143,7 @@ export async function POST(req: Request) {
     const { data: byEmail, error: byEmailError } = await supabase
       .from("parents")
       .select("id, user_id")
-      .eq("email", email)
+      .ilike("email", exactParentEmailPattern(email))
       .maybeSingle();
     if (byEmailError) {
       console.error(`[enroll] خطأ استعلام أثناء البحث بالبريد للمستخدم ${user.id}:`, byEmailError.message);
@@ -152,10 +158,20 @@ export async function POST(req: Request) {
 
     if (byEmail && !byEmail.user_id) {
       // صف موجود بلا user_id (نادر بعد تصلّب هذا المسار، لكن ممكن من بيانات أقدم) — اربطه الآن.
-      const { error: linkError } = await supabase.from("parents").update({ user_id: user.id }).eq("id", byEmail.id).is("user_id", null);
+      const { data: linked, error: linkError } = await supabase
+        .from("parents")
+        .update({ user_id: user.id, email })
+        .eq("id", byEmail.id)
+        .is("user_id", null)
+        .select("id, user_id")
+        .maybeSingle();
       if (linkError) {
         console.error(`[enroll] فشل ربط parent موجود (${byEmail.id}) بالمستخدم ${user.id}:`, linkError.message);
         return NextResponse.json({ error: "تعذّر إكمال إعداد الحساب" }, { status: 500 });
+      }
+      if (!linked || linked.user_id !== user.id) {
+        const { data: owner } = await supabase.from("parents").select("id, user_id").eq("id", byEmail.id).maybeSingle();
+        if (owner?.user_id !== user.id) return NextResponse.json({ error: "تعذّر إكمال ربط الحساب، حاول مرة أخرى" }, { status: 409 });
       }
       parent = byEmail;
     } else {
@@ -189,15 +205,21 @@ export async function POST(req: Request) {
 
       if (phoneMatch) {
         // صف يتيم فعليًا (بلا user_id وبلا email) — ربطه الآن بدل إنشاء صف جديد.
-        const { error: bridgeError } = await supabase
+        const { data: bridged, error: bridgeError } = await supabase
           .from("parents")
           .update({ user_id: user.id, email })
           .eq("id", phoneMatch.id)
           .is("user_id", null)
-          .is("email", null);
+          .is("email", null)
+          .select("id, user_id")
+          .maybeSingle();
         if (bridgeError) {
           console.error(`[enroll] فشل جسر الجوال القديم لصف ${phoneMatch.id} للمستخدم ${user.id}:`, bridgeError.message);
           return NextResponse.json({ error: "تعذّر إكمال إعداد الحساب" }, { status: 500 });
+        }
+        if (!bridged || bridged.user_id !== user.id) {
+          const { data: owner } = await supabase.from("parents").select("id, user_id").eq("id", phoneMatch.id).maybeSingle();
+          if (owner?.user_id !== user.id) return NextResponse.json({ error: "تعذّر إكمال ربط الحساب، حاول مرة أخرى" }, { status: 409 });
         }
         parent = phoneMatch;
       } else {
@@ -207,7 +229,10 @@ export async function POST(req: Request) {
           .insert({ user_id: user.id, full_name: parentName, phone: normalizedPhone, email })
           .select("id")
           .single();
-        if (parentError) return NextResponse.json({ error: parentError.message }, { status: 500 });
+        if (parentError) {
+          console.error(`[enroll] فشل إنشاء parent للمستخدم ${user.id}:`, parentError.message);
+          return NextResponse.json({ error: "تعذّر إعداد حساب ولي الأمر" }, { status: 500 });
+        }
         parent = newParent;
       }
     }
@@ -218,7 +243,10 @@ export async function POST(req: Request) {
     .insert({ parent_id: parent.id, first_name: childName, grade: gradeNumber })
     .select("id")
     .single();
-  if (childError) return NextResponse.json({ error: childError.message }, { status: 500 });
+  if (childError) {
+    console.error(`[enroll] فشل إنشاء child لولي الأمر ${parent.id}:`, childError.message);
+    return NextResponse.json({ error: "تعذّر حفظ بيانات الطفل" }, { status: 500 });
+  }
 
   // الخطوة الذرّية الفعلية: قفل المجموعة + إعادة فحص المقاعد + إدراج الاشتراك كوحدة واحدة —
   // هذا ما يمنع تجاوز السعة فعليًا عند التسجيل المتزامن، وليس الفحص أعلاه.
@@ -242,7 +270,8 @@ export async function POST(req: Request) {
       cohort_full: "اكتمل عدد المقاعد في هذه المجموعة",
     };
     const known = Object.keys(map).find((k) => subError.message.includes(k));
-    return NextResponse.json({ error: known ? map[known] : subError.message }, { status: 409 });
+    console.error(`[enroll] فشل إنشاء الاشتراك للمستخدم ${user.id}:`, subError.message);
+    return NextResponse.json({ error: known ? map[known] : "تعذّر إنشاء الاشتراك، حاول مرة أخرى" }, { status: 409 });
   }
 
   return NextResponse.json({ subscriptionId });

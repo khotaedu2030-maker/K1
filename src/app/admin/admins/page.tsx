@@ -3,7 +3,7 @@ import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export default async function AdminAdminsPage() {
-  const admin = await getAdminIdentity();
+  const admin = await getAdminIdentity("admin.manage");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
 
   const supabase = createSupabaseAdminClient();

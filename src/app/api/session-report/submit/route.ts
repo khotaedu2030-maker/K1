@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { requireTeacher } from "@/lib/require-teacher";
 import { issueMakeupCreditIfEligible } from "@/lib/makeup-credits";
 import type { AttendanceReason } from "@/lib/policies";
+import { getRuntimeSettings } from "@/lib/platform-settings";
 
 type Entry = {
   childId: string;
@@ -36,26 +37,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
   }
 
-  const authed = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await authed.auth.getUser();
-  if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+  const teacherCheck = await requireTeacher();
+  if (!teacherCheck.ok) return teacherCheck.response;
 
   const admin = createSupabaseAdminClient();
 
-  const { data: teacher } = await admin.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
-  if (!teacher) return NextResponse.json({ error: "هذا الحساب ليس حساب معلم" }, { status: 403 });
-
-  const { data: session } = await admin.from("sessions").select("id, teacher_id, cohort_id, status").eq("id", sessionId).maybeSingle();
-  if (!session || session.teacher_id !== teacher.id) {
+  const { data: session } = await admin.from("sessions").select("id, teacher_id, cohort_id, status, ends_at").eq("id", sessionId).maybeSingle();
+  if (!session || session.teacher_id !== teacherCheck.teacherId) {
     return NextResponse.json({ error: "هذه الجلسة لا تخص حسابك" }, { status: 403 });
+  }
+  const settings = await getRuntimeSettings();
+  if (session.ends_at && Date.now() > new Date(session.ends_at).getTime() + settings.attendanceLockHours * 60 * 60 * 1000) {
+    return NextResponse.json({ error: "انتهت مهلة تعديل حضور هذه الجلسة" }, { status: 409 });
   }
 
   const pulseRows = entries.map((e) => ({
     session_id: sessionId,
     child_id: e.childId,
-    teacher_id: teacher.id,
+    teacher_id: teacherCheck.teacherId,
     tasks_completed: e.subjectsCompleted,
     independence_rating: e.independenceRating,
     focus_rating: e.focusRating,
@@ -72,13 +71,16 @@ export async function POST(req: Request) {
   const { error: pulseError } = await admin
     .from("daily_pulse_reports")
     .upsert(pulseRows, { onConflict: "session_id,child_id" });
-  if (pulseError) return NextResponse.json({ error: pulseError.message }, { status: 500 });
+  if (pulseError) {
+    console.error("[session-report] pulse save failed:", pulseError.message);
+    return NextResponse.json({ error: "تعذّر حفظ تقرير الجلسة" }, { status: 500 });
+  }
 
   const recommendationRows = entries
     .filter((e) => e.needsSpecialist)
     .map((e) => ({
       child_id: e.childId,
-      teacher_id: teacher.id,
+      teacher_id: teacherCheck.teacherId,
       subject: e.specialistSubject ?? null,
       reason: e.teacherNote || "لاحظ المعلم أن الطالب يحتاج دعمًا إضافيًا في هذه الجلسة.",
       status: "open",
@@ -86,14 +88,20 @@ export async function POST(req: Request) {
 
   if (recommendationRows.length > 0) {
     const { error: recError } = await admin.from("recommendations").insert(recommendationRows);
-    if (recError) return NextResponse.json({ error: recError.message }, { status: 500 });
+    if (recError) {
+      console.error("[session-report] recommendation save failed:", recError.message);
+      return NextResponse.json({ error: "تعذّر حفظ توصية الجلسة" }, { status: 500 });
+    }
   }
 
   const { error: sessionUpdateError } = await admin
     .from("sessions")
     .update({ status: "completed" })
     .eq("id", sessionId);
-  if (sessionUpdateError) return NextResponse.json({ error: sessionUpdateError.message }, { status: 500 });
+  if (sessionUpdateError) {
+    console.error("[session-report] session update failed:", sessionUpdateError.message);
+    return NextResponse.json({ error: "تعذّر إكمال الجلسة" }, { status: 500 });
+  }
 
   // ---------- الحضور الفعلي (Absence Policy) ----------
   // تقرير المعلم هو المرجع النهائي للحضور — يؤكد أو يصحح ما سجّله الطالب بنفسه عبر "دخول الجلسة".
@@ -104,7 +112,7 @@ export async function POST(req: Request) {
     child_id: e.childId,
     status: e.attended ? "present" : "absent",
     reason: !e.attended ? e.absenceReason ?? "unexcused" : null,
-    marked_by: teacher.id,
+    marked_by: teacherCheck.teacherId,
   }));
   await admin.from("attendance").upsert(attendanceRows, { onConflict: "session_id,child_id" });
 
@@ -125,7 +133,7 @@ export async function POST(req: Request) {
       sourceSessionId: sessionId,
       sourceType: "student_absence",
       reason: e.absenceReason ?? "unexcused",
-      issuedBy: user.id,
+      issuedBy: teacherCheck.userId,
     });
   }
 

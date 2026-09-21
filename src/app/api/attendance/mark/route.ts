@@ -70,7 +70,10 @@ export async function POST(req: Request) {
     .from("attendance")
     .upsert({ session_id: sessionId, child_id: childId, status: "present" }, { onConflict: "session_id,child_id" });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[attendance] save failed:", error.message);
+    return NextResponse.json({ error: "تعذّر تسجيل الحضور" }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, meetingUrl: session.meeting_url });
 }

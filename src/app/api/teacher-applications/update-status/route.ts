@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const VALID_STATUSES = ["new", "reviewing", "shortlisted", "rejected", "accepted"];
 
 // Admin guard مركزي server-side — لا يعتمد على أي شيء يُرسَل من العميل سوى applicationId/status.
 export async function POST(req: Request) {
-  const adminCheck = await requireAdmin();
+  const adminCheck = await requirePermission("teacher_application.review");
   if (!adminCheck.ok) return adminCheck.response;
 
   const body = await req.json().catch(() => null);
@@ -18,7 +18,10 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
   const { error } = await admin.from("teacher_applications").update({ status }).eq("id", applicationId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[teacher-applications] status update failed:", error.message);
+    return NextResponse.json({ error: "تعذّر تحديث حالة الطلب" }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

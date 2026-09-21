@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getRiyadhDayOfWeek, getRiyadhMinutesSinceMidnight } from "@/lib/riyadh-time";
-
-// نطاق الإطلاق التجريبي الحالي مجمَّد صراحةً: الصفوف 4/5/6 فقط قابلة للاختيار عند إنشاء مجموعة
-// جديدة من هذه الواجهة — لا يعني هذا حذف قيم grade_band القديمة (1-3/7-9/10-12) من قاعدة
-// البيانات؛ تبقى صالحة لصفوف قديمة موجودة، فقط لا تُعرَض كخيار لمجموعة جديدة الآن.
-const PILOT_GRADES = [4, 5, 6];
+import { getRuntimeSettings } from "@/lib/platform-settings";
+import { resolveGradeBand } from "@/lib/grade-config";
 
 export async function POST(req: Request) {
-  const adminCheck = await requireAdmin();
+  const adminCheck = await requirePermission("cohort.manage");
   if (!adminCheck.ok) return adminCheck.response;
 
   const body = await req.json().catch(() => null);
@@ -17,7 +14,16 @@ export async function POST(req: Request) {
   const grade = Number(body?.grade);
   const planId = typeof body?.planId === "string" ? body.planId.trim() : "";
   const teacherId = typeof body?.teacherId === "string" ? body.teacherId.trim() : "";
-  const capacity = Number(body?.capacity);
+  const settings = await getRuntimeSettings();
+  const requestedCapacity = body?.capacity;
+  const defaultCapacityByGrade = grade >= 1 && grade <= 3
+    ? settings.defaultCapacity1_3
+    : grade >= 4 && grade <= 6
+      ? settings.defaultCapacity4_6
+      : grade >= 7 && grade <= 9
+        ? settings.defaultCapacity7_9
+        : settings.defaultCapacity10_12;
+  const capacity = requestedCapacity === undefined ? defaultCapacityByGrade : Number(requestedCapacity);
   const daysOfWeek = Array.isArray(body?.daysOfWeek) ? body.daysOfWeek.map((d: unknown) => Number(d)) : [];
   const startTime = typeof body?.startTime === "string" ? body.startTime : "";
   const endTime = typeof body?.endTime === "string" ? body.endTime : "";
@@ -25,8 +31,11 @@ export async function POST(req: Request) {
   const status = body?.status === "closed" ? "closed" : "open";
 
   if (!title) return NextResponse.json({ error: "اسم المجموعة مطلوب" }, { status: 400 });
-  if (!PILOT_GRADES.includes(grade)) {
-    return NextResponse.json({ error: "الصف يجب أن يكون 4 أو 5 أو 6 ضمن نطاق التجربة الحالي" }, { status: 400 });
+  let gradeBand: string;
+  try {
+    gradeBand = resolveGradeBand(grade);
+  } catch {
+    return NextResponse.json({ error: "الصف يجب أن يكون بين 1 و12" }, { status: 400 });
   }
   if (!Number.isInteger(capacity) || capacity < 1 || capacity > 20) {
     return NextResponse.json({ error: "السعة يجب أن تكون رقمًا صحيحًا بين 1 و20" }, { status: 400 });
@@ -98,7 +107,7 @@ export async function POST(req: Request) {
       plan_id: planId,
       title,
       grade,
-      grade_band: "4-6", // نطاق motabaa الحالي — يبقى grade_band متوافقًا مع منطق التسجيل الحالي
+      grade_band: gradeBand,
       teacher_id: teacherIdFinal,
       capacity,
       days_of_week: daysOfWeek,

@@ -16,12 +16,16 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 // ولا تُقرأ أبدًا من جسم الطلب القادم من المتصفح.
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
+  if (JSON.stringify(body ?? {}).length > 4096) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const sessionId = body?.sessionId as string | undefined;
   const submittedQuestionId = body?.questionId;
   const selectedIndex = body?.selectedIndex as number | undefined;
 
   if (!sessionId || submittedQuestionId === undefined || selectedIndex === undefined) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  }
+  if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex > 20) {
+    return NextResponse.json({ error: "الإجابة غير صالحة" }, { status: 400 });
   }
 
   const admin = createSupabaseAdminClient();
@@ -64,7 +68,8 @@ export async function POST(req: Request) {
     if (insertError.code === "23505") {
       return NextResponse.json({ error: "تمت الإجابة على هذا السؤال بالفعل" }, { status: 409 });
     }
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
+    console.error("[level-test] answer save failed:", insertError.message);
+    return NextResponse.json({ error: "تعذّر حفظ الإجابة" }, { status: 500 });
   }
 
   // إعادة بناء answeredIds/history الكاملين من قاعدة البيانات — مصدر الحقيقة الوحيد

@@ -12,22 +12,32 @@ export async function POST(req: Request) {
   if (!adminCheck.ok) return adminCheck.response;
 
   const body = await req.json().catch(() => null);
-  const makeupLimit = Number(body?.makeupMonthlyLimit);
+  const admin = createSupabaseAdminClient();
+  const { data: current } = await admin
+    .from("admin_platform_settings")
+    .select("makeup_monthly_limit, pause_min_days, pause_max_days, quiet_hours_start, quiet_hours_end, registration_enabled, seat_hold_hours, attendance_lock_hours, default_capacity_1_3, default_capacity_4_6, default_capacity_7_9, default_capacity_10_12, default_session_duration_minutes, booking_window_days, support_email, support_phone")
+    .eq("id", true)
+    .maybeSingle();
+  if (!current) {
+    return NextResponse.json({ error: "الإعدادات غير مُهيَّأة بعد — طبّق migration الإعدادات أولًا" }, { status: 500 });
+  }
+
+  const makeupLimit = body?.makeupMonthlyLimit === undefined ? current.makeup_monthly_limit : Number(body.makeupMonthlyLimit);
   // Phase 8.5/8.6 — pause_min_days أصبحت ACTIVE فعليًا منذ Phase 6 (تُقرأ بـ
   // getRuntimeSettings().pauseMinDays وتُستهلَك داخل admin_create_subscription_pause_atomic لفرض
   // حد أدنى فعلي لمدة التجميد) — كانت هذه الصفحة تتجاهلها وتُبقي القيمة المخزَّنة كما هي فقط
   // (current.pause_min_days) بلا قبولها من الواجهة إطلاقًا. تُقبَل الآن كحقل حقيقي قابل للتعديل.
-  const pauseMin = Number(body?.pauseMinDays);
-  const pauseMax = Number(body?.pauseMaxDays);
-  const quietStart = typeof body?.quietHoursStart === "string" ? body.quietHoursStart : "";
-  const quietEnd = typeof body?.quietHoursEnd === "string" ? body.quietHoursEnd : "";
-  const registrationEnabled = body?.registrationEnabled === true;
-  const seatHoldHours = Number(body?.seatHoldHours);
-  const attendanceLockHours = Number(body?.attendanceLockHours);
-  const cap1_3 = Number(body?.defaultCapacity1_3);
-  const cap4_6 = Number(body?.defaultCapacity4_6);
-  const cap7_9 = Number(body?.defaultCapacity7_9);
-  const cap10_12 = Number(body?.defaultCapacity10_12);
+  const pauseMin = body?.pauseMinDays === undefined ? current.pause_min_days : Number(body.pauseMinDays);
+  const pauseMax = body?.pauseMaxDays === undefined ? current.pause_max_days : Number(body.pauseMaxDays);
+  const quietStart = typeof body?.quietHoursStart === "string" ? body.quietHoursStart : String(current.quiet_hours_start).slice(0, 5);
+  const quietEnd = typeof body?.quietHoursEnd === "string" ? body.quietHoursEnd : String(current.quiet_hours_end).slice(0, 5);
+  const registrationEnabled = typeof body?.registrationEnabled === "boolean" ? body.registrationEnabled : current.registration_enabled;
+  const seatHoldHours = body?.seatHoldHours === undefined ? current.seat_hold_hours : Number(body.seatHoldHours);
+  const attendanceLockHours = body?.attendanceLockHours === undefined ? current.attendance_lock_hours : Number(body.attendanceLockHours);
+  const cap1_3 = body?.defaultCapacity1_3 === undefined ? current.default_capacity_1_3 : Number(body.defaultCapacity1_3);
+  const cap4_6 = body?.defaultCapacity4_6 === undefined ? current.default_capacity_4_6 : Number(body.defaultCapacity4_6);
+  const cap7_9 = body?.defaultCapacity7_9 === undefined ? current.default_capacity_7_9 : Number(body.defaultCapacity7_9);
+  const cap10_12 = body?.defaultCapacity10_12 === undefined ? current.default_capacity_10_12 : Number(body.defaultCapacity10_12);
 
   if (
     !Number.isInteger(makeupLimit) || makeupLimit < 0 || makeupLimit > 10 ||
@@ -44,19 +54,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "قيم غير صالحة، راجع الحدود المسموحة لكل حقل" }, { status: 400 });
   }
 
-  const admin = createSupabaseAdminClient();
-
-  // Phase 9 Step 9.2A production reconciliation — reads/writes admin_platform_settings,
-  // not platform_settings (that name is a pre-existing, unrelated Production table with a
-  // key/value shape; left untouched — see supabase/migrations/20261002_phase9_production_reconciliation.sql).
-  const { data: current } = await admin
-    .from("admin_platform_settings")
-    .select("default_session_duration_minutes, booking_window_days, support_email, support_phone")
-    .eq("id", true)
-    .maybeSingle();
-  if (!current) {
-    return NextResponse.json({ error: "الإعدادات غير مُهيَّأة بعد — طبّق migration الإعدادات أولًا" }, { status: 500 });
-  }
   // pause_min_days <= pause_max_days مطلوب دائمًا (قيد قاعدة البيانات نفسه) — تحقّق واضح هنا
   // بدل ترك خطأ DB خامًا يصل المستخدم، الآن على القيمتين الجديدتين المُدخَلتين معًا.
   if (pauseMin > pauseMax) {

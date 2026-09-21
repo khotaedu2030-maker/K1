@@ -4,18 +4,18 @@ import { useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 
 const DAY_LABELS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-const GRADES = [4, 5, 6];
+const GRADES = Array.from({ length: 12 }, (_, index) => index + 1);
 
 export default function CreateCohortForm({
   teachers,
   plans,
   cycles,
-  defaultCapacity,
+  defaultCapacities,
 }: {
   teachers: { id: string; full_name: string }[];
   plans: { id: string; name: string; days_per_week: number | null }[];
   cycles?: { id: string; name: string; enabled_grade_bands: string[] | null }[];
-  defaultCapacity?: number;
+  defaultCapacities?: Record<"1-3" | "4-6" | "7-9" | "10-12", number>;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -23,7 +23,7 @@ export default function CreateCohortForm({
   const [grade, setGrade] = useState<number | "">("");
   const [planId, setPlanId] = useState("");
   const [teacherId, setTeacherId] = useState("");
-  const [capacity, setCapacity] = useState(String(defaultCapacity ?? 4));
+  const [capacity, setCapacity] = useState(String(defaultCapacities?.["4-6"] ?? 4));
   const [days, setDays] = useState<number[]>([]);
   const [startTime, setStartTime] = useState("16:30");
   const [endTime, setEndTime] = useState("17:30");
@@ -35,12 +35,17 @@ export default function CreateCohortForm({
 
   const selectedPlan = plans.find((p) => p.id === planId);
 
+  function capacityForGrade(value: number | "") {
+    const band = !value ? "4-6" : value <= 3 ? "1-3" : value <= 6 ? "4-6" : value <= 9 ? "7-9" : "10-12";
+    return defaultCapacities?.[band] ?? ({ "1-3": 3, "4-6": 4, "7-9": 5, "10-12": 5 }[band]);
+  }
+
   function toggleDay(d: number) {
     setDays((prev: number[]) => (prev.includes(d) ? prev.filter((x: number) => x !== d) : [...prev, d].sort()));
   }
 
   function reset() {
-    setTitle(""); setGrade(""); setPlanId(""); setTeacherId(""); setCapacity("4");
+    setTitle(""); setGrade(""); setPlanId(""); setTeacherId(""); setCapacity(String(capacityForGrade("")));
     setDays([]); setStartTime("16:30"); setEndTime("17:30"); setMeetingUrl(""); setStatus("open");
   }
 
@@ -102,8 +107,8 @@ export default function CreateCohortForm({
         </label>
 
         <label>
-          الصف (نطاق التجربة الحالي: 4-6 فقط)
-          <select value={grade} onChange={(e: ChangeEvent<HTMLSelectElement>) => setGrade(Number(e.target.value))}>
+          الصف
+          <select value={grade} onChange={(e: ChangeEvent<HTMLSelectElement>) => { const next = e.target.value ? Number(e.target.value) : ""; setGrade(next); setCapacity(String(capacityForGrade(next))); }}>
             <option value="">— اختر —</option>
             {GRADES.map((g) => <option value={g} key={g}>الصف {g}</option>)}
           </select>

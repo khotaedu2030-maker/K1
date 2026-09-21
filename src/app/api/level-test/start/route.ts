@@ -8,6 +8,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 // فقط sessionId يُستخدم كمرجع للخادم في /submit.
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
+  if (JSON.stringify(body ?? {}).length > 2048) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const trackId = body?.trackId as TrackId | undefined;
 
   const track = tracks.find((t) => t.id === trackId);
@@ -36,7 +37,8 @@ export async function POST(req: Request) {
     .single();
 
   if (error || !session) {
-    return NextResponse.json({ error: error?.message ?? "تعذّر إنشاء جلسة الاختبار" }, { status: 500 });
+    if (error) console.error("[level-test] session create failed:", error.message);
+    return NextResponse.json({ error: "تعذّر إنشاء جلسة الاختبار" }, { status: 500 });
   }
 
   return NextResponse.json({

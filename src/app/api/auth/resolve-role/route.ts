@@ -16,7 +16,7 @@ export async function POST() {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: adminRow } = await admin.from("admins").select("id").eq("user_id", user.id).maybeSingle();
+  const { data: adminRow } = await admin.from("admins").select("id").eq("user_id", user.id).eq("active", true).maybeSingle();
   if (adminRow) return NextResponse.json({ role: "admin" });
 
   const { data: teacherRow } = await admin.from("teachers").select("id").eq("user_id", user.id).eq("active", true).maybeSingle();
