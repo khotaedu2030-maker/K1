@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 // تحديث بيانات مجموعة (تشغيلية + سعة/تسجيل) — يمر بالكامل عبر Server API محمي، لا كتابة
@@ -7,7 +7,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 // (السعة/الحالة/المعلم/الرابط) يتم عبر RPC ذرّي واحد (admin_update_cohort_operations_atomic) —
 // لا "احسب المحتسَب ثم حدِّث" منفصلَين من JavaScript، فلا نافذة سباق بين القراءة والكتابة.
 export async function POST(req: Request) {
-  const adminCheck = await requireAdmin();
+  const adminCheck = await requirePermission("cohort.manage");
   if (!adminCheck.ok) return adminCheck.response;
 
   const admin = createSupabaseAdminClient();

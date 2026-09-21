@@ -7,7 +7,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 const PAGE_SIZE = 30;
 
 export default async function AdminParentsPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
-  const admin = await getAdminIdentity();
+  const admin = await getAdminIdentity("parent.context.read");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
 
   const params = await searchParams;

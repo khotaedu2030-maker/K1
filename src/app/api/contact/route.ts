@@ -15,6 +15,9 @@ export async function POST(req: Request) {
   if (!fullName || !email || !message) {
     return NextResponse.json({ error: "الاسم والبريد والرسالة مطلوبة" }, { status: 400 });
   }
+  if (fullName.length > 160 || email.length > 320 || phone.length > 32) {
+    return NextResponse.json({ error: "بيانات التواصل طويلة جدًا" }, { status: 400 });
+  }
   if (!email.includes("@")) {
     return NextResponse.json({ error: "البريد الإلكتروني غير صحيح" }, { status: 400 });
   }

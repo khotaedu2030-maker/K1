@@ -81,7 +81,10 @@ export async function POST(req: Request) {
     reason: reason ?? null,
     status: "requested",
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[subscription-pause] request failed:", error.message);
+    return NextResponse.json({ error: "تعذّر إرسال طلب التجميد" }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

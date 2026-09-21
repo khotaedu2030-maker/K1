@@ -34,7 +34,10 @@ export async function POST(req: Request) {
     sender_role: auth.role,
     body: text,
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[messages] send failed:", error.message);
+    return NextResponse.json({ error: "تعذّر إرسال الرسالة" }, { status: 500 });
+  }
 
   await admin.from("message_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
 

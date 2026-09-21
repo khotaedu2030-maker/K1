@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { requireAdmin } from "@/lib/require-admin";
+import { requirePermission } from "@/lib/require-admin";
 
 // اعتماد/رفض طلب تجميد — للأدمن فقط. تحديث حالة الطلب وتمديد renewal_date (عند الاعتماد)
 // ينفَّذان كمعاملة ذرّية واحدة عبر public.review_subscription_pause — لا حالة وسيطة ممكنة
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   const decision = body?.decision as "approved" | "rejected" | undefined;
   if (!pauseId || !decision) return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
 
-  const adminCheck = await requireAdmin();
+  const adminCheck = await requirePermission("subscription.review");
   if (!adminCheck.ok) return adminCheck.response;
 
   const admin = createSupabaseAdminClient();
@@ -30,7 +30,8 @@ export async function POST(req: Request) {
       invalid_decision: "قرار غير صالح",
     };
     const known = Object.keys(map).find((k) => error.message.includes(k));
-    return NextResponse.json({ error: known ? map[known] : error.message }, { status: 409 });
+    console.error("[subscription-pause] review failed:", error.message);
+    return NextResponse.json({ error: known ? map[known] : "تعذّرت مراجعة طلب التجميد" }, { status: 409 });
   }
 
   return NextResponse.json({ ok: true });

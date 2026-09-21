@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { issueMakeupCreditIfEligible } from "@/lib/makeup-credits";
-import { requireAdmin } from "@/lib/require-admin";
+import { requirePermission } from "@/lib/require-admin";
 import { requireTeacher } from "@/lib/require-teacher";
 
 // إلغاء جلسة كاملة (وليس غياب طالب فردي) — من المعلم أو من إدارة خُطى. يمنح رصيد تعويض
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     actorUserId = teacherCheck.userId;
     teacherId = teacherCheck.teacherId;
   } else {
-    const adminCheck = await requireAdmin();
+    const adminCheck = await requirePermission("session.manage");
     if (!adminCheck.ok) return adminCheck.response;
     actorUserId = adminCheck.userId;
   }
@@ -44,7 +44,10 @@ export async function POST(req: Request) {
     .from("sessions")
     .update({ status: "cancelled", cancelled_by: cancelledBy })
     .eq("id", sessionId);
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (updateError) {
+    console.error("[session-cancel] update failed:", updateError.message);
+    return NextResponse.json({ error: "تعذّر إلغاء الجلسة" }, { status: 500 });
+  }
 
   const { data: activeSubs } = await admin
     .from("subscriptions")

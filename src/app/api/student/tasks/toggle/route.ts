@@ -24,7 +24,10 @@ export async function POST(req: Request) {
 
   const nextStatus = task.status === "done" ? "pending" : "done";
   const { error } = await admin.from("daily_tasks").update({ status: nextStatus }).eq("id", taskId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[student-tasks] update failed:", error.message);
+    return NextResponse.json({ error: "تعذّر تحديث المهمة" }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, status: nextStatus });
 }

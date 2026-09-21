@@ -7,7 +7,7 @@ const STATUS_LABELS: Record<string, string> = { available: "متاح", reserved:
 const SOURCE_LABELS: Record<string, string> = { student_absence: "غياب طالب", teacher_cancellation: "إلغاء معلم", platform_cancellation: "إلغاء من خُطى", manual_admin: "منح يدوي من الإدارة" };
 
 export default async function AdminMakeupCreditsPage() {
-  const admin = await getAdminIdentity();
+  const admin = await getAdminIdentity("makeup.manage");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
 
   const supabase = createSupabaseAdminClient();

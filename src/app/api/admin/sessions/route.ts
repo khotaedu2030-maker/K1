@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 // تعيين معلم بديل لجلسة واحدة فقط — لا يغيّر cohorts.teacher_id (المعلم الأساسي للمجموعة)
@@ -7,7 +7,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 // المجموعة تبقى بمعلمها الأساسي، والسجلات التاريخية لا تتأثر (نُعدِّل جلسات scheduled مستقبلية
 // فقط، لا completed ولا cancelled).
 export async function POST(req: Request) {
-  const adminCheck = await requireAdmin();
+  const adminCheck = await requirePermission("session.manage");
   if (!adminCheck.ok) return adminCheck.response;
 
   const body = await req.json().catch(() => null);

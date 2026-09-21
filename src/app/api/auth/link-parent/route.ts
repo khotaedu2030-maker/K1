@@ -3,7 +3,6 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-identity";
 
-type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 type ParentRow = { id: string; user_id: string | null };
 
 // يُستدعى من العميل فور نجاح verifyOtp مباشرة — الربط الفعلي بأكمله server-side، ولا يثق بأي
@@ -19,38 +18,6 @@ type ParentRow = { id: string; user_id: string | null };
 // إطلاقًا، نُعيد رسالة واضحة تطلب من المستخدم بدء التسجيل أولًا — لا صفًا ناقص الجوال.
 //
 // جدول التبعيات المؤكَّد من schema.sql مباشرة: children, subscriptions, payments فقط.
-
-async function mergeAndDeleteDuplicate(
-  admin: AdminClient,
-  canonicalId: string,
-  duplicateId: string
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-  const { error: childrenError } = await admin.from("children").update({ parent_id: canonicalId }).eq("parent_id", duplicateId);
-  if (childrenError) {
-    console.error(`[link-parent] فشل نقل children من ${duplicateId} إلى ${canonicalId}:`, childrenError.message);
-    return { ok: false, status: 503, error: "تعذّر إكمال دمج الحساب، حاول مرة أخرى" };
-  }
-
-  const { error: subsError } = await admin.from("subscriptions").update({ parent_id: canonicalId }).eq("parent_id", duplicateId);
-  if (subsError) {
-    console.error(`[link-parent] فشل نقل subscriptions من ${duplicateId} إلى ${canonicalId}:`, subsError.message);
-    return { ok: false, status: 503, error: "تعذّر إكمال دمج الحساب، حاول مرة أخرى" };
-  }
-
-  const { error: paymentsError } = await admin.from("payments").update({ parent_id: canonicalId }).eq("parent_id", duplicateId);
-  if (paymentsError) {
-    console.error(`[link-parent] فشل نقل payments من ${duplicateId} إلى ${canonicalId}:`, paymentsError.message);
-    return { ok: false, status: 503, error: "تعذّر إكمال دمج الحساب، حاول مرة أخرى" };
-  }
-
-  const { error: deleteError } = await admin.from("parents").delete().eq("id", duplicateId);
-  if (deleteError) {
-    console.error(`[link-parent] فشل حذف parent مكرَّر ${duplicateId} بعد نقل كل مراجعه بنجاح:`, deleteError.message);
-    return { ok: false, status: 503, error: "تعذّر إكمال تنظيف الحساب، حاول مرة أخرى" };
-  }
-
-  return { ok: true };
-}
 
 export async function POST() {
   const supabase = await createSupabaseServerClient();
@@ -94,18 +61,15 @@ export async function POST() {
       return NextResponse.json({ parentId: existingByUser.id });
     }
 
-    const safeToMerge = ((otherRows ?? []) as ParentRow[]).filter((p) => p.user_id === null);
     const conflicting = ((otherRows ?? []) as ParentRow[]).filter((p) => p.user_id !== null);
     if (conflicting.length > 0) {
       console.error(
         `[link-parent] تعارض: البريد ${email} مرتبط أيضًا بحساب مستخدم آخر (${conflicting.map((c) => c.id).join(", ")}) غير المستخدم الحالي (${user.id}) — لا يُدمَج تلقائيًا، يتطلب مراجعة يدوية.`
       );
     }
-    for (const dup of safeToMerge) {
-      const mergeResult = await mergeAndDeleteDuplicate(admin, existingByUser.id, dup.id);
-      if (!mergeResult.ok) return NextResponse.json({ error: mergeResult.error }, { status: mergeResult.status });
-    }
-
+    // Duplicate cleanup is intentionally deferred: moving dependent rows and deleting an
+    // orphan cannot be made atomic with the available client APIs. Never risk touching a
+    // row another request may have claimed after this read.
     return NextResponse.json({ parentId: existingByUser.id });
   }
 
@@ -139,31 +103,29 @@ export async function POST() {
     );
   }
 
-  // 3) الحالة الأساسية: صف واحد أو أكثر بلا user_id لنفس البريد — الأقدم هو الأساسي، ندمج أي
-  // تكرار آخر فيه (نقل مراجع ثم حذف الصف المكرَّر فعليًا) قبل ربطه بالمستخدم.
-  const canonical = unlinked[0];
-  const duplicates = unlinked.slice(1);
-
-  for (const dup of duplicates) {
-    const mergeResult = await mergeAndDeleteDuplicate(admin, canonical.id, dup.id);
-    if (!mergeResult.ok) return NextResponse.json({ error: mergeResult.error }, { status: mergeResult.status });
+  // 3) Multiple unlinked rows are ambiguous without an atomic merge transaction. Fail closed.
+  if (unlinked.length > 1) {
+    return NextResponse.json({ error: "تعذّر ربط هذا البريد تلقائيًا. تواصل معنا للمساعدة." }, { status: 409 });
   }
+
+  // 4) A single unlinked row may be claimed with an ownership proof below.
+  const canonical = unlinked[0];
 
   const { data: linkedRow, error: linkError } = await admin
     .from("parents")
     .update({ user_id: user.id, email })
     .eq("id", canonical.id)
     .is("user_id", null)
-    .select("id")
+    .select("id, user_id")
     .maybeSingle();
 
   if (linkError) {
     console.error(`[link-parent] فشل ربط parent موجود (${canonical.id}) بالمستخدم ${user.id}:`, linkError.message);
     return NextResponse.json({ error: "تعذّر إكمال ربط الحساب" }, { status: 500 });
   }
-  if (!linkedRow) {
-    const { data: recheck } = await admin.from("parents").select("id").eq("user_id", user.id).maybeSingle();
-    if (recheck) return NextResponse.json({ parentId: recheck.id });
+  if (!linkedRow || linkedRow.user_id !== user.id) {
+    const { data: recheck } = await admin.from("parents").select("id, user_id").eq("user_id", user.id).maybeSingle();
+    if (recheck?.user_id === user.id) return NextResponse.json({ parentId: recheck.id });
     return NextResponse.json({ error: "تعذّر إكمال ربط الحساب، حاول مرة أخرى" }, { status: 503 });
   }
 

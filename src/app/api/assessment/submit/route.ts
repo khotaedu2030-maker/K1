@@ -92,7 +92,8 @@ export async function POST(req: Request) {
 
   if (error) {
     // فشل أي جزء من المعاملة الثلاثية يعني ROLLBACK تلقائي كامل داخل الدالة — لا كتابات جزئية.
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[assessment] submit RPC failed:", error.message);
+    return NextResponse.json({ error: "تعذّر حفظ التقييم" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, assessmentId, independenceTotal });

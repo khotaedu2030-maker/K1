@@ -48,7 +48,8 @@ export async function POST(req: Request) {
       session_full: "اكتمل عدد المقاعد في هذه الجلسة",
     };
     const known = Object.keys(map).find((k) => error.message.includes(k));
-    return NextResponse.json({ error: known ? map[known] : error.message }, { status: 409 });
+    console.error("[makeup] redeem failed:", error.message);
+    return NextResponse.json({ error: known ? map[known] : "تعذّر استخدام رصيد التعويض" }, { status: 409 });
   }
 
   return NextResponse.json({ ok: true });

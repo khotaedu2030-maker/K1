@@ -49,12 +49,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "تعذّر ربط هذا البريد تلقائيًا. تواصل معنا للمساعدة." }, { status: 409 });
   }
   if (emailRows?.[0]) {
-    const { error } = await admin.from("parents").update({ user_id: user.id, email }).eq("id", emailRows[0].id).is("user_id", null);
+    const { data: linked, error } = await admin
+      .from("parents")
+      .update({ user_id: user.id, email })
+      .eq("id", emailRows[0].id)
+      .is("user_id", null)
+      .select("id, user_id")
+      .maybeSingle();
     if (error) {
       console.error("[parent-signup] email link failed:", error.message);
       return NextResponse.json({ error: "تعذّر ربط الحساب" }, { status: 503 });
     }
-    return NextResponse.json({ ok: true, parentId: emailRows[0].id });
+    if (!linked || linked.user_id !== user.id) {
+      const { data: owner } = await admin.from("parents").select("id, user_id").eq("id", emailRows[0].id).maybeSingle();
+      if (owner?.user_id === user.id) return NextResponse.json({ ok: true, parentId: owner.id });
+      return NextResponse.json({ error: "تعذّر ربط الحساب، حاول مرة أخرى" }, { status: 409 });
+    }
+    return NextResponse.json({ ok: true, parentId: linked.id });
   }
 
   const { data: phoneRows, error: phoneError } = await admin
@@ -69,17 +80,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "هذا الرقم مرتبط بحساب آخر بالفعل. تواصل معنا للمساعدة." }, { status: 409 });
   }
   if (phoneRows?.[0]) {
-    const { error } = await admin
+    const { data: linked, error } = await admin
       .from("parents")
       .update({ user_id: user.id, email })
       .eq("id", phoneRows[0].id)
       .is("user_id", null)
-      .is("email", null);
+      .is("email", null)
+      .select("id, user_id")
+      .maybeSingle();
     if (error) {
       console.error("[parent-signup] legacy phone link failed:", error.message);
       return NextResponse.json({ error: "تعذّر ربط الحساب" }, { status: 503 });
     }
-    return NextResponse.json({ ok: true, parentId: phoneRows[0].id });
+    if (!linked || linked.user_id !== user.id) {
+      const { data: owner } = await admin.from("parents").select("id, user_id").eq("id", phoneRows[0].id).maybeSingle();
+      if (owner?.user_id === user.id) return NextResponse.json({ ok: true, parentId: owner.id });
+      return NextResponse.json({ error: "تعذّر ربط الحساب، حاول مرة أخرى" }, { status: 409 });
+    }
+    return NextResponse.json({ ok: true, parentId: linked.id });
   }
 
   const { data: created, error: createError } = await admin

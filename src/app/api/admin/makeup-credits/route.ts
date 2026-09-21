@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 // منح/إلغاء رصيد تعويض يدويًا من الإدارة — لا نظام تعويض ثانٍ، نستخدم جدول makeup_credits
 // نفسه بـsource_type='manual_admin' (مُعفى أصلًا من السقف الشهري للغياب العادي حسب
 // isMonthlyCapApplicable في policies.ts — هذا استثناء إداري صريح، لا عدّاد آلي).
 export async function POST(req: Request) {
-  const adminCheck = await requireAdmin();
+  const adminCheck = await requirePermission("makeup.manage");
   if (!adminCheck.ok) return adminCheck.response;
 
   const body = await req.json().catch(() => null);

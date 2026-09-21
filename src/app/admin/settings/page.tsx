@@ -20,7 +20,7 @@ const SETTING_CLASSIFICATION: { key: string; label: string; status: "ACTIVE" | "
 ];
 
 export default async function AdminSettingsPage() {
-  const admin = await getAdminIdentity();
+  const admin = await getAdminIdentity("settings.manage");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
 
   // Phase 9 Step 9.2A production reconciliation — reads admin_platform_settings, not

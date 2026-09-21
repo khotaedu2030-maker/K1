@@ -27,7 +27,7 @@ const statusMeta: Record<string, { label: string; color: string }> = {
 };
 
 export default async function P() {
-  const adminIdentity = await getAdminIdentity();
+  const adminIdentity = await getAdminIdentity("teacher.manage");
 
   if (!adminIdentity) {
     return (

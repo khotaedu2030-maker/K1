@@ -31,7 +31,10 @@ export async function POST(req: Request) {
     .insert({ parent_user_id: user.id, child_id: childId, expires_at: expiresAt.toISOString() })
     .select("id")
     .single();
-  if (error || !session) return NextResponse.json({ error: error?.message ?? "تعذّر الدخول" }, { status: 500 });
+  if (error || !session) {
+    if (error) console.error("[student-mode] enter failed:", error.message);
+    return NextResponse.json({ error: "تعذّر الدخول إلى وضع الطالب" }, { status: 500 });
+  }
 
   const res = NextResponse.json({ ok: true });
   res.cookies.set(STUDENT_SESSION_COOKIE, session.id, {

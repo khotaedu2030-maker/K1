@@ -27,7 +27,10 @@ export async function POST(req: Request) {
     .eq("thread_id", threadId)
     .neq("sender_user_id", user.id)
     .is("read_at", null);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[messages] mark-read failed:", error.message);
+    return NextResponse.json({ error: "تعذّر تحديث الرسائل" }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

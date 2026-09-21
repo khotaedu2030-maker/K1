@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 // جلب تفصيلي محدود عند الطلب فقط (لا Preload) — يفتح عند نقر صف ولي أمر بلوحة الإدارة.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const adminCheck = await requireAdmin();
+  const adminCheck = await requirePermission("parent.context.read");
   if (!adminCheck.ok) return adminCheck.response;
 
   const { id } = await params;
@@ -19,7 +19,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .select("id, first_name, grade, subscriptions(status, cohorts(title))")
       .eq("parent_id", id)
       .limit(20),
-    admin.from("payments").select("status, amount_sar, paid_at").eq("parent_id", id).order("created_at", { ascending: false }).limit(5),
+    adminCheck.role === "super_admin" || adminCheck.role === "finance_admin"
+      ? admin.from("payments").select("status, amount_sar, paid_at").eq("parent_id", id).order("created_at", { ascending: false }).limit(5)
+      : Promise.resolve({ data: [] }),
   ]);
 
   const childIds = (children ?? []).map((c: { id: string }) => c.id);

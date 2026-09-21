@@ -5,7 +5,7 @@ import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export default async function P() {
-  const adminIdentity = await getAdminIdentity();
+  const adminIdentity = await getAdminIdentity("teacher_application.review");
 
   if (!adminIdentity) {
     return (

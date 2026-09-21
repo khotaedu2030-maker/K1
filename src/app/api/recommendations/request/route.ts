@@ -47,13 +47,19 @@ export async function POST(req: Request) {
     goal: `جلسة تقوية فردية لـ${childName ? " " + childName : ""} — ${recommendation.subject ?? ""}: ${recommendation.reason}`,
     status: "new",
   });
-  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
+  if (insertError) {
+    console.error("[recommendations] create failed:", insertError.message);
+    return NextResponse.json({ error: "تعذّر حفظ الطلب" }, { status: 500 });
+  }
 
   const { error: updateError } = await admin
     .from("recommendations")
     .update({ status: "actioned" })
     .eq("id", recommendationId);
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (updateError) {
+    console.error("[recommendations] update failed:", updateError.message);
+    return NextResponse.json({ error: "تعذّر تحديث الطلب" }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

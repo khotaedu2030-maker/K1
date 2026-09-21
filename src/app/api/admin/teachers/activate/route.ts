@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const ACTIVATION_ERRORS: Record<string, string> = {
@@ -8,7 +8,7 @@ const ACTIVATION_ERRORS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
-  const adminCheck = await requireAdmin();
+  const adminCheck = await requirePermission("teacher.manage");
   if (!adminCheck.ok) return adminCheck.response;
 
   const body = await req.json().catch(() => null);

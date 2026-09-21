@@ -56,7 +56,10 @@ export async function POST(req: Request) {
     )
     .select("id")
     .single();
-  if (error || !thread) return NextResponse.json({ error: error?.message ?? "تعذّر إنشاء المحادثة" }, { status: 500 });
+  if (error || !thread) {
+    if (error) console.error("[messages] thread create failed:", error.message);
+    return NextResponse.json({ error: "تعذّر إنشاء المحادثة" }, { status: 500 });
+  }
 
   return NextResponse.json({ threadId: thread.id });
 }

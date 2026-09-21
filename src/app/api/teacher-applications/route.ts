@@ -15,6 +15,9 @@ export async function POST(req: Request) {
   if (!fullName || !email || !phone || !specialization) {
     return NextResponse.json({ error: "الاسم والبريد والجوال والتخصص مطلوبة" }, { status: 400 });
   }
+  if (fullName.length > 160 || email.length > 320 || phone.length > 32 || specialization.length > 160 || cvUrl.length > 2000) {
+    return NextResponse.json({ error: "بيانات الطلب طويلة جدًا" }, { status: 400 });
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "البريد الإلكتروني غير صحيح" }, { status: 400 });
   }

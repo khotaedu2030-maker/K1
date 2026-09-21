@@ -38,7 +38,10 @@ export async function POST(req: Request) {
     if (typeof progress === "number") patch.progress = progress;
 
     const { error } = await admin.from("weekly_goals").update(patch).eq("id", goalId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error("[goals] update failed:", error.message);
+      return NextResponse.json({ error: "تعذّر تحديث الهدف" }, { status: 500 });
+    }
     return NextResponse.json({ ok: true });
   }
 
@@ -62,7 +65,10 @@ export async function POST(req: Request) {
     category: category ?? null,
     created_by_teacher_id: teacherCheck.teacherId,
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[goals] create failed:", error.message);
+    return NextResponse.json({ error: "تعذّر إنشاء الهدف" }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

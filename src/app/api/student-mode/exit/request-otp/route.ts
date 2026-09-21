@@ -27,7 +27,10 @@ export async function POST() {
   // (لديه صف parent مرتبط بطفل بجلسة طالب نشطة فعليًا) — لا يجوز أن يُنشئ حساب Auth جديدًا
   // بالخطأ لبريد Legacy لم يسجّل دخول عبر OTP من قبل إطلاقًا.
   const { error } = await admin.auth.signInWithOtp({ email: parent.email, options: { shouldCreateUser: false } });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[student-mode] exit OTP request failed:", error.message);
+    return NextResponse.json({ error: "تعذّر إرسال رمز التحقق" }, { status: 500 });
+  }
 
   // لا نُرجع البريد الكامل للعميل إطلاقًا — الإخفاء الجزئي فقط للعرض.
   return NextResponse.json({ ok: true, maskedEmail: maskEmail(parent.email) });
