@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import AdminAccountMenu from "./AdminAccountMenu";
 
 // كل قسم من الـ17 مذكورين صراحةً بالطلب — أي قسم بلا صفحة حقيقية بعد يقود لصفحة تعرض بوضوح
 // "قيد التطوير" (لا 404، ولا بيانات وهمية) بدل اختراع محتوى. القسم يبقى بالتنقّل دائمًا حتى
@@ -16,7 +17,7 @@ const SECTIONS: { label: string; href: string }[] = [
   { label: "المجموعات", href: "/admin/groups" },
   { label: "الجلسات", href: "/admin/sessions" },
   { label: "الحضور", href: "/admin/attendance" },
-  { label: "الاشتراكات", href: "/admin/subscriptions" },
+  { label: "مراجعة طلبات التجميد", href: "/admin/subscriptions" },
   { label: "المدفوعات", href: "/admin/payments" },
   { label: "التعويضات", href: "/admin/makeup-credits" },
   { label: "طلبات التسجيل والتواصل", href: "/admin/requests" },
@@ -36,7 +37,7 @@ export default function AdminShell({ adminName, children }: { adminName: string;
       <header className="admin-os-topbar">
         <button className="admin-os-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="القائمة">☰</button>
         <Link href="/admin" className="admin-os-brand">خُطى — الإدارة</Link>
-        <span className="admin-os-admin-name">{adminName}</span>
+        <AdminAccountMenu adminName={adminName} />
       </header>
 
       <div className="admin-os-body">
