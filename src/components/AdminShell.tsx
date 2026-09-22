@@ -23,6 +23,7 @@ const SECTIONS: { label: string; href: string }[] = [
   { label: "التعويضات", href: "/admin/makeup-credits" },
   { label: "طلبات التسجيل والتواصل", href: "/admin/requests" },
   { label: "حالات الدعم", href: "/admin/support" },
+  { label: "الاستثناءات التشغيلية", href: "/admin/exceptions" },
   { label: "الرسائل", href: "/admin/messages" },
   { label: "التقارير", href: "/admin/reports" },
   { label: "الإعدادات", href: "/admin/settings" },
