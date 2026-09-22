@@ -1,4 +1,5 @@
 import AdminShell from "@/components/AdminShell";
+import ProvisionTeacherIdentityButton from "./ProvisionTeacherIdentityButton";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { SCORECARD_POLICY } from "@/lib/policies";
@@ -41,13 +42,13 @@ export default async function P() {
   }
 
   const admin = createSupabaseAdminClient();
-  const { data: teachers } = await admin.from("teachers").select("id, full_name").eq("active", true);
+  const { data: teachers } = await admin.from("teachers").select("id, full_name, active, user_id").order("full_name", { ascending: true });
 
   const windowStart = new Date();
   windowStart.setDate(windowStart.getDate() - WINDOW_DAYS);
 
   const rows = await Promise.all(
-    (teachers ?? []).map(async (t: { id: string; full_name: string }) => {
+    (teachers ?? []).map(async (t: { id: string; full_name: string; active: boolean; user_id: string | null }) => {
       const { data: sessions } = await admin
         .from("sessions")
         .select("id, status, cancelled_by, ends_at")
@@ -87,6 +88,8 @@ export default async function P() {
       return {
         id: t.id,
         name: t.full_name,
+        active: t.active,
+        userLinked: Boolean(t.user_id),
         commitmentRate,
         timelinessRate,
         assignedCohorts: cohortIds.length,
@@ -106,13 +109,19 @@ export default async function P() {
       </p>
 
       <div>
-        {rows.map((r: { id: string; name: string; commitmentRate: number | null; timelinessRate: number | null; assignedCohorts: number; activeStudents: number; status: string }) => (
+        {rows.map((r: { id: string; name: string; active: boolean; userLinked: boolean; commitmentRate: number | null; timelinessRate: number | null; assignedCohorts: number; activeStudents: number; status: string }) => (
           <div className="dashcard" key={r.id} style={{ marginBottom: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <b>{r.name}</b>
-              <span className="badge" style={{ color: statusMeta[r.status].color }}>
-                {statusMeta[r.status].label}
-              </span>
+              <div>
+                <b>{r.name}</b>
+                <span className="badge" style={{ marginInlineStart: 8, color: r.active ? "var(--t)" : "var(--gray)" }}>
+                  {r.active ? (r.userLinked ? "نشط — حساب الدخول مربوط" : "نشط — يحتاج تجهيز حساب الدخول") : "غير نشط"}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {r.active && !r.userLinked && <ProvisionTeacherIdentityButton teacherId={r.id} />}
+                <span className="badge" style={{ color: statusMeta[r.status].color }}>{statusMeta[r.status].label}</span>
+              </div>
             </div>
             <div className="kpi" style={{ marginTop: 14 }}>
               <div>
