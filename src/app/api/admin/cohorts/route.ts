@@ -13,6 +13,7 @@ export async function POST(req: Request) {
   const title = typeof body?.title === "string" ? body.title.trim() : "";
   const grade = Number(body?.grade);
   const planId = typeof body?.planId === "string" ? body.planId.trim() : "";
+  const cycleId = typeof body?.cycleId === "string" ? body.cycleId.trim() : "";
   const teacherId = typeof body?.teacherId === "string" ? body.teacherId.trim() : "";
   const settings = await getRuntimeSettings();
   const requestedCapacity = body?.capacity;
@@ -49,6 +50,15 @@ export async function POST(req: Request) {
   if (!planId) return NextResponse.json({ error: "الباقة مطلوبة" }, { status: 400 });
 
   const admin = createSupabaseAdminClient();
+
+  if (cycleId) {
+    const { data: cycle } = await admin.from("cycles").select("id, status, enabled_grade_bands").eq("id", cycleId).maybeSingle();
+    if (!cycle) return NextResponse.json({ error: "الدورة غير موجودة" }, { status: 400 });
+    if (["completed", "archived"].includes(cycle.status)) return NextResponse.json({ error: "لا يمكن ربط مجموعة بدورة مكتملة أو مؤرشفة" }, { status: 409 });
+    if (Array.isArray(cycle.enabled_grade_bands) && cycle.enabled_grade_bands.length > 0 && !cycle.enabled_grade_bands.includes(gradeBand)) {
+      return NextResponse.json({ error: "الصف لا يطابق النطاقات المفعلة لهذه الدورة" }, { status: 409 });
+    }
+  }
 
   // الباقة يجب أن تكون فعّالة، من نفس المنتج (motabaa)، وعدد أيامها يطابق أيام المجموعة
   // المُدخَلة بالضبط — قيد قاعدة البيانات (enforce_cohort_days_match_plan) يرفض غير ذلك
@@ -108,6 +118,7 @@ export async function POST(req: Request) {
       title,
       grade,
       grade_band: gradeBand,
+      cycle_id: cycleId || null,
       teacher_id: teacherIdFinal,
       capacity,
       days_of_week: daysOfWeek,

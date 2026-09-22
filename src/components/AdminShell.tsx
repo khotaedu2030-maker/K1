@@ -10,6 +10,7 @@ import AdminAccountMenu from "./AdminAccountMenu";
 // يعرف الأدمن أن الميزة موجودة على الخارطة، لا مخفية.
 const SECTIONS: { label: string; href: string }[] = [
   { label: "نظرة عامة", href: "/admin" },
+  { label: "الدورات", href: "/admin/cycles" },
   { label: "أولياء الأمور", href: "/admin/parents" },
   { label: "الأبناء", href: "/admin/students" },
   { label: "المعلمون", href: "/admin/teachers" },

@@ -23,6 +23,7 @@ export default function CreateCohortForm({
   const [grade, setGrade] = useState<number | "">("");
   const [planId, setPlanId] = useState("");
   const [teacherId, setTeacherId] = useState("");
+  const [cycleId, setCycleId] = useState("");
   const [capacity, setCapacity] = useState(String(defaultCapacities?.["4-6"] ?? 4));
   const [days, setDays] = useState<number[]>([]);
   const [startTime, setStartTime] = useState("16:30");
@@ -45,7 +46,7 @@ export default function CreateCohortForm({
   }
 
   function reset() {
-    setTitle(""); setGrade(""); setPlanId(""); setTeacherId(""); setCapacity(String(capacityForGrade("")));
+    setTitle(""); setGrade(""); setPlanId(""); setTeacherId(""); setCycleId(""); setCapacity(String(capacityForGrade("")));
     setDays([]); setStartTime("16:30"); setEndTime("17:30"); setMeetingUrl(""); setStatus("open");
   }
 
@@ -69,6 +70,7 @@ export default function CreateCohortForm({
         grade,
         planId,
         teacherId: teacherId || undefined,
+        cycleId: cycleId || undefined,
         capacity: Number(capacity),
         daysOfWeek: days,
         startTime,
@@ -134,6 +136,14 @@ export default function CreateCohortForm({
           <select value={teacherId} onChange={(e: ChangeEvent<HTMLSelectElement>) => setTeacherId(e.target.value)}>
             <option value="">— غير مُسنَد —</option>
             {teachers.map((t) => <option value={t.id} key={t.id}>{t.full_name}</option>)}
+          </select>
+        </label>
+
+        <label>
+          دورة التشغيل (اختياري للبيانات التاريخية)
+          <select value={cycleId} onChange={(e: ChangeEvent<HTMLSelectElement>) => setCycleId(e.target.value)}>
+            <option value="">— غير مصنفة —</option>
+            {(cycles ?? []).map((cycle) => <option value={cycle.id} key={cycle.id}>{cycle.name}</option>)}
           </select>
         </label>
 
