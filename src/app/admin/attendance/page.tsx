@@ -1,12 +1,15 @@
 import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
+import { adminRoleHasPermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import AttendanceOverrideButton from "./AttendanceOverrideButton";
 
 const STATUS_LABELS: Record<string, string> = { present: "حاضر", absent: "غائب", late: "متأخر", excused: "معذور" };
 
 export default async function AdminAttendancePage() {
   const admin = await getAdminIdentity();
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
+  const canOverride = adminRoleHasPermission(admin.role, "session.manage");
 
   const supabase = createSupabaseAdminClient();
   const today = new Date().toISOString().slice(0, 10);
@@ -15,7 +18,7 @@ export default async function AdminAttendancePage() {
   const [{ data: recentAttendance }, { data: recentSessions }] = await Promise.all([
     supabase
       .from("attendance")
-      .select("id, status, created_at, children(first_name), sessions(session_date, cohorts(title))")
+      .select("id, session_id, child_id, status, created_at, children(first_name), sessions(session_date, cohorts(title))")
       .gte("created_at", weekAgo)
       .order("created_at", { ascending: false })
       .limit(80),
@@ -45,7 +48,7 @@ export default async function AdminAttendancePage() {
         <p className="admin-empty-state">لا توجد تسجيلات حضور حديثة.</p>
       ) : (
         <table className="admin-table">
-          <thead><tr><th>الطالب</th><th>المجموعة</th><th>التاريخ</th><th>الحالة</th></tr></thead>
+          <thead><tr><th>الطالب</th><th>المجموعة</th><th>التاريخ</th><th>الحالة</th>{canOverride && <th>تصحيح</th>}</tr></thead>
           <tbody>
             {(recentAttendance ?? []).map((a: any) => (
               <tr key={a.id}>
@@ -53,6 +56,7 @@ export default async function AdminAttendancePage() {
                 <td>{a.sessions?.cohorts?.title ?? "—"}</td>
                 <td>{a.sessions?.session_date ? new Date(a.sessions.session_date).toLocaleDateString("ar-SA") : "—"}</td>
                 <td>{STATUS_LABELS[a.status] ?? a.status}</td>
+                {canOverride && <td><AttendanceOverrideButton sessionId={a.session_id} childId={a.child_id} currentStatus={a.status} /></td>}
               </tr>
             ))}
           </tbody>
