@@ -68,7 +68,7 @@ export default function CycleManager({ initialCycles, initialCohorts }: { initia
           <label>تاريخ النهاية<input dir="ltr" type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} /></label>
           <label>بداية التسجيل<input dir="ltr" type="date" value={form.registrationStart} onChange={(e) => setForm({ ...form, registrationStart: e.target.value })} /></label>
           <label>نهاية التسجيل<input dir="ltr" type="date" value={form.registrationEnd} onChange={(e) => setForm({ ...form, registrationEnd: e.target.value })} /></label>
-          <fieldset><legend>النطاقات الدراسية</legend>{bands.map((band) => <label key={band}><input type="checkbox" checked={form.enabledGradeBands.includes(band)} onChange={(e) => setForm({ ...form, enabledGradeBands: e.target.checked ? [...form.enabledGradeBands, band] : form.enabledGradeBands.filter((value) => value !== band) })} /> {band}</label>)}</fieldset>
+          <fieldset><legend>النطاقات الدراسية</legend>{bands.map((band) => <label key={band}><input type="checkbox" checked={form.enabledGradeBands.includes(band)} onChange={(e) => setForm((current) => ({ ...current, enabledGradeBands: e.target.checked ? (current.enabledGradeBands.includes(band) ? current.enabledGradeBands : [...current.enabledGradeBands, band]) : current.enabledGradeBands.filter((value) => value !== band) }))} /> {band}</label>)}</fieldset>
           <button className="btn" type="button" disabled={saving} onClick={createCycle}>{saving ? "جارٍ الحفظ..." : "إنشاء الدورة"}</button>
         </div>
       </div>
