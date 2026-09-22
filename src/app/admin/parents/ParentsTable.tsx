@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import AdminDrawer from "@/components/AdminDrawer";
+import TransferSubscriptionButton from "./TransferSubscriptionButton";
 
 type ParentRow = { id: string; full_name: string; phone: string; email: string | null; created_at: string };
 type Detail = {
   parent: ParentRow;
-  children: { id: string; firstName: string; grade: number; subscriptionStatus: string | null; cohortTitle: string | null; makeupAvailable: number }[];
+  children: { id: string; firstName: string; grade: number; subscriptionId: string | null; subscriptionStatus: string | null; cohortTitle: string | null; transferTargets: { id: string; title: string }[]; makeupAvailable: number }[];
   recentPayments: { status: string; amount_sar: number; paid_at: string | null }[];
 };
 
@@ -76,6 +77,11 @@ export default function ParentsTable({ parents, childCountByParent, activeSubByP
                   {c.cohortTitle ? `المجموعة: ${c.cohortTitle}` : "بلا مجموعة"} · {c.subscriptionStatus ? (SUB_STATUS_LABELS[c.subscriptionStatus] ?? c.subscriptionStatus) : "بلا اشتراك"}
                   {c.makeupAvailable > 0 && ` · ${c.makeupAvailable} رصيد تعويض متاح`}
                 </div>
+                {c.subscriptionId && c.subscriptionStatus === "active" && (
+                  <div style={{ marginTop: 8 }}>
+                    <TransferSubscriptionButton parentId={detail.parent.id} subscriptionId={c.subscriptionId} targets={c.transferTargets} />
+                  </div>
+                )}
               </div>
             ))}
 
