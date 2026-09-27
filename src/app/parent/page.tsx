@@ -44,44 +44,44 @@ export default async function P() {
   const { data: children } = await admin.from("children").select("id, first_name").eq("parent_id", parent.id);
 
   const firstChild = children?.[0] ?? null;
+  let tasks: { title: string; status: string }[] = [];
+  let recommendation: { reason: string } | null = null;
+  let pulse: { tasks_completed: string[]; independence_rating: number | null; focus_rating: number | null; tomorrow_readiness: string | null; readiness_status: string | null; remaining_review: string | null; created_at: string } | null = null;
+  let weeklyGoal: { title: string; status: string; progress: number | null } | null = null;
+  let latestIndependence: { total_score: number } | null = null;
 
-  const { data: tasks } = firstChild
-    ? await admin.from("daily_tasks").select("title, status").eq("child_id", firstChild.id).order("created_at", { ascending: false }).limit(5)
-    : { data: [] };
-
-  const { data: recommendation } = firstChild
-    ? await admin.from("recommendations").select("reason").eq("child_id", firstChild.id).eq("status", "open").limit(1).maybeSingle()
-    : { data: null };
-
-  const { data: pulse } = firstChild
-    ? await admin
+  if (firstChild) {
+    const [tasksResult, recommendationResult, pulseResult, weeklyGoalResult, independenceResult] = await Promise.all([
+      admin.from("daily_tasks").select("title, status").eq("child_id", firstChild.id).order("created_at", { ascending: false }).limit(5),
+      admin.from("recommendations").select("reason").eq("child_id", firstChild.id).eq("status", "open").limit(1).maybeSingle(),
+      admin
         .from("daily_pulse_reports")
         .select("tasks_completed, independence_rating, focus_rating, tomorrow_readiness, readiness_status, remaining_review, created_at")
         .eq("child_id", firstChild.id)
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle()
-    : { data: null };
-
-  const { data: weeklyGoal } = firstChild
-    ? await admin
+        .maybeSingle(),
+      admin
         .from("weekly_goals")
         .select("title, status, progress")
         .eq("child_id", firstChild.id)
         .order("week_start", { ascending: false })
         .limit(1)
-        .maybeSingle()
-    : { data: null };
-
-  const { data: latestIndependence } = firstChild
-    ? await admin
+        .maybeSingle(),
+      admin
         .from("independence_assessments")
         .select("total_score")
         .eq("child_id", firstChild.id)
         .order("assessment_date", { ascending: false })
         .limit(1)
-        .maybeSingle()
-    : { data: null };
+        .maybeSingle(),
+    ]);
+    tasks = tasksResult.data ?? [];
+    recommendation = recommendationResult.data;
+    pulse = pulseResult.data;
+    weeklyGoal = weeklyGoalResult.data;
+    latestIndependence = independenceResult.data;
+  }
 
   const readinessLabel: Record<string, string> = {
     ready: "جاهز ✓",

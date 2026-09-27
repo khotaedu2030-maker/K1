@@ -39,44 +39,16 @@ export async function GET(req: Request) {
     .eq("parent_id", SYNTHETIC_ID);
   if (childrenError) return response(false, duration(), 503);
 
-  const { error: tasksError } = await admin
-    .from("daily_tasks")
-    .select("title, status")
-    .eq("child_id", SYNTHETIC_ID)
-    .limit(5);
-  if (tasksError) return response(false, duration(), 503);
-
-  const { error: recommendationError } = await admin
-    .from("recommendations")
-    .select("reason")
-    .eq("child_id", SYNTHETIC_ID)
-    .limit(1)
-    .maybeSingle();
-  if (recommendationError) return response(false, duration(), 503);
-
-  const { error: pulseError } = await admin
-    .from("daily_pulse_reports")
-    .select("created_at")
-    .eq("child_id", SYNTHETIC_ID)
-    .limit(1)
-    .maybeSingle();
-  if (pulseError) return response(false, duration(), 503);
-
-  const { error: weeklyGoalError } = await admin
-    .from("weekly_goals")
-    .select("title, status, progress")
-    .eq("child_id", SYNTHETIC_ID)
-    .limit(1)
-    .maybeSingle();
-  if (weeklyGoalError) return response(false, duration(), 503);
-
-  const { error: independenceError } = await admin
-    .from("independence_assessments")
-    .select("total_score")
-    .eq("child_id", SYNTHETIC_ID)
-    .limit(1)
-    .maybeSingle();
-  if (independenceError) return response(false, duration(), 503);
+  const [tasksResult, recommendationResult, pulseResult, weeklyGoalResult, independenceResult] = await Promise.all([
+    admin.from("daily_tasks").select("title,status").eq("child_id", SYNTHETIC_ID).limit(5),
+    admin.from("recommendations").select("reason").eq("child_id", SYNTHETIC_ID).limit(1).maybeSingle(),
+    admin.from("daily_pulse_reports").select("created_at").eq("child_id", SYNTHETIC_ID).limit(1).maybeSingle(),
+    admin.from("weekly_goals").select("title,status,progress").eq("child_id", SYNTHETIC_ID).limit(1).maybeSingle(),
+    admin.from("independence_assessments").select("total_score").eq("child_id", SYNTHETIC_ID).limit(1).maybeSingle(),
+  ]);
+  if ([tasksResult, recommendationResult, pulseResult, weeklyGoalResult, independenceResult].some((result) => result.error)) {
+    return response(false, duration(), 503);
+  }
 
   return response(true, duration(), 200);
 }
