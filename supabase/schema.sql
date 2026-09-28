@@ -910,6 +910,30 @@ $$;
 revoke all on function public.admin_update_cohort_operations_atomic(uuid, smallint, text, uuid, boolean, text, boolean) from public, anon, authenticated;
 grant execute on function public.admin_update_cohort_operations_atomic(uuid, smallint, text, uuid, boolean, text, boolean) to service_role;
 
+alter default privileges for role postgres in schema public
+  revoke execute on functions from public, anon, authenticated;
+
+alter default privileges for role postgres in schema public
+  grant execute on functions to service_role;
+
+alter default privileges for role supabase_admin in schema public
+  revoke execute on functions from public, anon, authenticated;
+
+alter default privileges for role supabase_admin in schema public
+  grant execute on functions to service_role;
+
+alter default privileges for role postgres in schema public
+  revoke truncate, references, trigger on tables
+  from anon, authenticated;
+
+alter default privileges for role supabase_admin in schema public
+  revoke truncate, references, trigger on tables
+  from anon, authenticated;
+
+revoke truncate, references, trigger
+on all tables in schema public
+from anon, authenticated;
+
 -- =========================================================
 -- Row Level Security — مفعّلة على كل الجداول من الآن (fail-closed)
 -- =========================================================
@@ -945,10 +969,8 @@ create policy "parents_self_select" on parents for select using (auth.uid() = us
 create policy "parents_self_update" on parents for update using (auth.uid() = user_id);
 create policy "parents_self_insert" on parents for insert with check (auth.uid() = user_id);
 
--- ولي الأمر يدير أبناءه فقط
-create policy "children_of_own_parent" on children for all using (
-  parent_id in (select id from parents where user_id = auth.uid())
-) with check (
+-- ولي الأمر يقرأ أبناءه فقط
+create policy "children_of_own_parent" on children for select using (
   parent_id in (select id from parents where user_id = auth.uid())
 );
 
@@ -1015,12 +1037,6 @@ create policy "cohorts_of_own_children" on cohorts for select using (
     select cohort_id from subscriptions
     where parent_id in (select id from parents where user_id = auth.uid())
   )
-);
-
--- جلسات التعويض قد تُستضاف في مجموعة لا يشترك فيها الطفل أصلًا (فترة/مجموعة تعويض مخصَّصة) —
--- أي مستخدم موثَّق (وليس anon) يرى فقط الجلسات المعلَّمة صراحةً makeup_eligible، لا كل الجلسات.
-create policy "makeup_eligible_sessions_visible_to_authenticated" on sessions for select using (
-  makeup_eligible = true and auth.uid() is not null
 );
 
 -- ---------- V3 Phase 2: RLS لجداول منهجية KHOTA ----------
