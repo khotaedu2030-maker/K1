@@ -2,30 +2,16 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { adminRoleHasPermission } from "@/lib/admin-permissions";
 
 // فحص صلاحية الإدارة المركزي — بدل تكرار getUser() + بحث جدول admins داخل كل route إداري.
-// كل admins الحاليين "Full Admin" (الجدول لا يميّز أدوارًا فرعية بعد — راجع التقرير النهائي
-// لتوصية تطوير لاحق: super_admin/operations_manager/admin_staff عند الحاجة الفعلية).
+// مصدر الحقيقة الوحيد لأدوار/صلاحيات الإدارة هو src/lib/admin-permissions.ts (يستهلكه أيضًا
+// admin-identity.ts وAdminShell)، لا تعريف مكرَّر هنا.
 export type AdminCheckResult =
   | { ok: true; userId: string; adminId: string; role: string }
   | { ok: false; response: NextResponse };
 
-const ROLE_PERMISSIONS: Record<string, ReadonlySet<string>> = {
-  super_admin: new Set([
-    "settings.manage", "cohort.manage", "session.manage", "teacher.manage",
-    "teacher_application.review", "makeup.manage", "subscription.review", "parent.context.read", "payment.read", "admin.manage",
-  ]),
-  operations_manager: new Set([
-    "cohort.manage", "session.manage", "teacher.manage", "teacher_application.review",
-    "makeup.manage", "subscription.review", "parent.context.read",
-  ]),
-  finance_admin: new Set(["subscription.review", "parent.context.read", "payment.read"]),
-  admin_support: new Set(["teacher_application.review", "parent.context.read"]),
-};
-
-export function adminRoleHasPermission(role: string | null | undefined, permission: string): boolean {
-  return Boolean(role && ROLE_PERMISSIONS[role]?.has(permission));
-}
+export { adminRoleHasPermission };
 
 export async function requirePermission(permission: string): Promise<AdminCheckResult> {
   const admin = await requireAdmin();

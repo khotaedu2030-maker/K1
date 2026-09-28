@@ -1,7 +1,7 @@
 import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { adminRoleHasPermission } from "@/lib/require-admin";
+import { adminRoleHasPermission, isKnownAdminRole } from "@/lib/admin-permissions";
 
 export type AdminIdentity = { id: string; user_id: string; full_name: string; role: string };
 
@@ -17,6 +17,9 @@ export async function getAdminIdentity(permission?: string): Promise<AdminIdenti
 
   const admin = createSupabaseAdminClient();
   const { data } = await admin.from("admins").select("id, user_id, full_name, role").eq("user_id", user.id).eq("active", true).maybeSingle();
-  if (!data || (permission && !adminRoleHasPermission(data.role, permission))) return null;
+  if (!data) return null;
+  // دور غير معروف (null/فاسد) يفشل مغلقًا دائمًا — حتى للصفحات التي لا تطلب صلاحية محدَّدة.
+  if (!isKnownAdminRole(data.role)) return null;
+  if (permission && !adminRoleHasPermission(data.role, permission)) return null;
   return data;
 }

@@ -23,7 +23,7 @@ const VALID_SEVERITIES = ["warning", "critical"];
 const VALID_TYPES = Object.keys(TYPE_LABELS);
 
 export default async function AdminExceptionsPage({ searchParams }: { searchParams: Promise<{ status?: string; severity?: string; type?: string }> }) {
-  const admin = await getAdminIdentity();
+  const admin = await getAdminIdentity("exception.manage");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
   const params = await searchParams;
   const status = VALID_STATUSES.includes(params.status ?? "") ? params.status! : "";
@@ -37,7 +37,7 @@ export default async function AdminExceptionsPage({ searchParams }: { searchPara
   const [{ data: exceptionsRaw }, { data: admins }] = await Promise.all([query, supabase.from("admins").select("id, full_name").eq("active", true)]);
   const exceptions = (exceptionsRaw ?? []) as any[];
 
-  return <AdminShell adminName={admin.full_name}>
+  return <AdminShell adminName={admin.full_name} role={admin.role}>
     <div className="admin-page-head"><h1>الاستثناءات التشغيلية</h1><SyncButton /></div>
     <p style={{ color: "var(--gray)", fontSize: 13, marginBottom: 16 }}>هذه الشاشة للتتبع والتصعيد فقط؛ الانتقال هنا لا يغير دفعة أو اشتراكًا أو مجموعة أو جلسة تلقائيًا.</p>
     <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>

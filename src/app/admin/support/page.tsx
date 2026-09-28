@@ -9,7 +9,7 @@ const PRIORITY_LABELS: Record<string, string> = { normal: "عادية", high: "�
 const VALID_STATUSES = ["new", "in_progress", "resolved"];
 
 export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  const admin = await getAdminIdentity();
+  const admin = await getAdminIdentity("support.manage");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
 
   const selectedStatus = (await searchParams).status ?? "";
@@ -30,7 +30,7 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
   const cases = (casesRaw ?? []) as any[];
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head"><h1>حالات الدعم</h1></div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>

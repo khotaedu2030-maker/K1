@@ -10,7 +10,7 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export default async function AdminAuditPage() {
-  const admin = await getAdminIdentity();
+  const admin = await getAdminIdentity("audit.read");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
 
   const supabase = createSupabaseAdminClient();
@@ -21,7 +21,7 @@ export default async function AdminAuditPage() {
     .limit(100);
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head">
         <h1>سجل العمليات</h1>
       </div>

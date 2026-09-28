@@ -4,36 +4,40 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AdminAccountMenu from "./AdminAccountMenu";
+import { adminRoleHasPermission } from "@/lib/admin-permissions";
 
 // كل قسم من الـ17 مذكورين صراحةً بالطلب — أي قسم بلا صفحة حقيقية بعد يقود لصفحة تعرض بوضوح
 // "قيد التطوير" (لا 404، ولا بيانات وهمية) بدل اختراع محتوى. القسم يبقى بالتنقّل دائمًا حتى
 // يعرف الأدمن أن الميزة موجودة على الخارطة، لا مخفية.
-const SECTIONS: { label: string; href: string }[] = [
+// permission غير معرَّف = متاح لكل دور إداري نشط معروف (مثل نظرة عامة). إخفاء الرابط هنا واجهة
+// فقط — الحماية الفعلية تبقى دائمًا على مستوى الصفحة/الـAPI (getAdminIdentity/requirePermission).
+const SECTIONS: { label: string; href: string; permission?: string }[] = [
   { label: "نظرة عامة", href: "/admin" },
-  { label: "الدورات", href: "/admin/cycles" },
-  { label: "أولياء الأمور", href: "/admin/parents" },
-  { label: "الأبناء", href: "/admin/students" },
-  { label: "المعلمون", href: "/admin/teachers" },
-  { label: "طلبات المعلمين", href: "/admin/teacher-applications" },
-  { label: "المجموعات", href: "/admin/groups" },
-  { label: "الجلسات", href: "/admin/sessions" },
-  { label: "الحضور", href: "/admin/attendance" },
-  { label: "مراجعة طلبات التجميد", href: "/admin/subscriptions" },
-  { label: "المدفوعات", href: "/admin/payments" },
-  { label: "التعويضات", href: "/admin/makeup-credits" },
-  { label: "طلبات التسجيل والتواصل", href: "/admin/requests" },
-  { label: "حالات الدعم", href: "/admin/support" },
-  { label: "الاستثناءات التشغيلية", href: "/admin/exceptions" },
-  { label: "الرسائل", href: "/admin/messages" },
-  { label: "التقارير", href: "/admin/reports" },
-  { label: "الإعدادات", href: "/admin/settings" },
-  { label: "الإداريون والصلاحيات", href: "/admin/admins" },
-  { label: "سجل العمليات", href: "/admin/audit" },
+  { label: "الدورات", href: "/admin/cycles", permission: "cohort.manage" },
+  { label: "أولياء الأمور", href: "/admin/parents", permission: "parent.context.read" },
+  { label: "الأبناء", href: "/admin/students", permission: "student.read" },
+  { label: "المعلمون", href: "/admin/teachers", permission: "teacher.manage" },
+  { label: "طلبات المعلمين", href: "/admin/teacher-applications", permission: "teacher_application.review" },
+  { label: "المجموعات", href: "/admin/groups", permission: "cohort.manage" },
+  { label: "الجلسات", href: "/admin/sessions", permission: "session.manage" },
+  { label: "الحضور", href: "/admin/attendance", permission: "attendance.read" },
+  { label: "مراجعة طلبات التجميد", href: "/admin/subscriptions", permission: "subscription.review" },
+  { label: "المدفوعات", href: "/admin/payments", permission: "payment.read" },
+  { label: "التعويضات", href: "/admin/makeup-credits", permission: "makeup.manage" },
+  { label: "طلبات التسجيل والتواصل", href: "/admin/requests", permission: "request.read" },
+  { label: "حالات الدعم", href: "/admin/support", permission: "support.manage" },
+  { label: "الاستثناءات التشغيلية", href: "/admin/exceptions", permission: "exception.manage" },
+  { label: "الرسائل", href: "/admin/messages", permission: "messages.metadata.read" },
+  { label: "التقارير", href: "/admin/reports", permission: "reports.read" },
+  { label: "الإعدادات", href: "/admin/settings", permission: "settings.manage" },
+  { label: "الإداريون والصلاحيات", href: "/admin/admins", permission: "admin.manage" },
+  { label: "سجل العمليات", href: "/admin/audit", permission: "audit.read" },
 ];
 
-export default function AdminShell({ adminName, children }: { adminName: string; children: ReactNode }) {
+export default function AdminShell({ adminName, role, children }: { adminName: string; role: string; children: ReactNode }) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const visibleSections = SECTIONS.filter((s) => !s.permission || adminRoleHasPermission(role, s.permission));
 
   return (
     <div className="admin-os">
@@ -49,7 +53,7 @@ export default function AdminShell({ adminName, children }: { adminName: string;
             <span>الأقسام</span>
             <button className="admin-os-close-btn" onClick={() => setDrawerOpen(false)} aria-label="إغلاق">✕</button>
           </div>
-          {SECTIONS.map((s) => {
+          {visibleSections.map((s) => {
             const active = s.href === "/admin" ? pathname === "/admin" : pathname.startsWith(s.href);
             return (
               <Link

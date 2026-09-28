@@ -6,7 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 const PAGE_SIZE = 30;
 
 export default async function AdminStudentsPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
-  const admin = await getAdminIdentity();
+  const admin = await getAdminIdentity("student.read");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
 
   const params = await searchParams;
@@ -35,7 +35,7 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head">
         <h1>الأبناء {count != null && <span style={{ color: "var(--gray)", fontWeight: 500, fontSize: 15 }}>({count})</span>}</h1>
         <form>
