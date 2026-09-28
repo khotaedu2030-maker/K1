@@ -582,6 +582,9 @@ begin
 end;
 $$;
 revoke all on function public.enroll_subscription_atomic(uuid, uuid, text, uuid) from public, anon, authenticated;
+grant execute on function public.enroll_subscription_atomic(
+  uuid, uuid, text, uuid
+) to service_role;
 
 -- اعتماد/رفض طلب التجميد كمعاملة ذرّية واحدة: تحديث حالة الطلب وتمديد renewal_date (عند
 -- الاعتماد) داخل نفس الدالة — لا يمكن أن ينجح أحدهما ويفشل الآخر (Rollback كامل تلقائي عند
