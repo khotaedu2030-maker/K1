@@ -10,13 +10,6 @@ alter default privileges for role postgres in schema public
 alter default privileges for role postgres in schema public
   grant execute on functions to service_role;
 
-alter default privileges for role supabase_admin in schema public
-  revoke execute on functions from public, anon, authenticated;
-
-alter default privileges for role supabase_admin in schema public
-  grant execute on functions to service_role;
-
-
 -- ============================================================
 -- 2. EXISTING TABLES — remove unnecessary whole-table privileges
 -- Does NOT revoke SELECT / INSERT / UPDATE / DELETE.
@@ -36,11 +29,6 @@ from anon, authenticated;
 alter default privileges for role postgres in schema public
   revoke truncate, references, trigger on tables
   from anon, authenticated;
-
-alter default privileges for role supabase_admin in schema public
-  revoke truncate, references, trigger on tables
-  from anon, authenticated;
-
 
 -- ============================================================
 -- 4. CHILDREN — authenticated parents only need direct SELECT
