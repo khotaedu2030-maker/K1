@@ -96,8 +96,6 @@ create table if not exists admins(
 alter table admins enable row level security;
 -- بلا أي policy إطلاقًا: لا anon ولا authenticated يقرأ هذا الجدول — service_role فقط
 -- (يُستخدم حصرًا داخل src/app/admin/** للتحقق من الصلاحية، عبر supabase-server ثم مطابقة يدوية)
-create policy "admins_self_select" on admins for select using (auth.uid() = user_id);
-
 create table if not exists cohorts(
   id uuid primary key default gen_random_uuid(),
   product text not null,
@@ -932,6 +930,25 @@ alter default privileges for role postgres in schema public
   revoke insert, update, delete on tables
   from anon, authenticated;
 
+revoke select
+on table
+  public.payments,
+  public.admins,
+  public.admin_actions,
+  public.messages,
+  public.teachers,
+  public.parents,
+  public.children,
+  public.sessions
+from anon;
+
+revoke select
+on table
+  public.admins,
+  public.admin_actions,
+  public.payments
+from authenticated;
+
 -- =========================================================
 -- Row Level Security — مفعّلة على كل الجداول من الآن (fail-closed)
 -- =========================================================
@@ -989,10 +1006,6 @@ create policy "learning_profiles_of_own_children" on learning_profiles for selec
 create policy "recommendations_of_own_children" on recommendations for select using (
   child_id in (select id from children where parent_id in (select id from parents where user_id = auth.uid()))
 );
-create policy "payments_of_own_parent" on payments for select using (
-  parent_id in (select id from parents where user_id = auth.uid())
-);
-
 -- ملاحظة مهمة: لا توجد سياسة INSERT/UPDATE على subscriptions أو payments من المتصفح عمدًا.
 -- إنشاء/تفعيل الاشتراك والدفع يتم فقط عبر route handlers على الخادم باستخدام service_role key
 -- (src/app/api/enroll و src/app/api/payment/confirm) — تمامًا كما كان موثّقًا في enroll/page.tsx الأصلية.
