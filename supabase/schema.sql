@@ -804,7 +804,8 @@ as $$
   from cohorts c
   where c.id = p_cohort_id;
 $$;
-grant execute on function public.cohort_available_seats(uuid) to anon, authenticated;
+revoke execute on function public.cohort_available_seats(uuid) from public, anon, authenticated;
+grant execute on function public.cohort_available_seats(uuid) to service_role;
 
 -- دالة كتالوج عامة آمنة: أعمدة غير حساسة فقط. meeting_url مستبعد عمدًا — لا يظهر إلا
 -- للمستخدم المصرح له والمرتبط فعليًا بالاشتراك/الجلسة عبر cohorts_of_own_children/cohorts_of_own_teacher
@@ -832,7 +833,8 @@ as $$
   from cohorts c
   where c.status = 'open' and (p_product is null or c.product = p_product);
 $$;
-grant execute on function public.public_cohorts_catalog(text) to anon, authenticated;
+revoke execute on function public.public_cohorts_catalog(text) from public, anon, authenticated;
+grant execute on function public.public_cohorts_catalog(text) to service_role;
 
 -- RPC إداري ذرّي: يستبدل نمط "JS يحسب occupied ثم update منفصل" (نافذة سباق نظرية) بمعاملة
 -- واحدة — SELECT...FOR UPDATE يقفل صف المجموعة، ثم يحسب المقاعد ويرفض/يحدِّث داخل نفس القفل.
@@ -931,19 +933,29 @@ alter default privileges for role postgres in schema public
   from anon, authenticated;
 
 revoke select
-on table
-  public.payments,
-  public.admins,
-  public.admin_actions,
-  public.messages,
-  public.teachers,
-  public.parents,
-  public.children,
-  public.sessions
+on all tables in schema public
 from anon;
+
+alter default privileges for role postgres in schema public
+  revoke select on tables
+  from anon;
 
 revoke select
 on table
+  public.admin_platform_settings,
+  public.contact_requests,
+  public.cycles,
+  public.level_test_answers,
+  public.level_test_sessions,
+  public.operational_exceptions,
+  public.payment_refunds,
+  public.platform_settings,
+  public.premium_requests,
+  public.readiness_blocker_overrides,
+  public.support_cases,
+  public.teacher_applications,
+  public.teacher_availability,
+  public.webhook_events,
   public.admins,
   public.admin_actions,
   public.payments
