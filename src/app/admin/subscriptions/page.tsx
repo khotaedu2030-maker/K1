@@ -24,7 +24,7 @@ export default async function P() {
     .order("created_at", { ascending: true });
 
   return (
-    <AdminShell adminName={adminIdentity.full_name}>
+    <AdminShell adminName={adminIdentity.full_name} role={adminIdentity.role}>
       <div className="admin-page-head">
         <h1>طلبات تجميد الاشتراك</h1>
       </div>

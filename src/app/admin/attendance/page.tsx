@@ -1,13 +1,13 @@
 import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
-import { adminRoleHasPermission } from "@/lib/require-admin";
+import { adminRoleHasPermission } from "@/lib/admin-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import AttendanceOverrideButton from "./AttendanceOverrideButton";
 
 const STATUS_LABELS: Record<string, string> = { present: "حاضر", absent: "غائب", late: "متأخر", excused: "معذور" };
 
 export default async function AdminAttendancePage() {
-  const admin = await getAdminIdentity();
+  const admin = await getAdminIdentity("attendance.read");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
   const canOverride = adminRoleHasPermission(admin.role, "session.manage");
 
@@ -29,7 +29,7 @@ export default async function AdminAttendancePage() {
   const unrecorded = (recentSessions ?? []).filter((s: any) => !recordedSessionIds.has(s.session_date));
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head">
         <h1>الحضور</h1>
       </div>

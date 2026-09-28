@@ -18,7 +18,7 @@ export default async function AdminMakeupCreditsPage() {
     .limit(100);
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head">
         <h1>التعويضات</h1>
       </div>

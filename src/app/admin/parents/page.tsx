@@ -35,7 +35,7 @@ export default async function AdminParentsPage({ searchParams }: { searchParams:
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head">
         <h1>أولياء الأمور {count != null && <span style={{ color: "var(--gray)", fontWeight: 500, fontSize: 15 }}>({count})</span>}</h1>
         <form>

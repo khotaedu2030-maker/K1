@@ -23,7 +23,7 @@ export default async function AdminPaymentsPage({ searchParams }: { searchParams
   const STATUS_LABELS: Record<string, string> = { pending: "قيد الانتظار", paid: "مدفوع", failed: "فشل", refunded: "مُسترَد" };
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head">
         <h1>المدفوعات</h1>
         <div style={{ display: "flex", gap: 8 }}>

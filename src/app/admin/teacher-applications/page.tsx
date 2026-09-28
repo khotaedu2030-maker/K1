@@ -30,7 +30,7 @@ export default async function P() {
   const activatedApplicationIds = new Set((linkedTeachers ?? []).map((teacher) => teacher.application_id).filter(Boolean));
 
   return (
-    <AdminShell adminName={adminIdentity.full_name}>
+    <AdminShell adminName={adminIdentity.full_name} role={adminIdentity.role}>
       <div className="admin-page-head">
         <h1>طلبات الانضمام كمعلم</h1>
       </div>

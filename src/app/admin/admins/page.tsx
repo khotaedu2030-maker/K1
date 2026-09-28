@@ -22,7 +22,7 @@ export default async function AdminAdminsPage() {
   const emailByUserId = new Map((authUsers?.users ?? []).map((user) => [user.id, user.email ?? "—"]));
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head"><h1>الإداريون والصلاحيات</h1></div>
       <p style={{ color: "var(--gray)", fontSize: 13, marginBottom: 16 }}>
         تغيير الدور أو حالة الحساب يمر عبر إجراء ذري موثق. لا يمكن تعطيل آخر Super Admin نشط أو الحساب المستخدم حاليًا.

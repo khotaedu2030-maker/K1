@@ -5,7 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 // عرض Metadata فقط عمدًا (لا محتوى الرسائل نفسه) — الخصوصية أولوية، لا نكشف كل محادثة خاصة
 // بمجرد فتح لوحة الإدارة. تفاصيل محادثة بعينها تحتاج مسارًا منفصلًا مُبرَّرًا تشغيليًا، لم يُبنَ بعد.
 export default async function AdminMessagesPage() {
-  const admin = await getAdminIdentity();
+  const admin = await getAdminIdentity("messages.metadata.read");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
 
   const supabase = createSupabaseAdminClient();
@@ -16,7 +16,7 @@ export default async function AdminMessagesPage() {
     .limit(100);
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head">
         <h1>الرسائل</h1>
       </div>

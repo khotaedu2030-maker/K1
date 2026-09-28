@@ -14,7 +14,7 @@ export default async function AdminCyclesPage() {
   ]);
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head"><h1>الدورات</h1></div>
       <p style={{ color: "var(--gray)", marginBottom: 20 }}>إدارة دورة التشغيل ومتابعة مجموعاتها وحالتها قبل الإغلاق.</p>
       <CycleManager initialCycles={cycles ?? []} initialCohorts={cohorts ?? []} />

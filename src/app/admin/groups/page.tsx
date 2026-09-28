@@ -90,7 +90,7 @@ export default async function P() {
   const otherCohorts = rows.filter((r: CohortRowWithCount) => r.activeCount !== 1);
 
   return (
-    <AdminShell adminName={adminIdentity.full_name}>
+    <AdminShell adminName={adminIdentity.full_name} role={adminIdentity.role}>
       <div className="admin-page-head">
         <h1>المجموعات</h1>
       </div>

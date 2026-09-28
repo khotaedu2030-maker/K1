@@ -91,7 +91,7 @@ export default async function AdminOverviewPage() {
   ].filter(Boolean) as { label: string; href: string }[];
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head">
         <h1>نظرة عامة</h1>
       </div>

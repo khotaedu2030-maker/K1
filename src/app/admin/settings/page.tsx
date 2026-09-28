@@ -34,7 +34,7 @@ export default async function AdminSettingsPage() {
     .maybeSingle();
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head">
         <h1>الإعدادات</h1>
       </div>

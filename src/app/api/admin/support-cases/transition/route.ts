@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const VALID_ACTIONS = new Set(["assign", "status", "resolve"]);
 
 export async function POST(req: Request) {
-  const adminCheck = await requireAdmin();
+  const adminCheck = await requirePermission("support.manage");
   if (!adminCheck.ok) return adminCheck.response;
   const body = await req.json().catch(() => null);
   const caseId = typeof body?.caseId === "string" ? body.caseId.trim() : "";

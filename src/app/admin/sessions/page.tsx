@@ -33,7 +33,7 @@ export default async function AdminSessionsPage({ searchParams }: { searchParams
   const STATUS_LABELS: Record<string, string> = { scheduled: "مجدولة", completed: "مكتملة", cancelled: "ملغاة" };
 
   return (
-    <AdminShell adminName={admin.full_name}>
+    <AdminShell adminName={admin.full_name} role={admin.role}>
       <div className="admin-page-head">
         <h1>الجلسات</h1>
         <div style={{ display: "flex", gap: 8 }}>
