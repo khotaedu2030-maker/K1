@@ -924,6 +924,14 @@ revoke truncate, references, trigger
 on all tables in schema public
 from anon, authenticated;
 
+revoke insert, update, delete
+on all tables in schema public
+from anon, authenticated;
+
+alter default privileges for role postgres in schema public
+  revoke insert, update, delete on tables
+  from anon, authenticated;
+
 -- =========================================================
 -- Row Level Security — مفعّلة على كل الجداول من الآن (fail-closed)
 -- =========================================================
@@ -956,8 +964,6 @@ create policy "plans_public_read" on plans for select using (active = true);
 
 -- ولي الأمر يدير صف نفسه فقط
 create policy "parents_self_select" on parents for select using (auth.uid() = user_id);
-create policy "parents_self_update" on parents for update using (auth.uid() = user_id);
-create policy "parents_self_insert" on parents for insert with check (auth.uid() = user_id);
 
 -- ولي الأمر يقرأ أبناءه فقط
 create policy "children_of_own_parent" on children for select using (
