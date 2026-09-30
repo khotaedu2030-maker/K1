@@ -4,6 +4,7 @@ import { resolveParentContext } from "@/lib/pilot-parent";
 import { toPaylinkSaudiMobile } from "@/lib/phone";
 import { createPaylinkInvoice, getPaylinkInvoice, getPaylinkTransactionsByOrderNumber } from "@/lib/paylink";
 import { verifyAndActivatePaylinkPayment } from "@/lib/paylink-verify";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -102,11 +103,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "يجب تسجيل الدخول أولًا" }, { status: 401 });
   }
 
+  if (declaredBodyExceeds(req, 8 * 1024)) {
+    return NextResponse.json({ error: "request_too_large" }, { status: 413 });
+  }
+
+  const parentLimit = await checkRateLimit({ request: req, scope: "paylink:create:parent", identifier: context.parentId, limit: 10, windowSeconds: 600 });
+  const parentRejection = rateLimitRejectionResponse(parentLimit);
+  if (parentRejection) return parentRejection;
+
   const body = await req.json().catch(() => null);
-  const subscriptionId = body?.subscriptionId;
-  if (!subscriptionId || typeof subscriptionId !== "string") {
+  const subscriptionId = typeof body?.subscriptionId === "string" ? body.subscriptionId.trim() : "";
+  if (!subscriptionId || subscriptionId.length > 100) {
     return NextResponse.json({ error: "subscriptionId مطلوب" }, { status: 400 });
   }
+
+  const subscriptionLimit = await checkRateLimit({ request: req, scope: "paylink:create:subscription", identifier: subscriptionId, limit: 5, windowSeconds: 600 });
+  const subscriptionRejection = rateLimitRejectionResponse(subscriptionLimit);
+  if (subscriptionRejection) return subscriptionRejection;
 
   const admin = createSupabaseAdminClient();
 
