@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getActiveStudentSession } from "@/lib/student-mode";
 import { STUDENT_SESSION_COOKIE } from "@/lib/student-mode-constants";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // يتحقق من رمز OTP المُرسَل للبريد الإلكتروني، وعند صحته يُنهي جلسة الطالب فعليًا (لا مجرد
 // إخفاء بصري) ويمسح الكوكي. العميل يرسل "code" فقط — لا نثق بأي "email" قادم من الطلب؛
@@ -10,9 +11,13 @@ export async function POST(req: Request) {
   const session = await getActiveStudentSession();
   if (!session) return NextResponse.json({ error: "لا توجد جلسة طالب نشطة" }, { status: 401 });
 
+  if (declaredBodyExceeds(req, 4 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
   const body = await req.json().catch(() => null);
-  const code = body?.code as string | undefined;
-  if (!code) return NextResponse.json({ error: "الرمز مطلوب" }, { status: 400 });
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  if (!code || code.length > 32) return NextResponse.json({ error: "الرمز مطلوب أو غير صالح" }, { status: 400 });
 
   const admin = createSupabaseAdminClient();
   const { data: child } = await admin.from("children").select("parent_id").eq("id", session.childId).maybeSingle();
@@ -21,6 +26,26 @@ export async function POST(req: Request) {
     : { data: null };
 
   if (!parent?.email) return NextResponse.json({ error: "لا يوجد بريد إلكتروني مسجَّل لهذا الحساب" }, { status: 500 });
+
+  const sessionLimit = await checkRateLimit({
+    request: req,
+    scope: "student-exit-otp:verify:session",
+    identifier: session.sessionId,
+    limit: 5,
+    windowSeconds: 600,
+  });
+  const sessionRejection = rateLimitRejectionResponse(sessionLimit);
+  if (sessionRejection) return sessionRejection;
+
+  const emailLimit = await checkRateLimit({
+    request: req,
+    scope: "student-exit-otp:verify:email",
+    identifier: parent.email,
+    limit: 10,
+    windowSeconds: 600,
+  });
+  const emailRejection = rateLimitRejectionResponse(emailLimit);
+  if (emailRejection) return emailRejection;
 
   const { error } = await admin.auth.verifyOtp({ email: parent.email, token: code, type: "email" });
   if (error) return NextResponse.json({ error: "رمز غير صحيح" }, { status: 401 });

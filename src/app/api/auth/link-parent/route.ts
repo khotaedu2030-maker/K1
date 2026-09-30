@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-identity";
+import { checkRateLimit, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 type ParentRow = { id: string; user_id: string | null };
 
@@ -19,7 +20,7 @@ type ParentRow = { id: string; user_id: string | null };
 //
 // جدول التبعيات المؤكَّد من schema.sql مباشرة: children, subscriptions, payments فقط.
 
-export async function POST() {
+export async function POST(req: Request) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -28,6 +29,16 @@ export async function POST() {
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول أولًا" }, { status: 401 });
   }
+
+  const rateLimit = await checkRateLimit({
+    request: req,
+    scope: "auth:link-parent:user",
+    identifier: user.id,
+    limit: 10,
+    windowSeconds: 3600,
+  });
+  const rejection = rateLimitRejectionResponse(rateLimit);
+  if (rejection) return rejection;
 
   const email = normalizeParentEmail(user.email ?? "");
   if (!email) {
