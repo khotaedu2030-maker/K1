@@ -3,13 +3,28 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { normalizeSaudiStoredPhoneInput } from "@/lib/phone";
 import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-identity";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 16 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "يجب التحقق من البريد أولًا" }, { status: 401 });
+
+  const rateLimit = await checkRateLimit({
+    request: req,
+    scope: "auth:complete-parent-signup:user",
+    identifier: user.id,
+    limit: 10,
+    windowSeconds: 3600,
+  });
+  const rejection = rateLimitRejectionResponse(rateLimit);
+  if (rejection) return rejection;
 
   const email = normalizeParentEmail(user.email ?? "");
   if (!email) return NextResponse.json({ error: "تعذّر تحديد البريد الإلكتروني" }, { status: 400 });
