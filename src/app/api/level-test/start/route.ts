@@ -2,11 +2,16 @@ import { NextResponse } from "next/server";
 import { tracks, MAX_QUESTIONS, toPublicQuestion, type TrackId } from "@/lib/level-test/data";
 import { chooseNextQuestion } from "@/lib/level-test/engine";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // ينشئ جلسة اختبار مملوكة بالكامل من الخادم (level_test_sessions) ويعيد أول سؤال فقط.
 // المتصفح لن يرى أبدًا answeredIds/history/targetDifficulty كحقيقة يُعتمد عليها لاحقًا —
 // فقط sessionId يُستخدم كمرجع للخادم في /submit.
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 4 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
   const body = await req.json().catch(() => null);
   if (JSON.stringify(body ?? {}).length > 2048) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const trackId = body?.trackId as TrackId | undefined;
@@ -15,6 +20,10 @@ export async function POST(req: Request) {
   if (!track) {
     return NextResponse.json({ error: "مسار غير معروف" }, { status: 400 });
   }
+
+  const ipLimit = await checkRateLimit({ request: req, scope: "level-test:start:ip", limit: 3, windowSeconds: 600 });
+  const ipRejection = rateLimitRejectionResponse(ipLimit);
+  if (ipRejection) return ipRejection;
 
   const first = chooseNextQuestion(track.questions, [], 2, []);
   if (!first) {

@@ -1,0 +1,122 @@
+import "server-only";
+import { createHmac } from "node:crypto";
+import { isIP } from "node:net";
+import { NextResponse } from "next/server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+
+type RateLimitOptions = {
+  request: Request;
+  scope: string;
+  identifier?: string;
+  limit: number;
+  windowSeconds: number;
+};
+
+export type RateLimitResult = {
+  allowed: boolean;
+  remaining: number;
+  retryAfterSeconds: number;
+  unavailable?: boolean;
+};
+
+function trustedClientIp(request: Request): string {
+  // Prefer the platform single-address header; accept XFF only when it contains one validated IP.
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp && !realIp.includes(",") && isIP(realIp)) return realIp;
+
+  const forwarded = request.headers.get("x-forwarded-for")?.trim();
+  if (forwarded && !forwarded.includes(",") && isIP(forwarded)) return forwarded;
+
+  throw new Error("Trusted client IP unavailable");
+}
+
+function normalizeScope(scope: string): string {
+  return scope.trim().toLowerCase().replace(/[^a-z0-9:_-]+/g, "-").slice(0, 64);
+}
+
+function makeLimiterKey(scope: string, identifier: string): string {
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) throw new Error("Rate-limit key unavailable");
+
+  const digest = createHmac("sha256", secret)
+    .update(`${scope}\0${identifier.trim().toLowerCase()}`)
+    .digest("hex");
+
+  return `${scope}:${digest}`;
+}
+
+export async function checkRateLimit({
+  request,
+  scope,
+  identifier,
+  limit,
+  windowSeconds,
+}: RateLimitOptions): Promise<RateLimitResult> {
+  try {
+    const normalizedScope = normalizeScope(scope);
+    if (!normalizedScope || !Number.isInteger(limit) || !Number.isInteger(windowSeconds)) {
+      throw new Error("Invalid rate-limit parameters");
+    }
+
+    const limiterIdentifier = identifier?.trim() || trustedClientIp(request);
+    const key = makeLimiterKey(normalizedScope, limiterIdentifier);
+    const admin = createSupabaseAdminClient();
+    const { data, error } = await admin.rpc("consume_api_rate_limit", {
+      p_key: key,
+      p_limit: limit,
+      p_window_seconds: windowSeconds,
+    });
+
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (
+      !row ||
+      typeof row.allowed !== "boolean" ||
+      !Number.isInteger(row.remaining) ||
+      !Number.isInteger(row.retry_after_seconds)
+    ) {
+      throw new Error("Invalid rate-limit response");
+    }
+
+    return {
+      allowed: row.allowed,
+      remaining: Math.max(0, row.remaining),
+      retryAfterSeconds: Math.max(1, row.retry_after_seconds),
+    };
+  } catch (error) {
+    console.error("[api-rate-limit] Durable limiter unavailable:", error instanceof Error ? error.message : "unknown error");
+    return { allowed: false, remaining: 0, retryAfterSeconds: 60, unavailable: true };
+  }
+}
+
+export function rateLimitResponse(result: RateLimitResult) {
+  return NextResponse.json(
+    { error: "طلبات كثيرة جدًا. يرجى المحاولة لاحقًا." },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": String(Math.max(1, result.retryAfterSeconds)),
+        "Cache-Control": "no-store",
+      },
+    }
+  );
+}
+
+export function rateLimitUnavailableResponse() {
+  return NextResponse.json(
+    { error: "الخدمة غير متاحة مؤقتًا. يرجى المحاولة لاحقًا." },
+    { status: 503, headers: { "Cache-Control": "no-store" } }
+  );
+}
+
+export function rateLimitRejectionResponse(result: RateLimitResult) {
+  if (result.unavailable) return rateLimitUnavailableResponse();
+  return result.allowed ? null : rateLimitResponse(result);
+}
+
+export function declaredBodyExceeds(request: Request, maxBytes: number): boolean {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength === null) return false;
+  if (!/^\d+$/.test(contentLength.trim())) return true;
+  return Number(contentLength) > maxBytes;
+}

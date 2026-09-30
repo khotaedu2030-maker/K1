@@ -9,24 +9,43 @@ import {
 } from "@/lib/level-test/data";
 import { chooseNextQuestion, getNextDifficulty, estimateLevel } from "@/lib/level-test/engine";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // الخادم هو مالك حالة الاختبار بالكامل. العميل يرسل الحد الأدنى فقط:
 // sessionId, questionId, selectedIndex — لا شيء آخر يُصدَّق منه.
 // history/answeredIds/targetDifficulty تُعاد بناؤها هنا من level_test_answers في كل طلب،
 // ولا تُقرأ أبدًا من جسم الطلب القادم من المتصفح.
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 8 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
   const body = await req.json().catch(() => null);
   if (JSON.stringify(body ?? {}).length > 4096) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const sessionId = body?.sessionId as string | undefined;
   const submittedQuestionId = body?.questionId;
   const selectedIndex = body?.selectedIndex as number | undefined;
 
-  if (!sessionId || submittedQuestionId === undefined || selectedIndex === undefined) {
+  if (typeof sessionId !== "string" || !sessionId || sessionId.length > 100 || submittedQuestionId === undefined || selectedIndex === undefined) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
   }
   if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex > 20) {
     return NextResponse.json({ error: "الإجابة غير صالحة" }, { status: 400 });
   }
+
+  const ipLimit = await checkRateLimit({ request: req, scope: "level-test:submit:ip", limit: 60, windowSeconds: 600 });
+  const ipRejection = rateLimitRejectionResponse(ipLimit);
+  if (ipRejection) return ipRejection;
+
+  const sessionLimit = await checkRateLimit({
+    request: req,
+    scope: "level-test:submit:session",
+    identifier: sessionId,
+    limit: 30,
+    windowSeconds: 600,
+  });
+  const sessionRejection = rateLimitRejectionResponse(sessionLimit);
+  if (sessionRejection) return sessionRejection;
 
   const admin = createSupabaseAdminClient();
 

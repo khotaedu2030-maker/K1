@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // الحفظ في Supabase هو مصدر الحقيقة — نجاح الطلب لا يعتمد على أي خدمة بريد خارجية إطلاقًا.
 // إشعار بريد اختياري (Resend) يُحاوَل بعد نجاح الحفظ فقط، وفشله لا يُفشِل الاستجابة للمستخدم.
 const NOTIFY_RECIPIENTS = ["khota.edu2030@gmail.com", "abdullahalmou@hotmail.com"];
 
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 16 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
+  const ipLimit = await checkRateLimit({ request: req, scope: "contact:ip", limit: 5, windowSeconds: 600 });
+  const ipRejection = rateLimitRejectionResponse(ipLimit);
+  if (ipRejection) return ipRejection;
+
   const body = await req.json().catch(() => null);
   const fullName = typeof body?.fullName === "string" ? body.fullName.trim() : "";
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
@@ -24,6 +33,16 @@ export async function POST(req: Request) {
   if (message.length > 4000) {
     return NextResponse.json({ error: "الرسالة طويلة جدًا" }, { status: 400 });
   }
+
+  const emailLimit = await checkRateLimit({
+    request: req,
+    scope: "contact:email",
+    identifier: email,
+    limit: 5,
+    windowSeconds: 3600,
+  });
+  const emailRejection = rateLimitRejectionResponse(emailLimit);
+  if (emailRejection) return emailRejection;
 
   const admin = createSupabaseAdminClient();
   const { error } = await admin.from("contact_requests").insert({

@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // إدراج فقط عبر service_role — لا policy عامة على الجدول إطلاقًا. Teacher application ≠
 // teacher access: هذا سجل طلب يراجعه الفريق يدويًا، لا يُنشئ أي حساب معلم تلقائيًا.
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 16 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
+  const ipLimit = await checkRateLimit({ request: req, scope: "teacher-application:ip", limit: 3, windowSeconds: 3600 });
+  const ipRejection = rateLimitRejectionResponse(ipLimit);
+  if (ipRejection) return ipRejection;
+
   const body = await req.json().catch(() => null);
   const fullName = typeof body?.fullName === "string" ? body.fullName.trim() : "";
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
@@ -41,6 +50,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "رابط السيرة الذاتية غير صالح" }, { status: 400 });
     }
   }
+
+  const emailLimit = await checkRateLimit({
+    request: req,
+    scope: "teacher-application:email",
+    identifier: email,
+    limit: 3,
+    windowSeconds: 86400,
+  });
+  const emailRejection = rateLimitRejectionResponse(emailLimit);
+  if (emailRejection) return emailRejection;
 
   const admin = createSupabaseAdminClient();
   const { error } = await admin.from("teacher_applications").insert({
