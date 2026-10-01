@@ -16,83 +16,39 @@ import {
 //   active بالفعل            : يتأكد أن سجل الدفع المرتبط مسجَّل paid فعليًا، يُصلحه إن لزم،
 //                               ثم يُعيد alreadyActive بلا أي تكرار.
 //   paused/cancelled/expired  : يُرفَض صراحةً — لا يُعاد تفعيله عبر هذا المسار إطلاقًا.
+//
+// مسار manual-dev (بلا paymentId) ينفّذ تحديث الاشتراك وإدخال الدفعة عبر معاملة Postgres ذرّية
+// واحدة (public.activate_subscription_manual_atomic) بدل عمليتين منفصلتين — يمنع هذا بنيويًا
+// احتمال "نجح تفعيل الاشتراك ثم فشل إدخال الدفعة" (لا طريقة سابقة لإصلاح ذلك تلقائيًا لهذا
+// المسار تحديدًا، إذ لا paymentId معروفًا يُصالَح به كما في مسار Paylink). مسار Paylink
+// (paymentId موجود) لم يتغيّر وظيفيًا إطلاقًا.
 
 export type ActivationResult =
   | { ok: true; alreadyActive: true }
   | { ok: true; alreadyActive: false; sessionsCreated: number }
   | { ok: false; status: number; error: string };
 
-export async function activateSubscriptionAfterPayment(
-  subscriptionId: string,
-  payment: { provider: string; providerRef?: string | null; paymentId?: string }
-): Promise<ActivationResult> {
-  const supabase = createSupabaseAdminClient();
+type SessionInsertRow = {
+  cohort_id: string;
+  teacher_id: string | null;
+  session_date: string;
+  starts_at: string;
+  ends_at: string;
+  meeting_url: string | null;
+  status: string;
+};
 
-  const { data: subscription, error: subFetchError } = await supabase
-    .from("subscriptions")
-    .select("id, parent_id, plan_id, cohort_id, status")
-    .eq("id", subscriptionId)
-    .single();
+type SessionPrepResult =
+  | { ok: true; sessionsToInsert: SessionInsertRow[]; startDate: string; renewalDate: string }
+  | { ok: false; status: number; error: string };
 
-  if (subFetchError) {
-    // single() يُرجِع خطأً أيضًا عند "لا صفوف" (PGRST116) — نميّز هذه الحالة (نهائية، 404) عن
-    // أي خطأ استعلام حقيقي آخر (مؤقت، يستحق إعادة محاولة لاحقة بدل رفض نهائي بـ404 مضلِّل).
-    if (subFetchError.code === "PGRST116") {
-      return { ok: false, status: 404, error: "اشتراك غير موجود" };
-    }
-    console.error(`[activate] خطأ استعلام مؤقت أثناء جلب الاشتراك ${subscriptionId}:`, subFetchError.message);
-    return { ok: false, status: 503, error: "خطأ مؤقت، يُعاد المحاولة تلقائيًا" };
-  }
-  if (!subscription) {
-    return { ok: false, status: 404, error: "اشتراك غير موجود" };
-  }
-
-  if (["paused", "cancelled", "expired"].includes(subscription.status)) {
-    console.error(`[activate] رفض — الاشتراك ${subscriptionId} بحالة "${subscription.status}"، لا يُعاد تفعيله بهذا المسار.`);
-    return { ok: false, status: 409, error: "حالة الاشتراك الحالية لا تسمح بهذا الإجراء" };
-  }
-
-  // مصالحة (reconciliation) لسجل الدفع — تُستخدَم في مسارَين: الاشتراك مفعَّل أصلًا، أو بعد
-  // نجاح تفعيله للتو أدناه. تُعيد نتيجة نجاح/فشل صريحة — فشل تحديث الدفعة هنا يجب أن يُبقي
-  // العملية بأكملها "غير ناجحة" (503) حتى لو كان الاشتراك نفسه active فعليًا، لأن الهدف من
-  // استدعاء هذه الدالة أصلًا هو ضمان أن Webhook يُعيد استجابة غير-200 عند أي فشل مؤقت هنا،
-  // فيُعيد Paylink المحاولة لاحقًا بدل اعتبار العملية منتهية بينما سجل الدفع لا يزال pending.
-  async function reconcilePaymentToPaid(): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-    if (!payment.paymentId) return { ok: true };
-    const { data: paymentRow, error: fetchError } = await supabase
-      .from("payments")
-      .select("id, status")
-      .eq("id", payment.paymentId)
-      .maybeSingle();
-    if (fetchError) {
-      console.error(`[activate] خطأ استعلام مؤقت أثناء قراءة payment ${payment.paymentId} للمصالحة:`, fetchError.message);
-      return { ok: false, status: 503, error: "خطأ مؤقت، يُعاد المحاولة تلقائيًا" };
-    }
-    if (paymentRow && paymentRow.status !== "paid") {
-      const { error } = await supabase
-        .from("payments")
-        .update({ status: "paid", provider_ref: payment.providerRef ?? null, paid_at: new Date().toISOString() })
-        .eq("id", payment.paymentId);
-      if (error) {
-        console.error(`[activate] فشل تحديث payment ${payment.paymentId} إلى paid أثناء المصالحة:`, error.message);
-        return { ok: false, status: 503, error: "خطأ مؤقت، يُعاد المحاولة تلقائيًا" };
-      }
-    }
-    return { ok: true };
-  }
-
-  if (subscription.status === "active") {
-    // تفعيل سابق بالفعل — لا نكرر توليد الجلسات، لكن نتأكد أن سجل الدفع نفسه مسجَّل paid فعليًا
-    // (يعالج حالة: الاشتراك فُعِّل بنجاح بمحاولة سابقة، لكن تحديث payment فشل حينها لأي سبب).
-    // فشل المصالحة هنا يُعيد 503 صراحةً — لا نُبلِّغ نجاحًا بينما سجل الدفع لا يزال غير مُصالَح.
-    const reconcileResult = await reconcilePaymentToPaid();
-    if (!reconcileResult.ok) return reconcileResult;
-    return { ok: true, alreadyActive: true };
-  }
-
-  // من هنا: subscription.status === "pending_payment" فقط (الحالة الوحيدة المتبقية المسموح
-  // بإكمال التفعيل منها).
-
+// يُولِّد جلسات الشهر الأول (idempotent عبر upsert + ignoreDuplicates) ويُعيد تواريخ البداية
+// والتجديد المحسوبة بتقويم الرياض. استُخرِجت من المنطق المشترك بين Paylink وmanual-dev بلا أي
+// تغيير في الخطوات أو الترتيب أو شروط الرفض — استخراج بحت، لا تعديل سلوك.
+async function prepareSessionsForActivation(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  subscription: { id: string; plan_id: string; cohort_id: string | null }
+): Promise<SessionPrepResult> {
   const { data: plan, error: planFetchError } = await supabase
     .from("plans")
     .select("price_sar, days_per_week")
@@ -144,25 +100,14 @@ export async function activateSubscriptionAfterPayment(
     return { ok: false, status: 409, error: "اكتمل عدد المقاعد في هذه المجموعة أثناء إتمام الدفع" };
   }
 
-  // 1) توليد جلسات الشهر الأول أولًا — upsert idempotent (ignoreDuplicates)، آمن تمامًا عند
-  // retry أو عند وصول Webhook وCallback متزامنَين لنفس العملية.
-  //
-  // كل هذا القسم يعمل على تواريخ تقويمية صرفة بالرياض (RiyadhCalendarDate) فقط، لا كائنات
-  // Date محلية — "اليوم" نفسه يُستخرَج بتقويم الرياض الفعلي (لا UTC الخام ولا منطقة بيئة
-  // التشغيل)، والتقدُّم يومًا بيوم حساب حسابي صرف عبر Date.UTC()/getUTC*، لا setDate/getDate
-  // المحليَّين. يمنع هذا أي انزياح يوم كامل قرب حدود منتصف الليل إن اختلف تقويم UTC عن الرياض.
+  // كل هذا القسم يعمل على تواريخ تقويمية صرفة بالرياض (RiyadhCalendarDate) فقط، لا كائنات Date
+  // محلية — "اليوم" نفسه يُستخرَج بتقويم الرياض الفعلي (لا UTC الخام ولا منطقة بيئة التشغيل)،
+  // والتقدُّم يومًا بيوم حساب حسابي صرف عبر Date.UTC()/getUTC*، لا setDate/getDate المحليَّين.
+  // يمنع هذا أي انزياح يوم كامل قرب حدود منتصف الليل إن اختلف تقويم UTC عن الرياض.
   const startCal = getRiyadhCalendarDate(new Date());
   const renewalCal = addRiyadhCalendarMonths(startCal, 1);
 
-  const sessionsToInsert: {
-    cohort_id: string;
-    teacher_id: string | null;
-    session_date: string;
-    starts_at: string;
-    ends_at: string;
-    meeting_url: string | null;
-    status: string;
-  }[] = [];
+  const sessionsToInsert: SessionInsertRow[] = [];
 
   const [startH, startM] = String(cohort.start_time).slice(0, 5).split(":").map(Number);
   const [endH, endM] = String(cohort.end_time).slice(0, 5).split(":").map(Number);
@@ -193,44 +138,160 @@ export async function activateSubscriptionAfterPayment(
     if (sessionsError) return { ok: false, status: 500, error: sessionsError.message };
   }
 
-  // 2) تفعيل الاشتراك — تحديث مشروط بـ status="pending_payment" وقت التنفيذ تحديدًا، يحمي من
-  // Race Condition بين طلبَين متزامنَين (Webhook + Callback لنفس العملية) يحاولان التفعيل معًا.
-  const { error: activateError } = await supabase
-    .from("subscriptions")
-    .update({
-      status: "active",
-      start_date: formatRiyadhCalendarDate(startCal),
-      renewal_date: formatRiyadhCalendarDate(renewalCal),
-    })
-    .eq("id", subscription.id)
-    .eq("status", "pending_payment");
-  if (activateError) return { ok: false, status: 500, error: activateError.message };
-  // ملاحظة: لا نتحقق من عدد الصفوف المتأثرة هنا — إن كان طلب مزامن آخر قد سبقنا بالتفعيل
-  // فعليًا، فهذا التحديث لن يُغيّر شيئًا (الشرط لن يتحقق)، وهذا سلوك صحيح ومقصود؛ سنكمل بأمان
-  // لتحديث سجل الدفع بالأسفل بغض النظر عمَّن نجح بالتفعيل فعليًا.
+  return {
+    ok: true,
+    sessionsToInsert,
+    startDate: formatRiyadhCalendarDate(startCal),
+    renewalDate: formatRiyadhCalendarDate(renewalCal),
+  };
+}
 
-  // 3) تحديث سجل الدفع إلى paid — هذه هي الخطوة "القابلة للاستعادة عند retry": إن فشلت بعد
-  // نجاح تفعيل الاشتراك أعلاه، لا نُبلِّغ نجاحًا رغم ذلك — نُعيد فشلًا (503) صراحةً، حتى لو
-  // الاشتراك نفسه بات active فعليًا، لأن Webhook يجب أن يرى استجابة غير-200 ليُعيد Paylink
-  // المحاولة لاحقًا. المحاولة التالية ستدخل فرع subscription.status === "active" أعلاه
-  // وتُصلح سجل الدفع عبر reconcilePaymentToPaid()، ثم فقط تُعيد نجاحًا.
-  if (payment.paymentId) {
-    const reconcileResult = await reconcilePaymentToPaid();
-    if (!reconcileResult.ok) return reconcileResult;
-  } else {
-    // مسار Dev اليدوي فقط (بلا paymentId مُمرَّر) — يُنشئ سجل دفع مباشرة كما كان دائمًا، بلا
-    // تغيير سلوك عن السابق.
-    const { error: paymentError } = await supabase.from("payments").insert({
-      subscription_id: subscription.id,
-      parent_id: subscription.parent_id,
-      amount_sar: plan?.price_sar ?? 0,
-      status: "paid",
-      provider: payment.provider,
-      provider_ref: payment.providerRef ?? null,
-      paid_at: new Date().toISOString(),
-    });
-    if (paymentError) return { ok: false, status: 500, error: paymentError.message };
+export async function activateSubscriptionAfterPayment(
+  subscriptionId: string,
+  payment: { provider: string; providerRef?: string | null; paymentId?: string }
+): Promise<ActivationResult> {
+  const supabase = createSupabaseAdminClient();
+
+  const { data: subscription, error: subFetchError } = await supabase
+    .from("subscriptions")
+    .select("id, parent_id, plan_id, cohort_id, status")
+    .eq("id", subscriptionId)
+    .single();
+
+  if (subFetchError) {
+    // single() يُرجِع خطأً أيضًا عند "لا صفوف" (PGRST116) — نميّز هذه الحالة (نهائية، 404) عن
+    // أي خطأ استعلام حقيقي آخر (مؤقت، يستحق إعادة محاولة لاحقة بدل رفض نهائي بـ404 مضلِّل).
+    if (subFetchError.code === "PGRST116") {
+      return { ok: false, status: 404, error: "اشتراك غير موجود" };
+    }
+    console.error(`[activate] خطأ استعلام مؤقت أثناء جلب الاشتراك ${subscriptionId}:`, subFetchError.message);
+    return { ok: false, status: 503, error: "خطأ مؤقت، يُعاد المحاولة تلقائيًا" };
+  }
+  if (!subscription) {
+    return { ok: false, status: 404, error: "اشتراك غير موجود" };
   }
 
-  return { ok: true, alreadyActive: false, sessionsCreated: sessionsToInsert.length };
+  if (["paused", "cancelled", "expired"].includes(subscription.status)) {
+    console.error(`[activate] رفض — الاشتراك ${subscriptionId} بحالة "${subscription.status}"، لا يُعاد تفعيله بهذا المسار.`);
+    return { ok: false, status: 409, error: "حالة الاشتراك الحالية لا تسمح بهذا الإجراء" };
+  }
+
+  // =============================== مسار Paylink (paymentId) ===============================
+  // دون تغيير وظيفي عن السابق: نفس الخطوات، نفس الترتيب، نفس شروط الرفض — توليد الجلسات فقط
+  // استُخرِج إلى prepareSessionsForActivation() أعلاه (استخراج بحت بلا أي تعديل منطق).
+  if (payment.paymentId) {
+    // مصالحة (reconciliation) لسجل الدفع — فشلها يجب أن يُبقي العملية بأكملها "غير ناجحة" (503)
+    // حتى لو كان الاشتراك نفسه active فعليًا، لأن الهدف هو ضمان أن Webhook يُعيد استجابة غير-200
+    // عند أي فشل مؤقت هنا، فيُعيد Paylink المحاولة لاحقًا بدل اعتبار العملية منتهية بينما سجل
+    // الدفع لا يزال pending.
+    async function reconcilePaymentToPaid(): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+      if (!payment.paymentId) return { ok: true };
+      const { data: paymentRow, error: fetchError } = await supabase
+        .from("payments")
+        .select("id, status")
+        .eq("id", payment.paymentId)
+        .maybeSingle();
+      if (fetchError) {
+        console.error(`[activate] خطأ استعلام مؤقت أثناء قراءة payment ${payment.paymentId} للمصالحة:`, fetchError.message);
+        return { ok: false, status: 503, error: "خطأ مؤقت، يُعاد المحاولة تلقائيًا" };
+      }
+      if (paymentRow && paymentRow.status !== "paid") {
+        const { error } = await supabase
+          .from("payments")
+          .update({ status: "paid", provider_ref: payment.providerRef ?? null, paid_at: new Date().toISOString() })
+          .eq("id", payment.paymentId);
+        if (error) {
+          console.error(`[activate] فشل تحديث payment ${payment.paymentId} إلى paid أثناء المصالحة:`, error.message);
+          return { ok: false, status: 503, error: "خطأ مؤقت، يُعاد المحاولة تلقائيًا" };
+        }
+      }
+      return { ok: true };
+    }
+
+    if (subscription.status === "active") {
+      // تفعيل سابق بالفعل — لا نكرر توليد الجلسات، لكن نتأكد أن سجل الدفع نفسه مسجَّل paid
+      // فعليًا (يعالج حالة: الاشتراك فُعِّل بنجاح بمحاولة سابقة، لكن تحديث payment فشل حينها).
+      const reconcileResult = await reconcilePaymentToPaid();
+      if (!reconcileResult.ok) return reconcileResult;
+      return { ok: true, alreadyActive: true };
+    }
+
+    // من هنا: subscription.status === "pending_payment" فقط.
+    const prep = await prepareSessionsForActivation(supabase, subscription);
+    if (!prep.ok) return prep;
+
+    // تفعيل الاشتراك — تحديث مشروط بـ status="pending_payment" وقت التنفيذ تحديدًا، يحمي من
+    // Race Condition بين طلبَين متزامنَين (Webhook + Callback لنفس العملية) يحاولان التفعيل معًا.
+    const { error: activateError } = await supabase
+      .from("subscriptions")
+      .update({ status: "active", start_date: prep.startDate, renewal_date: prep.renewalDate })
+      .eq("id", subscription.id)
+      .eq("status", "pending_payment");
+    if (activateError) return { ok: false, status: 500, error: activateError.message };
+    // ملاحظة: لا نتحقق من عدد الصفوف المتأثرة هنا — إن كان طلب مزامن آخر قد سبقنا بالتفعيل
+    // فعليًا، فهذا التحديث لن يُغيّر شيئًا، وهذا سلوك صحيح ومقصود؛ نكمل بأمان لمصالحة سجل الدفع
+    // بالأسفل بغض النظر عمَّن نجح بالتفعيل فعليًا — سلوك Paylink الأصلي، بلا أي تغيير.
+    const reconcileResult = await reconcilePaymentToPaid();
+    if (!reconcileResult.ok) return reconcileResult;
+
+    return { ok: true, alreadyActive: false, sessionsCreated: prep.sessionsToInsert.length };
+  }
+
+  // =============================== مسار Dev اليدوي (manual-dev) ===============================
+  // لا تحديث وإدخال منفصلَين بعد الآن — معاملة Postgres ذرّية واحدة
+  // (public.activate_subscription_manual_atomic) تقفل صف الاشتراك (FOR UPDATE) وتتخذ القرار
+  // الكامل (رفض/تفعيل+دفعة/already_active/تعارض) وتُنفِّذه داخل نفس الـtransaction — فإمّا تنجح
+  // كل خطواتها معًا أو ROLLBACK كامل تلقائي. هذا يغلق تمامًا فجوة "نجح تحديث الاشتراك ثم فشل
+  // إدخال الدفعة" التي كانت ممكنة سابقًا بين عمليتين منفصلتين على مستوى التطبيق.
+  let sessionsCreatedCount = 0;
+  let startDateParam: string | null = null;
+  let renewalDateParam: string | null = null;
+
+  if (subscription.status === "pending_payment") {
+    // لا نُولِّد جلسات ولا تواريخ إطلاقًا إن كانت الحالة active بالفعل — الدالة الذرّية تتحقق من
+    // active أولًا قبل أي استخدام لهذين البارامترين، وتتجاهلهما كليًا في تلك الحالة.
+    const prep = await prepareSessionsForActivation(supabase, subscription);
+    if (!prep.ok) return prep;
+    sessionsCreatedCount = prep.sessionsToInsert.length;
+    startDateParam = prep.startDate;
+    renewalDateParam = prep.renewalDate;
+  }
+
+  const { data: rpcRows, error: rpcError } = await supabase.rpc("activate_subscription_manual_atomic", {
+    p_subscription_id: subscription.id,
+    p_start_date: startDateParam,
+    p_renewal_date: renewalDateParam,
+  });
+
+  if (rpcError) {
+    console.error(`[activate] فشل استدعاء RPC الذرّية manual-dev للاشتراك ${subscription.id}:`, rpcError.message);
+    return { ok: false, status: 503, error: "خطأ مؤقت، يُعاد المحاولة تلقائيًا" };
+  }
+
+  const rpcResult = rpcRows?.[0] as
+    | { ok: boolean; already_active: boolean; payment_id: string | null; error_code: string | null }
+    | undefined;
+
+  if (!rpcResult || !rpcResult.ok) {
+    // لا نُبلِّغ نجاحًا زائفًا أبدًا هنا — كل فرع يُعيد فشلًا صريحًا بحالة HTTP مناسبة لسببه.
+    const code = rpcResult?.error_code ?? "unknown";
+    const messages: Record<string, { status: number; error: string }> = {
+      subscription_not_found: { status: 404, error: "اشتراك غير موجود" },
+      invalid_status: { status: 409, error: "حالة الاشتراك الحالية لا تسمح بهذا الإجراء" },
+      missing_dates: { status: 500, error: "تعذّر حساب تواريخ التفعيل" },
+      active_without_manual_payment: {
+        status: 409,
+        error: "الاشتراك مُفعَّل بالفعل عبر مسار دفع آخر (ليس manual-dev) — لا يمكن إنشاء دفعة يدوية بأثر رجعي",
+      },
+    };
+    const mapped = messages[code];
+    console.error(`[activate] RPC manual-dev رفضت العملية للاشتراك ${subscription.id}: ${code}`);
+    return { ok: false, status: mapped?.status ?? 500, error: mapped?.error ?? "تعذّر تفعيل الاشتراك" };
+  }
+
+  if (rpcResult.already_active) {
+    return { ok: true, alreadyActive: true };
+  }
+
+  return { ok: true, alreadyActive: false, sessionsCreated: sessionsCreatedCount };
 }

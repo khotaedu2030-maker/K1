@@ -261,6 +261,96 @@ create unique index if not exists uq_paylink_one_pending_per_subscription
 on public.payments (subscription_id)
 where provider = 'paylink' and status = 'pending';
 
+-- يمنع أكثر من سجل دفع "paid" واحد بمزوّد manual-dev (مسار /api/payment/confirm Dev-only) لنفس
+-- الاشتراك — خط دفاع أخير مستقل على مستوى القاعدة، بالإضافة إلى الذرّية الفعلية التي توفّرها
+-- معاملة public.activate_subscription_manual_atomic() أدناه (راجع
+-- migrations/20261101_manual_payment_idempotency.sql).
+create unique index if not exists uq_manual_dev_one_paid_per_subscription
+on public.payments (subscription_id)
+where provider = 'manual-dev' and status = 'paid';
+
+-- دالة RPC ذرّية واحدة لتفعيل الاشتراك اليدوي (manual-dev): قفل صف الاشتراك، التحقق من حالته،
+-- إدخال سجل الدفع، وتحديث حالة الاشتراك — كل ذلك داخل معاملة واحدة (ROLLBACK كامل تلقائي عند أي
+-- فشل). راجع migrations/20261102_manual_payment_activate_atomic.sql لتفاصيل قرار SECURITY
+-- INVOKER (مقصود، وليس SECURITY DEFINER) وتفصيل كل حالة.
+create or replace function public.activate_subscription_manual_atomic(
+  p_subscription_id uuid,
+  p_start_date date,
+  p_renewal_date date
+)
+returns table (
+  ok boolean,
+  already_active boolean,
+  payment_id uuid,
+  error_code text
+)
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+declare
+  v_sub record;
+  v_plan_price numeric(10,2);
+  v_existing_payment_id uuid;
+  v_new_payment_id uuid;
+begin
+  select * into v_sub from public.subscriptions where id = p_subscription_id for update;
+
+  if v_sub is null then
+    return query select false, false, null::uuid, 'subscription_not_found'::text;
+    return;
+  end if;
+
+  if v_sub.status in ('paused', 'cancelled', 'expired') then
+    return query select false, false, null::uuid, 'invalid_status'::text;
+    return;
+  end if;
+
+  if v_sub.status = 'active' then
+    select id into v_existing_payment_id
+    from public.payments
+    where subscription_id = p_subscription_id and provider = 'manual-dev' and status = 'paid'
+    limit 1;
+
+    if v_existing_payment_id is not null then
+      return query select true, true, v_existing_payment_id, null::text;
+      return;
+    end if;
+
+    return query select false, false, null::uuid, 'active_without_manual_payment'::text;
+    return;
+  end if;
+
+  if v_sub.status <> 'pending_payment' then
+    return query select false, false, null::uuid, 'invalid_status'::text;
+    return;
+  end if;
+
+  if p_start_date is null or p_renewal_date is null then
+    return query select false, false, null::uuid, 'missing_dates'::text;
+    return;
+  end if;
+
+  select price_sar into v_plan_price from public.plans where id = v_sub.plan_id;
+
+  insert into public.payments (
+    subscription_id, parent_id, amount_sar, status, provider, provider_ref, paid_at
+  ) values (
+    p_subscription_id, v_sub.parent_id, coalesce(v_plan_price, 0), 'paid', 'manual-dev', null, now()
+  )
+  returning id into v_new_payment_id;
+
+  update public.subscriptions
+  set status = 'active', start_date = p_start_date, renewal_date = p_renewal_date
+  where id = p_subscription_id;
+
+  return query select true, false, v_new_payment_id, null::text;
+end;
+$$;
+revoke all on function public.activate_subscription_manual_atomic(uuid, date, date)
+from public, anon, authenticated;
+grant execute on function public.activate_subscription_manual_atomic(uuid, date, date)
+to service_role;
+
 create table if not exists teacher_availability(
   id uuid primary key default gen_random_uuid(),
   teacher_id uuid not null references teachers(id) on delete cascade,
