@@ -194,8 +194,12 @@ export async function activateSubscriptionAfterPayment(
   }
 
   // 2) تفعيل الاشتراك — تحديث مشروط بـ status="pending_payment" وقت التنفيذ تحديدًا، يحمي من
-  // Race Condition بين طلبَين متزامنَين (Webhook + Callback لنفس العملية) يحاولان التفعيل معًا.
-  const { error: activateError } = await supabase
+  // Race Condition بين طلبَين متزامنَين (Webhook + Callback لنفس العملية، أو طلبَي manual-dev
+  // متزامنَين) يحاولان التفعيل معًا. .select("id") هنا ليس تجميليًا: Postgres (READ COMMITTED)
+  // يُعيد تقييم WHERE لأي صف تغيَّر تزامنيًا قبل أن يُطبَّق هذا التحديث عليه (EvalPlanQual) —
+  // لذلك طلبان متزامنان فعليًا على نفس الصف لا يمكن أن يريا كلاهما صفًا متأثرًا هنا؛ واحد فقط
+  // يراه (الفائز الحقيقي بتحويل pending_payment → active)، والآخر يرى مصفوفة فارغة دائمًا.
+  const { data: activatedRows, error: activateError } = await supabase
     .from("subscriptions")
     .update({
       status: "active",
@@ -203,23 +207,28 @@ export async function activateSubscriptionAfterPayment(
       renewal_date: formatRiyadhCalendarDate(renewalCal),
     })
     .eq("id", subscription.id)
-    .eq("status", "pending_payment");
+    .eq("status", "pending_payment")
+    .select("id");
   if (activateError) return { ok: false, status: 500, error: activateError.message };
-  // ملاحظة: لا نتحقق من عدد الصفوف المتأثرة هنا — إن كان طلب مزامن آخر قد سبقنا بالتفعيل
-  // فعليًا، فهذا التحديث لن يُغيّر شيئًا (الشرط لن يتحقق)، وهذا سلوك صحيح ومقصود؛ سنكمل بأمان
-  // لتحديث سجل الدفع بالأسفل بغض النظر عمَّن نجح بالتفعيل فعليًا.
+  const activatedNow = (activatedRows?.length ?? 0) > 0;
 
-  // 3) تحديث سجل الدفع إلى paid — هذه هي الخطوة "القابلة للاستعادة عند retry": إن فشلت بعد
-  // نجاح تفعيل الاشتراك أعلاه، لا نُبلِّغ نجاحًا رغم ذلك — نُعيد فشلًا (503) صراحةً، حتى لو
-  // الاشتراك نفسه بات active فعليًا، لأن Webhook يجب أن يرى استجابة غير-200 ليُعيد Paylink
-  // المحاولة لاحقًا. المحاولة التالية ستدخل فرع subscription.status === "active" أعلاه
-  // وتُصلح سجل الدفع عبر reconcilePaymentToPaid()، ثم فقط تُعيد نجاحًا.
+  // 3) تحديث/إنشاء سجل الدفع:
+  //
+  // مسار Paylink (paymentId مُمرَّر) — سلوك غير مُغيَّر إطلاقًا عن السابق: دائمًا يُصالِح سجل
+  // الدفع المحدَّد بهذا المعرّف بصرف النظر عن activatedNow، لأن هذه هي الخطوة "القابلة
+  // للاستعادة عند retry": إن فشلت بعد نجاح تفعيل الاشتراك أعلاه، لا نُبلِّغ نجاحًا رغم ذلك —
+  // نُعيد فشلًا (503) صراحةً حتى لو الاشتراك نفسه بات active فعليًا، لأن Webhook يجب أن يرى
+  // استجابة غير-200 ليُعيد Paylink المحاولة لاحقًا. المحاولة التالية ستدخل فرع
+  // subscription.status === "active" أعلاه وتُصلح سجل الدفع عبر reconcilePaymentToPaid()، ثم
+  // فقط تُعيد نجاحًا.
   if (payment.paymentId) {
     const reconcileResult = await reconcilePaymentToPaid();
     if (!reconcileResult.ok) return reconcileResult;
-  } else {
-    // مسار Dev اليدوي فقط (بلا paymentId مُمرَّر) — يُنشئ سجل دفع مباشرة كما كان دائمًا، بلا
-    // تغيير سلوك عن السابق.
+  } else if (activatedNow) {
+    // مسار Dev اليدوي (بلا paymentId) — ونحن الفائز الوحيد فعليًا بتحويل هذا الاشتراك تحديدًا:
+    // الإدخال هنا آمن بنيويًا من التكرار (لا طلب متزامن آخر لنفس الاشتراك يمكن أن يرى
+    // activatedNow=true في آنٍ معًا)، ومحمي إضافيًا بقيد DB فريد جزئي
+    // (uq_manual_dev_one_paid_per_subscription) كخط دفاع أخير مستقل عن هذا المنطق بالذات.
     const { error: paymentError } = await supabase.from("payments").insert({
       subscription_id: subscription.id,
       parent_id: subscription.parent_id,
@@ -229,7 +238,22 @@ export async function activateSubscriptionAfterPayment(
       provider_ref: payment.providerRef ?? null,
       paid_at: new Date().toISOString(),
     });
-    if (paymentError) return { ok: false, status: 500, error: paymentError.message };
+    if (paymentError && paymentError.code !== "23505") {
+      return { ok: false, status: 500, error: paymentError.message };
+    }
+    if (paymentError) {
+      // القيد الفريد رفض إدخالًا مكرَّرًا رغم activatedNow=true (لا يُفترَض حدوثه بنيويًا، لكنه
+      // خط الدفاع الأخير المقصود) — سجل دفع manual-dev صحيح موجود فعلًا لهذا الاشتراك، فلا
+      // نُبلِّغ فشلًا هنا.
+      console.error(`[activate] قيد فريد منع إدخال payment manual-dev مكرَّر للاشتراك ${subscription.id} رغم الفوز بتفعيله.`);
+    }
+  }
+  // else: manual-dev وخسرنا السباق (activatedNow=false) — طلب آخر سبقنا فعليًا بتفعيل هذا
+  // الاشتراك تحديدًا؛ لا ننشئ أي سجل دفع جديد، ونُبلِّغ ذلك أدناه كـ"مفعَّل بالفعل" بدل أي أثر
+  // مالي إضافي.
+
+  if (!payment.paymentId && !activatedNow) {
+    return { ok: true, alreadyActive: true };
   }
 
   return { ok: true, alreadyActive: false, sessionsCreated: sessionsToInsert.length };

@@ -261,6 +261,14 @@ create unique index if not exists uq_paylink_one_pending_per_subscription
 on public.payments (subscription_id)
 where provider = 'paylink' and status = 'pending';
 
+-- يمنع أكثر من سجل دفع "paid" واحد بمزوّد manual-dev (مسار /api/payment/confirm Dev-only) لنفس
+-- الاشتراك — خط دفاع أخير على مستوى القاعدة، بالإضافة إلى التحقق الذرّي من نتيجة تحديث
+-- subscriptions.status في src/lib/activate-subscription.ts (راجع
+-- migrations/20261101_manual_payment_idempotency.sql).
+create unique index if not exists uq_manual_dev_one_paid_per_subscription
+on public.payments (subscription_id)
+where provider = 'manual-dev' and status = 'paid';
+
 create table if not exists teacher_availability(
   id uuid primary key default gen_random_uuid(),
   teacher_id uuid not null references teachers(id) on delete cascade,
