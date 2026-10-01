@@ -5,12 +5,17 @@ import { parseAndValidateGrade, resolveGradeBand } from "@/lib/grade-config";
 import { normalizeSaudiStoredPhoneInput, SAUDI_PHONE_ERROR } from "@/lib/phone";
 import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-identity";
 import { getRuntimeSettings } from "@/lib/platform-settings";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // إنشاء اشتراك جديد بحالة pending_payment — يتطلب الآن جلسة Supabase Auth حقيقية (Email OTP
 // مُتحقَّق فعليًا) قبل أي شيء آخر. لا يعود ممكنًا لمستخدم غير متحقق حجز مقعد — هذا هو الإصلاح
 // الجوهري لهذه الجولة: كان هذا المسار عامًا بالكامل سابقًا، ينشئ child + pending_payment قبل
 // أي تحقق OTP إطلاقًا.
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 16 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
   const authed = await createSupabaseServerClient();
   const {
     data: { user },
@@ -18,6 +23,10 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول أولًا" }, { status: 401 });
   }
+
+  const enrollLimit = await checkRateLimit({ request: req, scope: "enroll:user", identifier: user.id, limit: 5, windowSeconds: 600 });
+  const enrollRejection = rateLimitRejectionResponse(enrollLimit);
+  if (enrollRejection) return enrollRejection;
 
   // البريد الموثوق الوحيد لهوية الحساب هو user.email من الجلسة المُصادَقة نفسها — لا نثق
   // بأي email قادم من body كمصدر هوية. لكن لا نتجاهل تعارضًا صامتًا: إن أرسل العميل بريدًا
