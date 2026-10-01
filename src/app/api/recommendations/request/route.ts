@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // طلب "جلسة تقوية فردية مركّزة" من بطاقة التوصية.
 // يتحقق أن التوصية فعلًا تخص طفل ولي الأمر المسجّل دخوله، ثم:
 //  1) يسجّل طلبًا في premium_requests (تتابعه لوحة الإدارة ماليًا وتشغيليًا)
 //  2) يحوّل حالة التوصية إلى actioned حتى لا تتكرر
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 4 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
   const body = await req.json().catch(() => null);
-  const { recommendationId } = body ?? {};
-  if (!recommendationId) {
+  const recommendationId = typeof body?.recommendationId === "string" ? body.recommendationId.trim() : "";
+  if (!recommendationId || recommendationId.length > 100) {
     return NextResponse.json({ error: "recommendationId مطلوب" }, { status: 400 });
   }
 
@@ -18,6 +23,10 @@ export async function POST(req: Request) {
     data: { user },
   } = await authed.auth.getUser();
   if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+
+  const userLimit = await checkRateLimit({ request: req, scope: "recommendations:request:user", identifier: user.id, limit: 10, windowSeconds: 3600 });
+  const userRejection = rateLimitRejectionResponse(userLimit);
+  if (userRejection) return userRejection;
 
   const admin = createSupabaseAdminClient();
 
@@ -33,6 +42,10 @@ export async function POST(req: Request) {
   if (!recommendation || (recommendation as any).children?.parent_id !== parent.id) {
     return NextResponse.json({ error: "توصية غير موجودة أو لا تخص حسابك" }, { status: 403 });
   }
+
+  const recommendationLimit = await checkRateLimit({ request: req, scope: "recommendations:request:recommendation", identifier: recommendationId, limit: 3, windowSeconds: 3600 });
+  const recommendationRejection = rateLimitRejectionResponse(recommendationLimit);
+  if (recommendationRejection) return recommendationRejection;
 
   if (recommendation.status !== "open") {
     return NextResponse.json({ error: "تم التعامل مع هذه التوصية مسبقًا" }, { status: 409 });
