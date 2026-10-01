@@ -19,6 +19,10 @@ export type RateLimitResult = {
   unavailable?: boolean;
 };
 
+export type LimitedJsonBodyResult =
+  | { ok: true; body: Awaited<ReturnType<Request["json"]>> | null }
+  | { ok: false; reason: "too_large" };
+
 function trustedClientIp(request: Request): string {
   // Prefer the platform single-address header; accept XFF only when it contains one validated IP.
   const realIp = request.headers.get("x-real-ip")?.trim();
@@ -119,4 +123,64 @@ export function declaredBodyExceeds(request: Request, maxBytes: number): boolean
   if (contentLength === null) return false;
   if (!/^\d+$/.test(contentLength.trim())) return true;
   return Number(contentLength) > maxBytes;
+}
+
+export async function readJsonBodyLimited(request: Request, maxBytes: number): Promise<LimitedJsonBodyResult> {
+  if (!Number.isInteger(maxBytes) || maxBytes <= 0) {
+    throw new RangeError("maxBytes must be a positive integer");
+  }
+
+  if (declaredBodyExceeds(request, maxBytes)) return { ok: false, reason: "too_large" };
+  if (request.body === null) return { ok: true, body: null };
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
+  try {
+    reader = request.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try {
+          void reader.cancel().catch(() => {
+            // Cancellation is best-effort; the oversized request is rejected either way.
+          });
+        } catch {
+          // Cancellation is best-effort; the oversized request is rejected either way.
+        }
+        return { ok: false, reason: "too_large" };
+      }
+
+      chunks.push(value);
+    }
+
+    const bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    try {
+      const text = new TextDecoder("utf-8").decode(bytes);
+      return { ok: true, body: JSON.parse(text) as Awaited<ReturnType<Request["json"]>> };
+    } catch {
+      return { ok: true, body: null };
+    }
+  } catch {
+    return { ok: true, body: null };
+  } finally {
+    if (reader) {
+      try {
+        reader.releaseLock();
+      } catch {
+        // The stream may already have released its lock.
+      }
+    }
+  }
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getRuntimeSettings } from "@/lib/platform-settings";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // طلب تجميد اشتراك — Workflow بحالة صريحة (requested → approved/rejected)، وليس تعديلًا مباشرًا
 // لولي الأمر على الاشتراك. كل قواعد الأهلية من src/lib/policies.ts فقط.
@@ -11,7 +11,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 8 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const subscriptionId = typeof body?.subscriptionId === "string" ? body.subscriptionId.trim() : "";
   const startDate = body?.startDate as string | undefined;
   const endDate = body?.endDate as string | undefined;

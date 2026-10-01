@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // طلب "جلسة تقوية فردية مركّزة" من بطاقة التوصية.
 // يتحقق أن التوصية فعلًا تخص طفل ولي الأمر المسجّل دخوله، ثم:
@@ -11,7 +11,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const recommendationId = typeof body?.recommendationId === "string" ? body.recommendationId.trim() : "";
   if (!recommendationId || recommendationId.length > 100) {
     return NextResponse.json({ error: "recommendationId مطلوب" }, { status: 400 });

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { tracks, MAX_QUESTIONS, toPublicQuestion, type TrackId } from "@/lib/level-test/data";
 import { chooseNextQuestion } from "@/lib/level-test/engine";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // ينشئ جلسة اختبار مملوكة بالكامل من الخادم (level_test_sessions) ويعيد أول سؤال فقط.
 // المتصفح لن يرى أبدًا answeredIds/history/targetDifficulty كحقيقة يُعتمد عليها لاحقًا —
@@ -12,7 +12,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   if (JSON.stringify(body ?? {}).length > 2048) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const trackId = body?.trackId as TrackId | undefined;
 

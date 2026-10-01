@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // إنشاء (أو إيجاد) محادثة مع معلم طفل معيّن. الطفل والمجموعة يُختاران من قوائم تعرض فقط ما
 // يملكه ولي الأمر فعليًا — لكن هذا الـ route لا يثق بذلك، ويعيد التحقق الكامل من الصفر:
@@ -11,7 +11,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const childId = typeof body?.childId === "string" ? body.childId.trim() : "";
   const cohortId = typeof body?.cohortId === "string" ? body.cohortId.trim() : "";
   if (!childId || childId.length > 100 || !cohortId || cohortId.length > 100) {

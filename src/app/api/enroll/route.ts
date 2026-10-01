@@ -5,7 +5,7 @@ import { parseAndValidateGrade, resolveGradeBand } from "@/lib/grade-config";
 import { normalizeSaudiStoredPhoneInput, SAUDI_PHONE_ERROR } from "@/lib/phone";
 import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-identity";
 import { getRuntimeSettings } from "@/lib/platform-settings";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // إنشاء اشتراك جديد بحالة pending_payment — يتطلب الآن جلسة Supabase Auth حقيقية (Email OTP
 // مُتحقَّق فعليًا) قبل أي شيء آخر. لا يعود ممكنًا لمستخدم غير متحقق حجز مقعد — هذا هو الإصلاح
@@ -38,7 +38,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "تعذّر تحديد البريد الإلكتروني من الجلسة" }, { status: 500 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 16 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const { parentName, phone, childName, grade, cohortId } = body ?? {};
 
   const bodyEmail = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";

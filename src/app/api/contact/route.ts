@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // الحفظ في Supabase هو مصدر الحقيقة — نجاح الطلب لا يعتمد على أي خدمة بريد خارجية إطلاقًا.
 // إشعار بريد اختياري (Resend) يُحاوَل بعد نجاح الحفظ فقط، وفشله لا يُفشِل الاستجابة للمستخدم.
@@ -15,7 +15,9 @@ export async function POST(req: Request) {
   const ipRejection = rateLimitRejectionResponse(ipLimit);
   if (ipRejection) return ipRejection;
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 16 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const fullName = typeof body?.fullName === "string" ? body.fullName.trim() : "";
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   const phone = typeof body?.phone === "string" ? body.phone.trim() : "";

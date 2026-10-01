@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyAndActivatePaylinkPayment } from "@/lib/paylink-verify";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // =========================================================================
 // Webhook دفع Paylink v2 — /api/payments/paylink/webhook
@@ -40,7 +40,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "request_too_large" }, { status: 413 });
   }
 
-  const payload = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 16 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "request_too_large" }, { status: 413 });
+  const payload = parsed.body;
   if (!payload || typeof payload !== "object") {
     console.error("[paylink-webhook] رفض الطلب — Payload غير صالح أو فارغ.");
     return NextResponse.json({ error: "payload غير صالح" }, { status: 400 });

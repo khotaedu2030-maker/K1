@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getActiveStudentSession } from "@/lib/student-mode";
 import { STUDENT_SESSION_COOKIE } from "@/lib/student-mode-constants";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // يتحقق من رمز OTP المُرسَل للبريد الإلكتروني، وعند صحته يُنهي جلسة الطالب فعليًا (لا مجرد
 // إخفاء بصري) ويمسح الكوكي. العميل يرسل "code" فقط — لا نثق بأي "email" قادم من الطلب؛
@@ -15,7 +15,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const code = typeof body?.code === "string" ? body.code.trim() : "";
   if (!code || code.length > 32) return NextResponse.json({ error: "الرمز مطلوب أو غير صالح" }, { status: 400 });
 
