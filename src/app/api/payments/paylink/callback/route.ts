@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { verifyAndActivatePaylinkPayment } from "@/lib/paylink-verify";
+import { checkRateLimit, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // Paylink يعيد المستخدم هنا بعد محاولة الدفع، مع orderNumber (= payments.id، وليس
 // subscriptionId) و transactionNo في الرابط. هذا الـcallback من المتصفح لا يُعتبَر أبدًا دليل
@@ -15,10 +16,30 @@ export async function GET(req: Request) {
 
   if (!transactionNo) {
     console.error("[paylink-callback] وصول بلا transactionNo — إعادة توجيه بحالة فشل.");
-    await appendSubIfResolvable(paymentPageUrl, orderNumber);
+    if (orderNumber.length <= 100) await appendSubIfResolvable(paymentPageUrl, orderNumber);
     paymentPageUrl.searchParams.set("failed", "1");
     return NextResponse.redirect(paymentPageUrl);
   }
+
+  if (transactionNo.length > 200 || orderNumber.length > 100) {
+    if (orderNumber.length <= 100) await appendSubIfResolvable(paymentPageUrl, orderNumber);
+    paymentPageUrl.searchParams.set("failed", "1");
+    return NextResponse.redirect(paymentPageUrl);
+  }
+
+  const ipLimit = await checkRateLimit({ request: req, scope: "paylink:callback:ip", limit: 20, windowSeconds: 600 });
+  const ipRejection = rateLimitRejectionResponse(ipLimit);
+  if (ipRejection) return ipRejection;
+
+  const transactionLimit = await checkRateLimit({
+    request: req,
+    scope: "paylink:callback:transaction",
+    identifier: transactionNo,
+    limit: 10,
+    windowSeconds: 600,
+  });
+  const transactionRejection = rateLimitRejectionResponse(transactionLimit);
+  if (transactionRejection) return transactionRejection;
 
   const result = await verifyAndActivatePaylinkPayment(transactionNo);
 

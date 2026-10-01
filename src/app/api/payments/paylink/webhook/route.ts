@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyAndActivatePaylinkPayment } from "@/lib/paylink-verify";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // =========================================================================
 // Webhook دفع Paylink v2 — /api/payments/paylink/webhook
@@ -35,6 +36,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "غير مصرَّح" }, { status: 401 });
   }
 
+  if (declaredBodyExceeds(req, 16 * 1024)) {
+    return NextResponse.json({ error: "request_too_large" }, { status: 413 });
+  }
+
   const payload = await req.json().catch(() => null);
   if (!payload || typeof payload !== "object") {
     console.error("[paylink-webhook] رفض الطلب — Payload غير صالح أو فارغ.");
@@ -55,6 +60,25 @@ export async function POST(req: Request) {
     console.error("[paylink-webhook] رفض — payload v2 غير مكتمل (حقل أساسي مفقود).");
     return NextResponse.json({ error: "payload غير مكتمل" }, { status: 400 });
   }
+  if (
+    transactionNo.length > 200 ||
+    merchantOrderNumber.length > 100 ||
+    orderStatus.length > 50 ||
+    paymentType.length > 50 ||
+    apiVersion.length > 50
+  ) {
+    return NextResponse.json({ error: "payload غير صالح" }, { status: 400 });
+  }
+
+  const transactionLimit = await checkRateLimit({
+    request: req,
+    scope: "paylink:webhook:transaction",
+    identifier: transactionNo,
+    limit: 30,
+    windowSeconds: 600,
+  });
+  const transactionRejection = rateLimitRejectionResponse(transactionLimit);
+  if (transactionRejection) return transactionRejection;
 
   console.error(
     `[paylink-webhook] استُلم: transactionNo=${transactionNo} merchantOrderNumber=${merchantOrderNumber} ` +
