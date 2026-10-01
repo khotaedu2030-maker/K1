@@ -4,6 +4,7 @@ import { requireTeacher } from "@/lib/require-teacher";
 import { issueMakeupCreditIfEligible } from "@/lib/makeup-credits";
 import type { AttendanceReason } from "@/lib/policies";
 import { getRuntimeSettings } from "@/lib/platform-settings";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 type Entry = {
   childId: string;
@@ -24,21 +25,99 @@ type Entry = {
   absenceReason?: AttendanceReason;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseEntry(value: unknown): Entry | null {
+  if (!isRecord(value)) return null;
+
+  const childId = typeof value.childId === "string" ? value.childId.trim() : "";
+  if (!childId || childId.length > 100) return null;
+
+  if (!Array.isArray(value.subjectsCompleted) || value.subjectsCompleted.length > 10) return null;
+  const subjectsCompleted: string[] = [];
+  for (const subject of value.subjectsCompleted) {
+    if (typeof subject !== "string") return null;
+    const trimmedSubject = subject.trim();
+    if (!trimmedSubject || trimmedSubject.length > 100) return null;
+    subjectsCompleted.push(trimmedSubject);
+  }
+
+  if (!Number.isInteger(value.independenceRating) || (value.independenceRating as number) < 1 || (value.independenceRating as number) > 5) return null;
+  if (!Number.isInteger(value.focusRating) || (value.focusRating as number) < 1 || (value.focusRating as number) > 5) return null;
+  if (typeof value.tomorrowReadiness !== "string" || value.tomorrowReadiness.length > 200) return null;
+  if (typeof value.teacherNote !== "string" || value.teacherNote.length > 2000) return null;
+  if (typeof value.needsSpecialist !== "boolean") return null;
+
+  let specialistSubject: string | undefined;
+  if (value.specialistSubject !== undefined) {
+    if (typeof value.specialistSubject !== "string") return null;
+    specialistSubject = value.specialistSubject.trim();
+    if (specialistSubject.length > 200) return null;
+  }
+
+  if (typeof value.materialsReady !== "boolean") return null;
+  if (typeof value.tomorrowTestStatus !== "string" || value.tomorrowTestStatus.length > 500) return null;
+  if (typeof value.remainingReview !== "string" || value.remainingReview.length > 500) return null;
+  if (value.readinessStatus !== "ready" && value.readinessStatus !== "needs_light_review" && value.readinessStatus !== "needs_attention") return null;
+  if (typeof value.attended !== "boolean") return null;
+
+  let absenceReason: AttendanceReason | undefined;
+  if (!value.attended) {
+    if (value.absenceReason !== "excused" && value.absenceReason !== "unexcused" && value.absenceReason !== "exceptional_approved") return null;
+    absenceReason = value.absenceReason;
+  }
+
+  return {
+    childId,
+    subjectsCompleted,
+    independenceRating: value.independenceRating as number,
+    focusRating: value.focusRating as number,
+    tomorrowReadiness: value.tomorrowReadiness,
+    teacherNote: value.teacherNote,
+    needsSpecialist: value.needsSpecialist,
+    ...(specialistSubject !== undefined ? { specialistSubject } : {}),
+    materialsReady: value.materialsReady,
+    tomorrowTestStatus: value.tomorrowTestStatus,
+    remainingReview: value.remainingReview,
+    readinessStatus: value.readinessStatus,
+    attended: value.attended,
+    ...(absenceReason !== undefined ? { absenceReason } : {}),
+  };
+}
+
 // يحفظ تقرير الجلسة الكامل لكل طلاب الجلسة دفعة واحدة، ويفعّل التوصية تلقائيًا عند الحاجة.
 // هذا هو تنفيذ خطوة "Report" من منهجية KHOTA Method (Scan → Prioritize → Guide → Reinforce → Prepare → Report):
 // المعلم يوثّق الجلسة ويغلق الحلقة مع ولي الأمر، وحقول Tomorrow Ready أدناه هي خطوة "Prepare".
 // يتحقق أولًا أن الحساب المسجّل دخوله هو فعلًا معلم هذه الجلسة تحديدًا قبل أي كتابة.
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const sessionId = body?.sessionId as string | undefined;
-  const entries = (body?.entries ?? []) as Entry[];
+  if (declaredBodyExceeds(req, 64 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
 
-  if (!sessionId || entries.length === 0) {
+  const body = await req.json().catch(() => null);
+  const sessionId = isRecord(body) && typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+  if (!sessionId || sessionId.length > 100 || !isRecord(body) || !Array.isArray(body.entries) || body.entries.length < 1 || body.entries.length > 20) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  }
+
+  const parsedEntries = body.entries.map(parseEntry);
+  if (parsedEntries.some((entry) => entry === null)) {
+    return NextResponse.json({ error: "بيانات التقرير غير صحيحة" }, { status: 400 });
+  }
+  const entries = parsedEntries as Entry[];
+  const submittedChildIds = new Set(entries.map((entry) => entry.childId));
+  if (submittedChildIds.size !== entries.length) {
+    return NextResponse.json({ error: "لا يمكن تكرار الطالب في التقرير" }, { status: 400 });
   }
 
   const teacherCheck = await requireTeacher();
   if (!teacherCheck.ok) return teacherCheck.response;
+
+  const teacherLimit = await checkRateLimit({ request: req, scope: "session-report:teacher", identifier: teacherCheck.userId, limit: 10, windowSeconds: 600 });
+  const teacherRejection = rateLimitRejectionResponse(teacherLimit);
+  if (teacherRejection) return teacherRejection;
 
   const admin = createSupabaseAdminClient();
 
@@ -46,6 +125,30 @@ export async function POST(req: Request) {
   if (!session || session.teacher_id !== teacherCheck.teacherId) {
     return NextResponse.json({ error: "هذه الجلسة لا تخص حسابك" }, { status: 403 });
   }
+  if (session.status === "cancelled") {
+    return NextResponse.json({ error: "لا يمكن إرسال تقرير لجلسة ملغاة" }, { status: 409 });
+  }
+
+  const sessionLimit = await checkRateLimit({ request: req, scope: "session-report:session", identifier: sessionId, limit: 5, windowSeconds: 600 });
+  const sessionRejection = rateLimitRejectionResponse(sessionLimit);
+  if (sessionRejection) return sessionRejection;
+
+  const { data: activeSubscriptions, error: subscriptionsError } = await admin
+    .from("subscriptions")
+    .select("child_id")
+    .eq("cohort_id", session.cohort_id)
+    .eq("status", "active");
+  if (subscriptionsError) {
+    console.error("[session-report] active cohort lookup failed:", subscriptionsError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من طلاب المجموعة" }, { status: 503 });
+  }
+
+  const activeChildIds = new Set((activeSubscriptions ?? []).map((subscription) => subscription.child_id));
+  const sameChildSet = submittedChildIds.size === activeChildIds.size && [...submittedChildIds].every((childId) => activeChildIds.has(childId));
+  if (!sameChildSet) {
+    return NextResponse.json({ error: "تغيّرت قائمة طلاب المجموعة. حدّث الصفحة وحاول مرة أخرى." }, { status: 409 });
+  }
+
   const settings = await getRuntimeSettings();
   if (session.ends_at && Date.now() > new Date(session.ends_at).getTime() + settings.attendanceLockHours * 60 * 60 * 1000) {
     return NextResponse.json({ error: "انتهت مهلة تعديل حضور هذه الجلسة" }, { status: 409 });
