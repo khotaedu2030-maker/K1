@@ -3,17 +3,23 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { issueMakeupCreditIfEligible } from "@/lib/makeup-credits";
 import { requirePermission } from "@/lib/require-admin";
 import { requireTeacher } from "@/lib/require-teacher";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // إلغاء جلسة كاملة (وليس غياب طالب فردي) — من المعلم أو من إدارة خُطى. يمنح رصيد تعويض
 // لكل الطلاب المسجَّلين فعليًا حاليًا في هذه المجموعة، بلا أي سقف شهري (مسؤولية خُطى، وليست
 // غياب الطالب). آمن للاستدعاء المتكرر: قيد unique(source_session_id, child_id) + ignoreDuplicates
 // يمنعان إصدار رصيد مضاعف لو أُعيد الطلب.
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const sessionId = body?.sessionId as string | undefined;
-  const cancelledBy = body?.cancelledBy as "teacher" | "platform" | undefined;
+  if (declaredBodyExceeds(req, 4 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
 
-  if (!sessionId || (cancelledBy !== "teacher" && cancelledBy !== "platform")) return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const sessionId = typeof parsed.body?.sessionId === "string" ? parsed.body.sessionId.trim() : "";
+  const cancelledBy = parsed.body?.cancelledBy as "teacher" | "platform" | undefined;
+
+  if (!sessionId || sessionId.length > 100 || (cancelledBy !== "teacher" && cancelledBy !== "platform")) return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
 
   let actorUserId: string;
   let teacherId: string | null = null;
@@ -28,6 +34,10 @@ export async function POST(req: Request) {
     actorUserId = adminCheck.userId;
   }
 
+  const actorLimit = await checkRateLimit({ request: req, scope: "session:cancel:user", identifier: actorUserId, limit: 10, windowSeconds: 600 });
+  const actorRejection = rateLimitRejectionResponse(actorLimit);
+  if (actorRejection) return actorRejection;
+
   const admin = createSupabaseAdminClient();
 
   const { data: session } = await admin.from("sessions").select("id, teacher_id, cohort_id, status").eq("id", sessionId).maybeSingle();
@@ -36,6 +46,11 @@ export async function POST(req: Request) {
   if (cancelledBy === "teacher" && session.teacher_id !== teacherId) {
     return NextResponse.json({ error: "غير مصرَّح لك بإلغاء هذه الجلسة" }, { status: 403 });
   }
+
+  const sessionLimit = await checkRateLimit({ request: req, scope: "session:cancel:session", identifier: sessionId, limit: 3, windowSeconds: 600 });
+  const sessionRejection = rateLimitRejectionResponse(sessionLimit);
+  if (sessionRejection) return sessionRejection;
+
   if (session.status === "cancelled") {
     return NextResponse.json({ ok: true, alreadyCancelled: true });
   }

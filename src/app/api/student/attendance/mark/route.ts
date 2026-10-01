@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getActiveStudentSession } from "@/lib/student-mode";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // نسخة مخصَّصة لمساحة الطالب من تسجيل الحضور. لا نعيد استخدام /api/attendance/mark (نسخة ولي
 // الأمر) عمدًا — تلك تتحقق فقط أن الطفل تابع لولي الأمر، ما يسمح لطالب A بلمس بيانات أخيه B.
@@ -11,9 +12,18 @@ export async function POST(req: Request) {
   const session = await getActiveStudentSession();
   if (!session) return NextResponse.json({ error: "لا توجد جلسة طالب نشطة" }, { status: 401 });
 
-  const body = await req.json().catch(() => null);
-  const sessionRowId = body?.sessionId as string | undefined;
-  if (!sessionRowId) return NextResponse.json({ error: "sessionId مطلوب" }, { status: 400 });
+  if (declaredBodyExceeds(req, 4 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const sessionRowId = typeof parsed.body?.sessionId === "string" ? parsed.body.sessionId.trim() : "";
+  if (!sessionRowId || sessionRowId.length > 100) return NextResponse.json({ error: "sessionId مطلوب" }, { status: 400 });
+
+  const studentLimit = await checkRateLimit({ request: req, scope: "student:attendance:mark:session", identifier: session.sessionId, limit: 20, windowSeconds: 300 });
+  const studentRejection = rateLimitRejectionResponse(studentLimit);
+  if (studentRejection) return studentRejection;
 
   const admin = createSupabaseAdminClient();
 
@@ -39,6 +49,10 @@ export async function POST(req: Request) {
   if (!sessionRow || !enrolledCohortIds.has(sessionRow.cohort_id)) {
     return NextResponse.json({ error: "هذه الجلسة لا تخص مجموعتك" }, { status: 403 });
   }
+
+  const resourceLimit = await checkRateLimit({ request: req, scope: "student:attendance:mark:resource", identifier: sessionRowId, limit: 30, windowSeconds: 300 });
+  const resourceRejection = rateLimitRejectionResponse(resourceLimit);
+  if (resourceRejection) return resourceRejection;
 
   const now = new Date();
   const opensAt = new Date(new Date(sessionRow.starts_at).getTime() - 10 * 60 * 1000);

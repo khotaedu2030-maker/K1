@@ -1,15 +1,26 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { requireTeacher } from "@/lib/require-teacher";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // إنشاء أو تحديث "خطوة هذا الأسبوع". يقبل goalId لتحديث هدف قائم (حالة/تقدّم)،
 // أو بياناته الكاملة لإنشاء هدف جديد.
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
+  if (declaredBodyExceeds(req, 8 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
+  const parsed = await readJsonBodyLimited(req, 8 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const { goalId, childId, weekStart, title, description, category, status, progress } = body ?? {};
 
   const teacherCheck = await requireTeacher();
   if (!teacherCheck.ok) return teacherCheck.response;
+
+  const teacherLimit = await checkRateLimit({ request: req, scope: "goals:submit:teacher", identifier: teacherCheck.userId, limit: 30, windowSeconds: 600 });
+  const teacherRejection = rateLimitRejectionResponse(teacherLimit);
+  if (teacherRejection) return teacherRejection;
 
   const admin = createSupabaseAdminClient();
 
@@ -29,6 +40,10 @@ export async function POST(req: Request) {
       .eq("status", "active");
     const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacherCheck.teacherId);
     if (!belongsToTeacher) return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
+
+    const resourceLimit = await checkRateLimit({ request: req, scope: "goals:submit:student", identifier: existing.child_id, limit: 20, windowSeconds: 600 });
+    const resourceRejection = rateLimitRejectionResponse(resourceLimit);
+    if (resourceRejection) return resourceRejection;
 
     const patch: Record<string, unknown> = {};
     if (status) {
@@ -56,6 +71,10 @@ export async function POST(req: Request) {
     .eq("status", "active");
   const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacherCheck.teacherId);
   if (!belongsToTeacher) return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
+
+  const resourceLimit = await checkRateLimit({ request: req, scope: "goals:submit:student", identifier: childId, limit: 20, windowSeconds: 600 });
+  const resourceRejection = rateLimitRejectionResponse(resourceLimit);
+  if (resourceRejection) return resourceRejection;
 
   const { error } = await admin.from("weekly_goals").insert({
     child_id: childId,
