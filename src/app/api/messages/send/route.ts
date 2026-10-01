@@ -3,11 +3,16 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { authorizeMessageThreadAccess, THREAD_CLOSED_MESSAGE } from "@/lib/messaging-authorization";
 import { isQuietHoursNow, QUIET_HOURS_MESSAGE } from "@/lib/messaging-config";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // إرسال رسالة. لا يكفي أن تكون طرفًا أصليًا في المحادثة — authorizeMessageThreadAccess يعيد
 // التحقق من العلاقة الحالية فعليًا (ما زال ولي الأمر مالكًا للطفل / ما زال المعلم يدرّسه ضمن
 // اشتراك فعّال) في كل مرة، لا فقط عند إنشاء المحادثة.
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 8 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
   const body = await req.json().catch(() => null);
   const threadId = body?.threadId as string | undefined;
   const rawBody = body?.body as string | undefined;
@@ -23,9 +28,17 @@ export async function POST(req: Request) {
   } = await authed.auth.getUser();
   if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
 
+  const userLimit = await checkRateLimit({ request: req, scope: "messages:send:user", identifier: user.id, limit: 30, windowSeconds: 300 });
+  const userRejection = rateLimitRejectionResponse(userLimit);
+  if (userRejection) return userRejection;
+
   const auth = await authorizeMessageThreadAccess(user.id, threadId);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   if (!auth.canWrite) return NextResponse.json({ error: THREAD_CLOSED_MESSAGE }, { status: 409 });
+
+  const threadLimit = await checkRateLimit({ request: req, scope: "messages:send:thread", identifier: threadId, limit: 20, windowSeconds: 300 });
+  const threadRejection = rateLimitRejectionResponse(threadLimit);
+  if (threadRejection) return threadRejection;
 
   const admin = createSupabaseAdminClient();
   const { error } = await admin.from("messages").insert({

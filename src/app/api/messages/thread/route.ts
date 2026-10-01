@@ -1,21 +1,32 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // إنشاء (أو إيجاد) محادثة مع معلم طفل معيّن. الطفل والمجموعة يُختاران من قوائم تعرض فقط ما
 // يملكه ولي الأمر فعليًا — لكن هذا الـ route لا يثق بذلك، ويعيد التحقق الكامل من الصفر:
 // Parent (auth) → Child (ملكه) → اشتراك فعّال → Cohort → معلمها. لا بحث حر عن معلمين.
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 4 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
   const body = await req.json().catch(() => null);
-  const childId = body?.childId as string | undefined;
-  const cohortId = body?.cohortId as string | undefined;
-  if (!childId || !cohortId) return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  const childId = typeof body?.childId === "string" ? body.childId.trim() : "";
+  const cohortId = typeof body?.cohortId === "string" ? body.cohortId.trim() : "";
+  if (!childId || childId.length > 100 || !cohortId || cohortId.length > 100) {
+    return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  }
 
   const authed = await createSupabaseServerClient();
   const {
     data: { user },
   } = await authed.auth.getUser();
   if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+
+  const userLimit = await checkRateLimit({ request: req, scope: "messages:thread:user", identifier: user.id, limit: 10, windowSeconds: 600 });
+  const userRejection = rateLimitRejectionResponse(userLimit);
+  if (userRejection) return userRejection;
 
   const admin = createSupabaseAdminClient();
 

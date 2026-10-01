@@ -1,21 +1,32 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // حجز جلسة تعويضية برصيد قائم. الحماية من الاستخدام المزدوج (ضغط متكرر أو طلبات متزامنة)
 // تتم داخل دالة قاعدة البيانات public.redeem_makeup_credit عبر row-lock حقيقي (for update) —
 // وليس فقط بفحص الحالة هنا قبل الكتابة (Race Condition-safe بالتصميم).
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 4 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
   const body = await req.json().catch(() => null);
-  const creditId = body?.creditId as string | undefined;
-  const sessionId = body?.sessionId as string | undefined;
-  if (!creditId || !sessionId) return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  const creditId = typeof body?.creditId === "string" ? body.creditId.trim() : "";
+  const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : "";
+  if (!creditId || creditId.length > 100 || !sessionId || sessionId.length > 100) {
+    return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  }
 
   const authed = await createSupabaseServerClient();
   const {
     data: { user },
   } = await authed.auth.getUser();
   if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+
+  const userLimit = await checkRateLimit({ request: req, scope: "makeup:redeem:user", identifier: user.id, limit: 10, windowSeconds: 600 });
+  const userRejection = rateLimitRejectionResponse(userLimit);
+  if (userRejection) return userRejection;
 
   const admin = createSupabaseAdminClient();
 
@@ -29,6 +40,10 @@ export async function POST(req: Request) {
   if (!child || child.parent_id !== parent.id) {
     return NextResponse.json({ error: "هذا الرصيد لا يخص أبناءك" }, { status: 403 });
   }
+
+  const creditLimit = await checkRateLimit({ request: req, scope: "makeup:redeem:credit", identifier: creditId, limit: 5, windowSeconds: 600 });
+  const creditRejection = rateLimitRejectionResponse(creditLimit);
+  if (creditRejection) return creditRejection;
 
   const { error } = await admin.rpc("redeem_makeup_credit", {
     p_credit_id: creditId,

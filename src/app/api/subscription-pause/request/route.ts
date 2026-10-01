@@ -2,18 +2,27 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getRuntimeSettings } from "@/lib/platform-settings";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // طلب تجميد اشتراك — Workflow بحالة صريحة (requested → approved/rejected)، وليس تعديلًا مباشرًا
 // لولي الأمر على الاشتراك. كل قواعد الأهلية من src/lib/policies.ts فقط.
 export async function POST(req: Request) {
+  if (declaredBodyExceeds(req, 8 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
   const body = await req.json().catch(() => null);
-  const subscriptionId = body?.subscriptionId as string | undefined;
+  const subscriptionId = typeof body?.subscriptionId === "string" ? body.subscriptionId.trim() : "";
   const startDate = body?.startDate as string | undefined;
   const endDate = body?.endDate as string | undefined;
-  const reason = body?.reason as string | undefined;
+  const rawReason = body?.reason as string | undefined;
+  const reason = typeof rawReason === "string" ? rawReason.trim() : undefined;
 
-  if (!subscriptionId || !startDate || !endDate) {
+  if (!subscriptionId || subscriptionId.length > 100 || !startDate || !endDate) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  }
+  if (reason !== undefined && reason.length > 1000) {
+    return NextResponse.json({ error: "سبب التجميد طويل جدًا" }, { status: 400 });
   }
 
   const authed = await createSupabaseServerClient();
@@ -21,6 +30,10 @@ export async function POST(req: Request) {
     data: { user },
   } = await authed.auth.getUser();
   if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+
+  const userLimit = await checkRateLimit({ request: req, scope: "subscription-pause:request:user", identifier: user.id, limit: 5, windowSeconds: 3600 });
+  const userRejection = rateLimitRejectionResponse(userLimit);
+  if (userRejection) return userRejection;
 
   const admin = createSupabaseAdminClient();
 
@@ -35,6 +48,11 @@ export async function POST(req: Request) {
   if (!subscription || subscription.parent_id !== parent.id) {
     return NextResponse.json({ error: "هذا الاشتراك لا يخصك" }, { status: 403 });
   }
+
+  const subscriptionLimit = await checkRateLimit({ request: req, scope: "subscription-pause:request:subscription", identifier: subscriptionId, limit: 3, windowSeconds: 3600 });
+  const subscriptionRejection = rateLimitRejectionResponse(subscriptionLimit);
+  if (subscriptionRejection) return subscriptionRejection;
+
   if (subscription.status !== "active") {
     return NextResponse.json({ error: "لا يمكن تجميد اشتراك غير فعّال" }, { status: 409 });
   }
