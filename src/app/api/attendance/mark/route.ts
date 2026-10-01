@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // يسجّل حضور الطفل عند ضغط ولي الأمر على "دخول الجلسة الآن".
 // معرفة sessionId وحدها لا تكفي: نتحقق من السلسلة الكاملة قبل أي كتابة أو إرجاع meeting_url:
@@ -8,10 +9,16 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 //   فعليًا تابعة لهذا الـcohort (subscription.cohort_id === session.cohort_id) — وليس فقط
 //   "هل الطفل تابع لولي الأمر؟" (كانت هذه فجوة حقيقية: طفل صحيح + جلسة من مجموعة أخرى كانت تُقبل).
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const { sessionId, childId } = body ?? {};
+  if (declaredBodyExceeds(req, 4 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
 
-  if (!sessionId || !childId) {
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const sessionId = typeof parsed.body?.sessionId === "string" ? parsed.body.sessionId.trim() : "";
+  const childId = typeof parsed.body?.childId === "string" ? parsed.body.childId.trim() : "";
+
+  if (!sessionId || sessionId.length > 100 || !childId || childId.length > 100) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
   }
 
@@ -23,6 +30,10 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
   }
+
+  const userLimit = await checkRateLimit({ request: req, scope: "attendance:mark:user", identifier: user.id, limit: 20, windowSeconds: 300 });
+  const userRejection = rateLimitRejectionResponse(userLimit);
+  if (userRejection) return userRejection;
 
   const admin = createSupabaseAdminClient();
 
@@ -57,6 +68,10 @@ export async function POST(req: Request) {
   if (!session || !enrolledCohortIds.has(session.cohort_id)) {
     return NextResponse.json({ error: "هذه الجلسة لا تخص هذا الطالب" }, { status: 403 });
   }
+
+  const sessionLimit = await checkRateLimit({ request: req, scope: "attendance:mark:session", identifier: sessionId, limit: 10, windowSeconds: 300 });
+  const sessionRejection = rateLimitRejectionResponse(sessionLimit);
+  if (sessionRejection) return sessionRejection;
 
   const now = new Date();
   const opensAt = new Date(new Date(session.starts_at).getTime() - 10 * 60 * 1000);

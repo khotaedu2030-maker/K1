@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { requireTeacher } from "@/lib/require-teacher";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import {
   calculateIndependenceScore,
   validateIndependenceInputs,
@@ -11,7 +12,13 @@ import {
 // يكتب تقييمًا تأسيسيًا/دوريًا كاملًا (أكاديمي + استقلالية + نقطة تتبع تقدّم) كـ معاملة واحدة ذرّية
 // عبر public.submit_assessment() — إمّا تنجح الكتابات الثلاث معًا أو لا يُكتب شيء إطلاقًا.
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
+  if (declaredBodyExceeds(req, 16 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
+  const parsed = await readJsonBodyLimited(req, 16 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const {
     childId,
     assessmentType,
@@ -58,6 +65,10 @@ export async function POST(req: Request) {
   const teacherCheck = await requireTeacher();
   if (!teacherCheck.ok) return teacherCheck.response;
 
+  const teacherLimit = await checkRateLimit({ request: req, scope: "assessment:submit:teacher", identifier: teacherCheck.userId, limit: 20, windowSeconds: 600 });
+  const teacherRejection = rateLimitRejectionResponse(teacherLimit);
+  if (teacherRejection) return teacherRejection;
+
   const admin = createSupabaseAdminClient();
 
   const { data: link } = await admin
@@ -69,6 +80,10 @@ export async function POST(req: Request) {
   if (!belongsToTeacher) {
     return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
   }
+
+  const resourceLimit = await checkRateLimit({ request: req, scope: "assessment:submit:resource", identifier: `${childId}:${assessmentType}`, limit: 5, windowSeconds: 600 });
+  const resourceRejection = rateLimitRejectionResponse(resourceLimit);
+  if (resourceRejection) return resourceRejection;
 
   // ---------- الكتابة كمعاملة ذرّية واحدة ----------
   const { data: assessmentId, error } = await admin.rpc("submit_assessment", {

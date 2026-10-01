@@ -2,14 +2,20 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { authorizeMessageThreadAccess } from "@/lib/messaging-authorization";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // تحديد رسائل الطرف الآخر كمقروءة. القراءة مسموحة دائمًا لطرفَي المحادثة الأصليين حتى لو
 // انتهت العلاقة التعليمية (Historical Read) — لا نتحقق من canWrite هنا عمدًا، فقط أن المستخدم
 // طرف فعلي في هذه المحادثة تحديدًا.
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const threadId = body?.threadId as string | undefined;
-  if (!threadId) return NextResponse.json({ error: "threadId مطلوب" }, { status: 400 });
+  if (declaredBodyExceeds(req, 4 * 1024)) {
+    return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  }
+
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const threadId = typeof parsed.body?.threadId === "string" ? parsed.body.threadId.trim() : "";
+  if (!threadId || threadId.length > 100) return NextResponse.json({ error: "threadId مطلوب" }, { status: 400 });
 
   const authed = await createSupabaseServerClient();
   const {
@@ -17,8 +23,16 @@ export async function POST(req: Request) {
   } = await authed.auth.getUser();
   if (!user) return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
 
+  const userLimit = await checkRateLimit({ request: req, scope: "messages:read:user", identifier: user.id, limit: 60, windowSeconds: 300 });
+  const userRejection = rateLimitRejectionResponse(userLimit);
+  if (userRejection) return userRejection;
+
   const auth = await authorizeMessageThreadAccess(user.id, threadId);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  const threadLimit = await checkRateLimit({ request: req, scope: "messages:read:thread", identifier: threadId, limit: 30, windowSeconds: 300 });
+  const threadRejection = rateLimitRejectionResponse(threadLimit);
+  if (threadRejection) return threadRejection;
 
   const admin = createSupabaseAdminClient();
   const { error } = await admin
