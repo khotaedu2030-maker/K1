@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // حجز جلسة تعويضية برصيد قائم. الحماية من الاستخدام المزدوج (ضغط متكرر أو طلبات متزامنة)
 // تتم داخل دالة قاعدة البيانات public.redeem_makeup_credit عبر row-lock حقيقي (for update) —
@@ -11,7 +11,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const creditId = typeof body?.creditId === "string" ? body.creditId.trim() : "";
   const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : "";
   if (!creditId || creditId.length > 100 || !sessionId || sessionId.length > 100) {

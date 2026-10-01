@@ -9,7 +9,7 @@ import {
 } from "@/lib/level-test/data";
 import { chooseNextQuestion, getNextDifficulty, estimateLevel } from "@/lib/level-test/engine";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // الخادم هو مالك حالة الاختبار بالكامل. العميل يرسل الحد الأدنى فقط:
 // sessionId, questionId, selectedIndex — لا شيء آخر يُصدَّق منه.
@@ -20,7 +20,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 8 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   if (JSON.stringify(body ?? {}).length > 4096) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const sessionId = body?.sessionId as string | undefined;
   const submittedQuestionId = body?.questionId;

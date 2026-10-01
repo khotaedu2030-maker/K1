@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { STUDENT_SESSION_COOKIE, STUDENT_SESSION_TTL_HOURS } from "@/lib/student-mode-constants";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // الدخول لمساحة الطالب: يتحقق أن الطفل تابع فعلًا لولي الأمر المسجّل دخوله، ثم ينشئ
 // student_mode_sessions ويضع معرّفها في كوكي httpOnly — لا نضع childId نفسه في أي كوكي أو state عميل.
@@ -11,7 +11,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const childId = typeof body?.childId === "string" ? body.childId.trim() : "";
   if (!childId || childId.length > 100) return NextResponse.json({ error: "childId مطلوب" }, { status: 400 });
 

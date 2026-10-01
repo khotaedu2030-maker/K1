@@ -4,7 +4,7 @@ import { requireTeacher } from "@/lib/require-teacher";
 import { issueMakeupCreditIfEligible } from "@/lib/makeup-credits";
 import type { AttendanceReason } from "@/lib/policies";
 import { getRuntimeSettings } from "@/lib/platform-settings";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 type Entry = {
   childId: string;
@@ -96,7 +96,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 64 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const sessionId = isRecord(body) && typeof body.sessionId === "string" ? body.sessionId.trim() : "";
   if (!sessionId || sessionId.length > 100 || !isRecord(body) || !Array.isArray(body.entries) || body.entries.length < 1 || body.entries.length > 20) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });

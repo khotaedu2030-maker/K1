@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { normalizeSaudiStoredPhoneInput } from "@/lib/phone";
 import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-identity";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 export async function POST(req: Request) {
   if (declaredBodyExceeds(req, 16 * 1024)) {
@@ -29,7 +29,9 @@ export async function POST(req: Request) {
   const email = normalizeParentEmail(user.email ?? "");
   if (!email) return NextResponse.json({ error: "تعذّر تحديد البريد الإلكتروني" }, { status: 400 });
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 16 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const fullName = typeof body?.fullName === "string" ? body.fullName.trim() : "";
   const phone = typeof body?.phone === "string" ? normalizeSaudiStoredPhoneInput(body.phone) : null;
   if (fullName.length < 2) return NextResponse.json({ error: "اسم ولي الأمر مطلوب" }, { status: 400 });

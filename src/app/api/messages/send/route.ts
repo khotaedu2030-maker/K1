@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { authorizeMessageThreadAccess, THREAD_CLOSED_MESSAGE } from "@/lib/messaging-authorization";
 import { isQuietHoursNow, QUIET_HOURS_MESSAGE } from "@/lib/messaging-config";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // إرسال رسالة. لا يكفي أن تكون طرفًا أصليًا في المحادثة — authorizeMessageThreadAccess يعيد
 // التحقق من العلاقة الحالية فعليًا (ما زال ولي الأمر مالكًا للطفل / ما زال المعلم يدرّسه ضمن
@@ -13,7 +13,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   }
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 8 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const threadId = body?.threadId as string | undefined;
   const rawBody = body?.body as string | undefined;
 

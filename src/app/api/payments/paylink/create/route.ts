@@ -4,7 +4,7 @@ import { resolveParentContext } from "@/lib/pilot-parent";
 import { toPaylinkSaudiMobile } from "@/lib/phone";
 import { createPaylinkInvoice, getPaylinkInvoice, getPaylinkTransactionsByOrderNumber } from "@/lib/paylink";
 import { verifyAndActivatePaylinkPayment } from "@/lib/paylink-verify";
-import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
+import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -111,7 +111,9 @@ export async function POST(req: Request) {
   const parentRejection = rateLimitRejectionResponse(parentLimit);
   if (parentRejection) return parentRejection;
 
-  const body = await req.json().catch(() => null);
+  const parsed = await readJsonBodyLimited(req, 8 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "request_too_large" }, { status: 413 });
+  const body = parsed.body;
   const subscriptionId = typeof body?.subscriptionId === "string" ? body.subscriptionId.trim() : "";
   if (!subscriptionId || subscriptionId.length > 100) {
     return NextResponse.json({ error: "subscriptionId مطلوب" }, { status: 400 });
