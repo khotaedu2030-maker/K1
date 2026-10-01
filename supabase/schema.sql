@@ -187,6 +187,7 @@ create table if not exists recommendations(
   id uuid primary key default gen_random_uuid(),
   child_id uuid not null references children(id) on delete cascade,
   teacher_id uuid references teachers(id),
+  source_session_id uuid references sessions(id) on delete set null,
   subject text,
   reason text not null,
   status text default 'open' check(status in('open','actioned','dismissed')),
@@ -195,6 +196,7 @@ create table if not exists recommendations(
 
 create table if not exists premium_requests(
   id uuid primary key default gen_random_uuid(),
+  source_recommendation_id uuid references recommendations(id) on delete set null,
   product text not null,
   full_name text,
   phone text not null,
@@ -222,6 +224,7 @@ create table if not exists daily_tasks(
   id uuid primary key default gen_random_uuid(),
   child_id uuid not null references children(id) on delete cascade,
   session_id uuid references sessions(id) on delete set null,
+  source_key text,
   title text not null,
   subject text,
   status text not null default 'pending' check(status in('pending','done','needs_review')),
@@ -345,6 +348,15 @@ on public.daily_tasks(child_id, created_at);
 
 create index if not exists idx_recommendations_child_created
 on public.recommendations(child_id, created_at);
+
+create unique index if not exists uq_recommendations_source_session_child
+on public.recommendations(source_session_id, child_id);
+
+create unique index if not exists uq_premium_requests_source_recommendation
+on public.premium_requests(source_recommendation_id);
+
+create unique index if not exists uq_daily_tasks_session_child_source
+on public.daily_tasks(session_id, child_id, source_key);
 
 create index if not exists idx_daily_pulse_reports_child_created
 on public.daily_pulse_reports(child_id, created_at);
@@ -986,6 +998,90 @@ $$;
 revoke all on function public.consume_api_rate_limit(text, integer, integer)
 from public, anon, authenticated;
 grant execute on function public.consume_api_rate_limit(text, integer, integer)
+to service_role;
+
+create or replace function public.request_recommendation_session_atomic(
+  p_recommendation_id uuid,
+  p_parent_id uuid
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_child_parent_id uuid;
+  v_child_name text;
+  v_full_name text;
+  v_phone text;
+  v_subject text;
+  v_reason text;
+  v_status text;
+  v_request_id uuid;
+begin
+  select
+    c.parent_id,
+    c.first_name,
+    p.full_name,
+    p.phone,
+    r.subject,
+    r.reason,
+    r.status
+  into
+    v_child_parent_id,
+    v_child_name,
+    v_full_name,
+    v_phone,
+    v_subject,
+    v_reason,
+    v_status
+  from public.recommendations as r
+  left join public.children as c on c.id = r.child_id
+  left join public.parents as p on p.id = c.parent_id
+  where r.id = p_recommendation_id
+  for update of r;
+
+  if not found then
+    raise exception 'recommendation_not_found' using errcode = 'P0001';
+  end if;
+
+  if v_child_parent_id is distinct from p_parent_id then
+    raise exception 'recommendation_not_owned' using errcode = 'P0001';
+  end if;
+
+  if v_status is distinct from 'open' then
+    raise exception 'recommendation_not_open' using errcode = 'P0001';
+  end if;
+
+  insert into public.premium_requests (
+    product,
+    full_name,
+    phone,
+    goal,
+    status,
+    source_recommendation_id
+  )
+  values (
+    'motabaa',
+    v_full_name,
+    v_phone,
+    'جلسة تقوية فردية لـ' || case when coalesce(v_child_name, '') <> '' then ' ' || v_child_name else '' end
+      || ' — ' || coalesce(v_subject, '') || ': ' || v_reason,
+    'new',
+    p_recommendation_id
+  )
+  returning id into v_request_id;
+
+  update public.recommendations
+  set status = 'actioned'
+  where id = p_recommendation_id;
+
+  return v_request_id;
+end;
+$$;
+revoke all on function public.request_recommendation_session_atomic(uuid, uuid)
+from public, anon, authenticated;
+grant execute on function public.request_recommendation_session_atomic(uuid, uuid)
 to service_role;
 
 alter default privileges for role postgres in schema public

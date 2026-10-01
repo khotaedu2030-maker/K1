@@ -187,10 +187,14 @@ export async function POST(req: Request) {
       subject: e.specialistSubject ?? null,
       reason: e.teacherNote || "لاحظ المعلم أن الطالب يحتاج دعمًا إضافيًا في هذه الجلسة.",
       status: "open",
+      source_session_id: sessionId,
     }));
 
   if (recommendationRows.length > 0) {
-    const { error: recError } = await admin.from("recommendations").insert(recommendationRows);
+    const { error: recError } = await admin.from("recommendations").upsert(recommendationRows, {
+      onConflict: "source_session_id,child_id",
+      ignoreDuplicates: true,
+    });
     if (recError) {
       console.error("[session-report] recommendation save failed:", recError.message);
       return NextResponse.json({ error: "تعذّر حفظ توصية الجلسة" }, { status: 500 });
@@ -247,17 +251,20 @@ export async function POST(req: Request) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().slice(0, 10);
 
-  const taskRows: { child_id: string; session_id: string; title: string; subject: string | null; status: string; due_date: string | null }[] = [];
+  const taskRows: { child_id: string; session_id: string; source_key: string; title: string; subject: string | null; status: string; due_date: string | null }[] = [];
   for (const e of entries) {
     for (const subject of e.subjectsCompleted) {
-      taskRows.push({ child_id: e.childId, session_id: sessionId, title: `مراجعة ${subject}`, subject, status: "done", due_date: null });
+      taskRows.push({ child_id: e.childId, session_id: sessionId, source_key: `subject:${subject.toLowerCase()}`, title: `مراجعة ${subject}`, subject, status: "done", due_date: null });
     }
     if (e.remainingReview) {
-      taskRows.push({ child_id: e.childId, session_id: sessionId, title: e.remainingReview, subject: null, status: "pending", due_date: tomorrowStr });
+      taskRows.push({ child_id: e.childId, session_id: sessionId, source_key: "remaining-review", title: e.remainingReview, subject: null, status: "pending", due_date: tomorrowStr });
     }
   }
   if (taskRows.length > 0) {
-    await admin.from("daily_tasks").insert(taskRows); // لا نُفشل الطلب كله إن تعذّر هذا الجزء الثانوي
+    await admin.from("daily_tasks").upsert(taskRows, {
+      onConflict: "session_id,child_id,source_key",
+      ignoreDuplicates: true,
+    }); // لا نُفشل الطلب كله إن تعذّر هذا الجزء الثانوي
   }
 
   return NextResponse.json({ ok: true, recommendationsCreated: recommendationRows.length });

@@ -5,8 +5,7 @@ import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse } from 
 
 // طلب "جلسة تقوية فردية مركّزة" من بطاقة التوصية.
 // يتحقق أن التوصية فعلًا تخص طفل ولي الأمر المسجّل دخوله، ثم:
-//  1) يسجّل طلبًا في premium_requests (تتابعه لوحة الإدارة ماليًا وتشغيليًا)
-//  2) يحوّل حالة التوصية إلى actioned حتى لا تتكرر
+// تُسجَّل premium_requests وتتحول حالة التوصية إلى actioned ذريًا داخل قاعدة البيانات.
 export async function POST(req: Request) {
   if (declaredBodyExceeds(req, 4 * 1024)) {
     return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
@@ -51,27 +50,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "تم التعامل مع هذه التوصية مسبقًا" }, { status: 409 });
   }
 
-  const childName = (recommendation as any).children?.first_name ?? "";
-
-  const { error: insertError } = await admin.from("premium_requests").insert({
-    product: "motabaa",
-    full_name: parent.full_name,
-    phone: parent.phone,
-    goal: `جلسة تقوية فردية لـ${childName ? " " + childName : ""} — ${recommendation.subject ?? ""}: ${recommendation.reason}`,
-    status: "new",
+  const { error: requestError } = await admin.rpc("request_recommendation_session_atomic", {
+    p_recommendation_id: recommendationId,
+    p_parent_id: parent.id,
   });
-  if (insertError) {
-    console.error("[recommendations] create failed:", insertError.message);
+  if (requestError) {
+    if (requestError.message.includes("recommendation_not_open")) {
+      return NextResponse.json({ error: "تم التعامل مع هذه التوصية مسبقًا" }, { status: 409 });
+    }
+    if (requestError.message.includes("recommendation_not_owned") || requestError.message.includes("recommendation_not_found")) {
+      return NextResponse.json({ error: "توصية غير موجودة أو لا تخص حسابك" }, { status: 403 });
+    }
+    console.error("[recommendations] atomic request failed:", requestError.message);
     return NextResponse.json({ error: "تعذّر حفظ الطلب" }, { status: 500 });
-  }
-
-  const { error: updateError } = await admin
-    .from("recommendations")
-    .update({ status: "actioned" })
-    .eq("id", recommendationId);
-  if (updateError) {
-    console.error("[recommendations] update failed:", updateError.message);
-    return NextResponse.json({ error: "تعذّر تحديث الطلب" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });
