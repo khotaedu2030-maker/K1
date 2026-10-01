@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "هذه الجلسة لا تخص مجموعتك" }, { status: 403 });
   }
 
-  const resourceLimit = await checkRateLimit({ request: req, scope: "student:attendance:mark:resource", identifier: sessionRowId, limit: 10, windowSeconds: 300 });
+  const resourceLimit = await checkRateLimit({ request: req, scope: "student:attendance:mark:resource", identifier: sessionRowId, limit: 30, windowSeconds: 300 });
   const resourceRejection = rateLimitRejectionResponse(resourceLimit);
   if (resourceRejection) return resourceRejection;
 
