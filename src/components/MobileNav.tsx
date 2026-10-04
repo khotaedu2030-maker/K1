@@ -3,8 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { NAV_LINKS } from "./nav-links";
+import type { AuthState } from "./Header";
 
-export default function MobileNav() {
+export default function MobileNav({
+  auth,
+  loggingOut,
+  onLogout,
+}: {
+  auth: AuthState;
+  loggingOut: boolean;
+  onLogout: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -64,12 +73,36 @@ export default function MobileNav() {
           ))}
         </nav>
         <div className="mobile-nav-actions">
-          <Link href="/login" className="btn outline" onClick={close}>
-            تسجيل الدخول
-          </Link>
-          <Link href="/start" className="btn" onClick={close}>
-            ابدأ مع خُطى
-          </Link>
+          {auth.status === "authenticated" && (
+            <>
+              {auth.dashboardHref && (
+                <Link href={auth.dashboardHref} className="btn outline" onClick={close}>
+                  لوحة الحساب
+                </Link>
+              )}
+              <button
+                type="button"
+                className="btn"
+                disabled={loggingOut}
+                onClick={() => {
+                  close();
+                  onLogout();
+                }}
+              >
+                {loggingOut ? "جارٍ تسجيل الخروج..." : "تسجيل الخروج"}
+              </button>
+            </>
+          )}
+          {auth.status === "guest" && (
+            <>
+              <Link href="/login" className="btn outline" onClick={close}>
+                تسجيل الدخول
+              </Link>
+              <Link href="/start" className="btn" onClick={close}>
+                ابدأ مع خُطى
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </div>
