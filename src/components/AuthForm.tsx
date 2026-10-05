@@ -4,23 +4,6 @@ import { Suspense, useEffect, useState, type ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-// لا نعرض رسائل Supabase/الخادم الخام للمستخدم أبدًا — نُترجم المعروف منها لعربية واضحة،
-// ونستخدم رسالة عامة مطمئنة لأي شيء آخر.
-function friendlyAuthError(raw: string | undefined | null): string {
-  if (!raw) return "تعذّر إكمال العملية الآن. حاول مرة أخرى.";
-  const lower = raw.toLowerCase();
-  if (lower.includes("rate limit") || lower.includes("too many")) {
-    return "محاولات كثيرة متتالية — انتظر قليلًا ثم أعد المحاولة.";
-  }
-  if (lower.includes("invalid") && (lower.includes("otp") || lower.includes("token") || lower.includes("code"))) {
-    return "رمز التحقق غير صحيح.";
-  }
-  if (lower.includes("expired")) {
-    return "انتهت صلاحية الرمز، اطلب رمزًا جديدًا.";
-  }
-  return "تعذّر إكمال العملية الآن. حاول مرة أخرى.";
-}
-
 // لا نسمح بإعادة توجيه إلا لمسار داخلي فعلي يبدأ بـ / — يمنع Open Redirect عبر next مُعدَّل
 // (// أو http:// أو https:// أو أي رابط خارجي).
 function safeNextPath(raw: string | null): string | null {
@@ -58,13 +41,16 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" | "signup" }) {
 
   useEffect(() => {
     if (mode !== "signup") return;
-    try {
-      const pending = JSON.parse(sessionStorage.getItem("khota_pending_enrollment") ?? "null") as { parentName?: string; phone?: string } | null;
-      if (pending?.parentName) setParentName(pending.parentName);
-      if (pending?.phone) setPhone(pending.phone);
-    } catch {
-      // Pending enrollment data is optional and never trusted as identity.
-    }
+    const timeout = window.setTimeout(() => {
+      try {
+        const pending = JSON.parse(sessionStorage.getItem("khota_pending_enrollment") ?? "null") as { parentName?: string; phone?: string } | null;
+        if (pending?.parentName) setParentName(pending.parentName);
+        if (pending?.phone) setPhone(pending.phone);
+      } catch {
+        // Pending enrollment data is optional and never trusted as identity.
+      }
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [mode]);
 
   function normalizedEmail() {
@@ -80,14 +66,22 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" | "signup" }) {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp(
-      mode === "signup"
-        ? { email: value, options: { shouldCreateUser: true } }
-        : { email: value, options: { shouldCreateUser: false } }
-    );
+    const response = await fetch("/api/auth/otp/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: value, mode }),
+    }).catch(() => null);
+    const responseData = await response?.json().catch(() => null);
     setLoading(false);
-    if (error) {
-      setError(mode === "parent" ? "تعذّر تسجيل الدخول بهذا البريد. إن لم يكن لديك حساب، أنشئ حسابًا." : friendlyAuthError(error.message));
+    if (!response?.ok) {
+      const errorMessage = responseData?.error as string | undefined;
+      if (response?.status === 429 && errorMessage) {
+        setError(errorMessage);
+      } else if (mode === "parent") {
+        setError("تعذّر تسجيل الدخول بهذا البريد. إن لم يكن لديك حساب، أنشئ حسابًا.");
+      } else {
+        setError("تعذّر إرسال رمز التحقق.");
+      }
       return;
     }
     setStep("otp");
@@ -98,19 +92,26 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" | "signup" }) {
     setLoading(true);
 
     const value = normalizedEmail();
-    const { data, error } = await supabase.auth.verifyOtp({
-      email: value,
-      token: code,
-      type: "email",
-    });
+    const response = await fetch("/api/auth/otp/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: value, code }),
+    }).catch(() => null);
 
-    if (error || !data.user) {
+    if (!response?.ok) {
+      const responseData = await response?.json().catch(() => null);
       setLoading(false);
-      setError(friendlyAuthError(error?.message));
+      if (response?.status === 401 || response?.status === 429) {
+        setError(responseData?.error ?? "رمز التحقق غير صحيح أو منتهي الصلاحية.");
+      } else {
+        setError("تعذّر التحقق من الرمز الآن. حاول مرة أخرى.");
+      }
       return;
     }
 
+    // Server-side verifyOtp sets the normal Supabase SSR auth cookies; tokens never enter client JSON.
     const roleRes = await fetch("/api/auth/resolve-role", { method: "POST" }).catch(() => null);
+
     if (!roleRes || !roleRes.ok) {
       await supabase.auth.signOut();
       setLoading(false);
