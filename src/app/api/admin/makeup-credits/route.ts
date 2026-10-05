@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -9,7 +10,10 @@ export async function POST(req: Request) {
   const adminCheck = await requirePermission("makeup.manage");
   if (!adminCheck.ok) return adminCheck.response;
 
-  const body = await req.json().catch(() => null);
+  if (declaredBodyExceeds(req, 16 * 1024)) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const parsed = await readJsonBodyLimited(req, 16 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const op = body?.op as "grant" | "cancel" | undefined;
   const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
 

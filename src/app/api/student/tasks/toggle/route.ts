@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { getActiveStudentSession } from "@/lib/student-mode";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -8,7 +9,10 @@ export async function POST(req: Request) {
   const session = await getActiveStudentSession();
   if (!session) return NextResponse.json({ error: "لا توجد جلسة طالب نشطة" }, { status: 401 });
 
-  const body = await req.json().catch(() => null);
+  if (declaredBodyExceeds(req, 4 * 1024)) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const taskId = body?.taskId as string | undefined;
   if (!taskId) return NextResponse.json({ error: "taskId مطلوب" }, { status: 400 });
 

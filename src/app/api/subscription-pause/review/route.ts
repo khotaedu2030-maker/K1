@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { requirePermission } from "@/lib/require-admin";
 
@@ -6,13 +7,16 @@ import { requirePermission } from "@/lib/require-admin";
 // ينفَّذان كمعاملة ذرّية واحدة عبر public.review_subscription_pause — لا حالة وسيطة ممكنة
 // حيث الطلب "معتمَد" لكن تاريخ التجديد لم يُمدَّد بعد.
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
+  const adminCheck = await requirePermission("subscription.review");
+  if (!adminCheck.ok) return adminCheck.response;
+
+  if (declaredBodyExceeds(req, 4 * 1024)) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const pauseId = body?.pauseId as string | undefined;
   const decision = body?.decision as "approved" | "rejected" | undefined;
   if (!pauseId || !decision) return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
-
-  const adminCheck = await requirePermission("subscription.review");
-  if (!adminCheck.ok) return adminCheck.response;
 
   const admin = createSupabaseAdminClient();
 
