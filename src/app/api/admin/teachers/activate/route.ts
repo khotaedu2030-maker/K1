@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -11,7 +12,10 @@ export async function POST(req: Request) {
   const adminCheck = await requirePermission("teacher.manage");
   if (!adminCheck.ok) return adminCheck.response;
 
-  const body = await req.json().catch(() => null);
+  if (declaredBodyExceeds(req, 4 * 1024)) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const parsed = await readJsonBodyLimited(req, 4 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const applicationId = typeof body?.applicationId === "string" ? body.applicationId.trim() : "";
   if (!applicationId) return NextResponse.json({ error: "معرّف الطلب مطلوب" }, { status: 400 });
 

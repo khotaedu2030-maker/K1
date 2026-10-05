@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -7,7 +8,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 export async function POST(req: Request) {
   const check = await requirePermission("admin.manage");
   if (!check.ok) return check.response;
-  const body = await req.json().catch(() => null);
+  if (declaredBodyExceeds(req, 8 * 1024)) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const parsed = await readJsonBodyLimited(req, 8 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const targetAdminId = typeof body?.targetAdminId === "string" ? body.targetAdminId.trim() : "";
   const active = body?.active === true;
   const reason = typeof body?.reason === "string" ? body.reason.trim() : "";

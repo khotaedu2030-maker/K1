@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -79,7 +80,10 @@ export async function GET() {
 export async function POST(req: Request) {
   const check = await requirePermission("cohort.manage");
   if (!check.ok) return check.response;
-  const body = await req.json().catch(() => null);
+  if (declaredBodyExceeds(req, 16 * 1024)) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const parsed = await readJsonBodyLimited(req, 16 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   if (body?.action === "complete") {
     const cycleId = typeof body?.cycleId === "string" ? body.cycleId.trim() : "";
     if (!cycleId) return NextResponse.json({ error: "معرّف الدورة مطلوب" }, { status: 400 });
@@ -134,7 +138,10 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const check = await requirePermission("cohort.manage");
   if (!check.ok) return check.response;
-  const body = await req.json().catch(() => null);
+  if (declaredBodyExceeds(req, 16 * 1024)) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const parsed = await readJsonBodyLimited(req, 16 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const cycleId = typeof body?.cycleId === "string" ? body.cycleId.trim() : "";
   if (!cycleId) return NextResponse.json({ error: "معرّف الدورة مطلوب" }, { status: 400 });
   const admin = createSupabaseAdminClient();

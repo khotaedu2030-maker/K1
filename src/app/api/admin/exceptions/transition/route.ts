@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -7,7 +8,10 @@ const VALID_ACTIONS = new Set(["assign", "status", "resolve"]);
 
 export async function POST(req: Request) {
   const check = await requirePermission("exception.manage"); if (!check.ok) return check.response;
-  const body = await req.json().catch(() => null);
+  if (declaredBodyExceeds(req, 16 * 1024)) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const parsed = await readJsonBodyLimited(req, 16 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const exceptionId = typeof body?.exceptionId === "string" ? body.exceptionId.trim() : "";
   const action = typeof body?.action === "string" ? body.action : "";
   const assignedTo = typeof body?.assignedTo === "string" ? body.assignedTo.trim() : "";

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -8,7 +9,10 @@ const VALID_ROLES = new Set(["super_admin", "operations_manager", "finance_admin
 export async function POST(req: Request) {
   const check = await requirePermission("admin.manage");
   if (!check.ok) return check.response;
-  const body = await req.json().catch(() => null);
+  if (declaredBodyExceeds(req, 8 * 1024)) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const parsed = await readJsonBodyLimited(req, 8 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
+  const body = parsed.body;
   const targetAdminId = typeof body?.targetAdminId === "string" ? body.targetAdminId.trim() : "";
   const newRole = typeof body?.newRole === "string" ? body.newRole : "";
   const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
