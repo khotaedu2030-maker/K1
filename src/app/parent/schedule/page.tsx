@@ -9,6 +9,7 @@ import UpcomingSessions, { type SessionRow } from "./UpcomingSessions";
 import { resolveParentContext } from "@/lib/pilot-parent";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { formatDaysList, formatSessionCount } from "@/lib/plan-display";
+import { firstRelation } from "@/lib/supabase-relation";
 
 // حدود الأسبوع الحالي بتوقيت الرياض (UTC+3 بلا توقيت صيفي — إزاحة ثابتة دائمًا في السعودية).
 function riyadhWeekStartUTC(now: Date): Date {
@@ -69,13 +70,15 @@ export default async function P() {
 
   // ملخّص "الخطة الحالية" — من أول اشتراك فعّال يحمل بيانات خطة كاملة، لعرض متّسق مع بقية
   // الرحلة (نفس الحقول: الخطة/الأيام/عدد الجلسات/السعر) بلا أي تغيير في منطق الاشتراكات نفسه.
-  const firstSubWithPlan: any = (subs ?? []).find((s: any) => s.plans);
+  const firstSubWithPlan = (subs ?? []).find((subscription) => firstRelation(subscription.plans));
+  const plan = firstRelation(firstSubWithPlan?.plans);
+  const planCohort = firstRelation(firstSubWithPlan?.cohorts);
   const currentPlan = firstSubWithPlan
     ? {
-        name: firstSubWithPlan.plans?.name ?? null,
-        days: firstSubWithPlan.cohorts?.days_of_week ? formatDaysList(firstSubWithPlan.cohorts.days_of_week as number[]) : null,
-        sessionsPerMonth: firstSubWithPlan.plans?.sessions_per_month ?? null,
-        priceSar: firstSubWithPlan.plans?.price_sar ?? null,
+        name: plan?.name ?? null,
+        days: planCohort?.days_of_week ? formatDaysList(planCohort.days_of_week as number[]) : null,
+        sessionsPerMonth: plan?.sessions_per_month ?? null,
+        priceSar: plan?.price_sar ?? null,
       }
     : null;
 
@@ -110,15 +113,15 @@ export default async function P() {
   // /api/payment/confirm)، بل حماية إضافية بسيطة بمفتاح واضح (cohort_id + starts_at) تحسبًا
   // لأي بيانات قديمة لم تشملها Migration التنظيف، أو أي مصدر تكرار مستقبلي غير متوقَّع.
   const seen = new Set<string>();
-  const sessions = (rawSessions ?? []).filter((s: any) => {
+  const sessions = (rawSessions ?? []).filter((s) => {
     const key = `${s.cohort_id}:${s.starts_at}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 
-  const upcoming = sessions.filter((s: any) => s.status === "scheduled" && new Date(s.starts_at) >= now);
-  const nextRow: any = upcoming[0] ?? null;
+  const upcoming = sessions.filter((s) => s.status === "scheduled" && new Date(s.starts_at) >= now);
+  const nextRow = upcoming[0] ?? null;
 
   const nextSession: NextSession | null = nextRow
     ? {
@@ -129,19 +132,19 @@ export default async function P() {
           const cid = childByCohort.get(nextRow.cohort_id);
           return cid ? childName.get(cid) ?? null : null;
         })(),
-        programTitle: nextRow.cohorts?.title ?? null,
+        programTitle: firstRelation(nextRow.cohorts)?.title ?? null,
         startsAt: nextRow.starts_at,
         endsAt: nextRow.ends_at,
         meetingUrl: nextRow.meeting_url,
       }
     : null;
 
-  const upcomingRows: SessionRow[] = upcoming.slice(1).map((s: any) => {
+  const upcomingRows: SessionRow[] = upcoming.slice(1).map((s) => {
     const cid = childByCohort.get(s.cohort_id);
     return {
       id: s.id,
       startsAt: s.starts_at,
-      programTitle: s.cohorts?.title ?? null,
+      programTitle: firstRelation(s.cohorts)?.title ?? null,
       childName: cid ? childName.get(cid) ?? null : null,
       status: s.status,
     };
@@ -150,20 +153,20 @@ export default async function P() {
   // ---------- ملخص هذا الأسبوع (بيانات حقيقية فقط) ----------
   const weekStart = riyadhWeekStartUTC(now);
   const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const weekSessions = sessions.filter((s: any) => {
+  const weekSessions = sessions.filter((s) => {
     const t = new Date(s.starts_at);
     return t >= weekStart && t < weekEnd;
   });
 
   let weeklyStats = null;
   if (weekSessions.length > 0) {
-    const weekSessionIds = weekSessions.map((s: any) => s.id);
+    const weekSessionIds = weekSessions.map((s) => s.id);
     const { data: weekAttendance } = await admin
       .from("attendance")
       .select("session_id, status")
       .in("session_id", weekSessionIds);
     const attendedCount = (weekAttendance ?? []).filter((a) => a.status === "present").length;
-    const upcomingThisWeek = weekSessions.filter((s: any) => s.status === "scheduled" && new Date(s.starts_at) >= now).length;
+    const upcomingThisWeek = weekSessions.filter((s) => s.status === "scheduled" && new Date(s.starts_at) >= now).length;
     weeklyStats = { totalSessions: weekSessions.length, attended: attendedCount, upcoming: upcomingThisWeek };
   }
 
@@ -204,10 +207,10 @@ export default async function P() {
         .limit(10)
     : { data: [] };
 
-  const eligibleList = (eligibleSessions ?? []).map((s: any) => ({
+  const eligibleList = (eligibleSessions ?? []).map((s) => ({
     id: s.id,
     startsAt: s.starts_at,
-    title: s.cohorts?.title ?? "جلسة تعويضية",
+    title: firstRelation(s.cohorts)?.title ?? "جلسة تعويضية",
   }));
 
   return (

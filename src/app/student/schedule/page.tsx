@@ -3,6 +3,7 @@ import StudentShell from "@/components/StudentShell";
 import { getActiveStudentSession } from "@/lib/student-mode";
 import { getToneLevel } from "@/lib/grade-config";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { firstRelation } from "@/lib/supabase-relation";
 
 const statusLabel: Record<string, string> = {
   scheduled: "قادمة",
@@ -46,7 +47,7 @@ export default async function P() {
         </div>
       )}
 
-      {(sessions ?? []).map((s: any) => (
+      {(sessions ?? []).map((s) => (
         <div className="student-card" key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <b style={{ fontSize: junior ? 18 : 15 }}>
@@ -54,8 +55,8 @@ export default async function P() {
             </b>
             <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
               {new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
-              {!junior && s.cohorts?.title ? ` • ${s.cohorts.title}` : ""}
-              {!junior && s.cohorts?.teachers?.full_name ? ` • ${s.cohorts.teachers.full_name}` : ""}
+              {!junior && firstRelation(s.cohorts)?.title ? ` • ${firstRelation(s.cohorts)?.title}` : ""}
+              {!junior && firstRelation(firstRelation(s.cohorts)?.teachers)?.full_name ? ` • ${firstRelation(firstRelation(s.cohorts)?.teachers)?.full_name}` : ""}
             </p>
           </div>
           <span className="badge">{statusLabel[s.status] ?? s.status}</span>

@@ -53,6 +53,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
   }
 
+  const cleanParentName = String(parentName).trim();
+  const cleanChildName = String(childName).trim();
+  if (cleanParentName.length < 2 || cleanParentName.length > 100 || cleanChildName.length < 2 || cleanChildName.length > 80) {
+    return NextResponse.json({ error: "تحقق من اسم ولي الأمر واسم الطفل" }, { status: 400 });
+  }
+
   // Server-side validation/normalization فعلي — لا نعتمد على أن العميل التزم بالتطبيع فعليًا
   // (التعليقات القديمة كانت تفترض ذلك بلا فرض حقيقي). نقبل فقط 05XXXXXXXX أو +9665XXXXXXXX،
   // ونُوحِّد دائمًا لصيغة التخزين +9665XXXXXXXX قبل أي استخدام لاحق — بحث/تعارض/إدراج.
@@ -237,7 +243,7 @@ export async function POST(req: Request) {
         // لا صف بهذا البريد ولا بهذا الجوال ولا بهذا الحساب إطلاقًا — إنشاء مباشر.
         const { data: newParent, error: parentError } = await supabase
           .from("parents")
-          .insert({ user_id: user.id, full_name: parentName, phone: normalizedPhone, email })
+          .insert({ user_id: user.id, full_name: cleanParentName, phone: normalizedPhone, email })
           .select("id")
           .single();
         if (parentError) {
@@ -249,9 +255,21 @@ export async function POST(req: Request) {
     }
   }
 
+  // المصدر النهائي للملف هو ما أكّده صاحب الجلسة في النموذج. يحدث أيضًا للصفوف القديمة
+  // التي رُبطت للتو بالبريد/الجوال، حتى لا يبقى اسم قديم أو مشوّه ظاهرًا في اللوحة.
+  const { error: profileError } = await supabase
+    .from("parents")
+    .update({ full_name: cleanParentName, phone: normalizedPhone, email })
+    .eq("id", parent.id)
+    .eq("user_id", user.id);
+  if (profileError) {
+    console.error(`[enroll] فشل تحديث ملف ولي الأمر ${parent.id}:`, profileError.message);
+    return NextResponse.json({ error: "تعذّر تحديث بيانات ولي الأمر" }, { status: 500 });
+  }
+
   const { data: child, error: childError } = await supabase
     .from("children")
-    .insert({ parent_id: parent.id, first_name: childName, grade: gradeNumber })
+    .insert({ parent_id: parent.id, first_name: cleanChildName, grade: gradeNumber })
     .select("id")
     .single();
   if (childError) {

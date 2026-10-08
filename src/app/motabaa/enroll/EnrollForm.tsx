@@ -22,15 +22,17 @@ export default function EnrollForm({
   grade,
   cohortId,
   details,
+  initialParent,
 }: {
   grade: number;
   cohortId: string;
   details: EnrollDetails;
+  initialParent: { name: string; email: string; phone: string; hasProfile: boolean };
 }) {
   const router = useRouter();
-  const [parentName, setParentName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [parentName, setParentName] = useState(initialParent.name);
+  const [email, setEmail] = useState(initialParent.email);
+  const [phone, setPhone] = useState(initialParent.phone);
   const [childName, setChildName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,25 +118,43 @@ export default function EnrollForm({
         </div>
 
         <div className="form" style={{ marginTop: 0 }}>
-          <label>
-            اسم ولي الأمر
-            <input value={parentName} onChange={(e: ChangeEvent<HTMLInputElement>) => setParentName(e.target.value)} />
-          </label>
-          <label>
-            البريد الإلكتروني
-            <input dir="ltr" type="email" autoComplete="email" value={email} onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
-          </label>
-          <label>
-            رقم الجوال
-            <input
-              dir="ltr"
-              inputMode="numeric"
-              maxLength={10}
-              placeholder="05XXXXXXXX"
-              value={phone}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-            />
-          </label>
+          {initialParent.hasProfile ? (
+            <div className="dashcard" style={{ padding: 16 }}>
+              <b>بيانات ولي الأمر محفوظة</b>
+              <p style={{ color: "var(--gray)", margin: "6px 0 0" }}>
+                {parentName} • <span dir="ltr">{phone}</span> • <span dir="ltr">{email}</span>
+              </p>
+              <Link href="/parent/profile" style={{ display: "inline-block", marginTop: 8, color: "var(--t)", fontWeight: 700 }}>
+                تعديل البيانات
+              </Link>
+            </div>
+          ) : (
+            <>
+              <label>
+                اسم ولي الأمر
+                <input value={parentName} onChange={(e: ChangeEvent<HTMLInputElement>) => setParentName(e.target.value)} />
+              </label>
+              {initialParent.email ? (
+                <p style={{ color: "var(--gray)", fontSize: 13 }}>البريد المسجّل: <span dir="ltr">{initialParent.email}</span></p>
+              ) : (
+                <label>
+                  البريد الإلكتروني
+                  <input dir="ltr" type="email" autoComplete="email" value={email} onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
+                </label>
+              )}
+              <label>
+                رقم الجوال
+                <input
+                  dir="ltr"
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="05XXXXXXXX"
+                  value={phone}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                />
+              </label>
+            </>
+          )}
           <label>
             اسم الطفل
             <input value={childName} onChange={(e: ChangeEvent<HTMLInputElement>) => setChildName(e.target.value)} />

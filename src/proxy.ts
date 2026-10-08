@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { STUDENT_SESSION_COOKIE, isStudentModeAllowedApiPath } from "@/lib/student-mode-constants";
 import { isPilotAuthEnabled, verifyPilotSessionToken, PILOT_SESSION_COOKIE } from "@/lib/pilot-auth";
 
@@ -9,7 +9,7 @@ import { isPilotAuthEnabled, verifyPilotSessionToken, PILOT_SESSION_COOKIE } fro
 const AUTH_REQUIRED_PREFIXES = ["/parent", "/teacher", "/admin", "/student"];
 const PARENT_AREA_PREFIXES = ["/parent", "/teacher", "/admin"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request });
   const path = request.nextUrl.pathname;
 
@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet: { name: string; value: string; options: any }[]) {
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
         },

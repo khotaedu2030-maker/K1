@@ -4,6 +4,8 @@ import EnrollForm from "./EnrollForm";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getGradeLabelArabic, parseAndValidateGrade } from "@/lib/grade-config";
 import { formatDaysList, formatCohortDisplayName } from "@/lib/plan-display";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { toSaudiLocalPhone } from "@/lib/phone";
 
 async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?: string; cohort?: string }> }) {
   const params = await searchParams;
@@ -26,6 +28,27 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
     price: null as string | null,
   };
 
+  let initialParent = { name: "", email: "", phone: "", hasProfile: false };
+  try {
+    const authed = await createSupabaseServerClient();
+    const { data: { user } } = await authed.auth.getUser();
+    if (user) {
+      const { data: parent } = await authed
+        .from("parents")
+        .select("full_name, phone")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      initialParent = {
+        name: parent?.full_name ?? "",
+        email: user.email ?? "",
+        phone: toSaudiLocalPhone(parent?.phone),
+        hasProfile: Boolean(parent?.full_name && parent?.phone),
+      };
+    }
+  } catch {
+    // يبقى النموذج العام متاحًا، والتحقق النهائي يتم في API بعد تسجيل الدخول.
+  }
+
   if (cohortId) {
     try {
       const supabase = createSupabaseAdminClient();
@@ -37,11 +60,12 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
 
       if (cohort) {
         const days = formatDaysList(cohort.days_of_week as number[], "، ");
-        const planName = (cohort as any).plans?.name ?? null;
-        const priceSar = (cohort as any).plans?.price_sar as number | null;
-        const sessionsPerMonth = (cohort as any).plans?.sessions_per_month as number | null;
+        const planDetails = cohort.plans as unknown as { name: string; price_sar: number | null; sessions_per_month: number | null } | null;
+        const planName = planDetails?.name ?? null;
+        const priceSar = planDetails?.price_sar ?? null;
+        const sessionsPerMonth = planDetails?.sessions_per_month ?? null;
         details.program = cohort.product === "focus_room" ? "جلسات التركيز" : "خُطى متابعة";
-        details.plan = planName;
+        details.plan = planName?.replace(/Focus Room/gi, "جلسات التركيز") ?? null;
         details.days = days;
         details.sessionsPerMonth = sessionsPerMonth;
         details.cohortTitle = formatCohortDisplayName(cohort.title);
@@ -53,7 +77,7 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
     }
   }
 
-  return <EnrollForm grade={grade} cohortId={cohortId} details={details} />;
+  return <EnrollForm grade={grade} cohortId={cohortId} details={details} initialParent={initialParent} />;
 }
 
 export default function P({ searchParams }: { searchParams: Promise<{ grade?: string; cohort?: string }> }) {

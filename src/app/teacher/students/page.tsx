@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { firstRelation } from "@/lib/supabase-relation";
 
 export default async function P() {
   const supabase = await createSupabaseServerClient();
@@ -43,12 +44,12 @@ export default async function P() {
           )}
 
           <div style={{ marginTop: 24 }}>
-            {(subs ?? []).map((s: any, i: number) => (
+            {(subs ?? []).map((s, i: number) => (
               <div className="session-row" key={i}>
                 <div>
-                  <b>{s.children?.first_name ?? "طالب"}</b>
+                  <b>{firstRelation(s.children)?.first_name ?? "طالب"}</b>
                   <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
-                    الصف {s.children?.grade} • {s.cohorts?.title}
+                    الصف {firstRelation(s.children)?.grade} • {firstRelation(s.cohorts)?.title}
                   </p>
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>

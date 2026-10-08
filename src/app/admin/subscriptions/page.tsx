@@ -2,6 +2,7 @@ import AdminShell from "@/components/AdminShell";
 import ReviewButtons from "./ReviewButtons";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { firstRelation } from "@/lib/supabase-relation";
 
 export default async function P() {
   const adminIdentity = await getAdminIdentity("subscription.review");
@@ -33,10 +34,10 @@ export default async function P() {
         <p className="admin-empty-state">لا توجد طلبات بانتظار المراجعة.</p>
       )}
 
-      {(requestedPauses ?? []).map((p: any) => (
+      {(requestedPauses ?? []).map((p) => (
         <div className="session-row" key={p.id}>
           <div>
-            <b>{p.subscriptions?.children?.first_name ?? "طالب"}</b>
+            <b>{firstRelation(firstRelation(p.subscriptions)?.children)?.first_name ?? "طالب"}</b>
             <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
               {p.start_date} → {p.end_date} {p.reason ? `• ${p.reason}` : ""}
             </p>

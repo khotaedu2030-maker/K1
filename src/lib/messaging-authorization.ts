@@ -1,5 +1,6 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { firstRelation } from "@/lib/supabase-relation";
 
 // Guard مركزي وقابل لإعادة الاستخدام: يُعاد استدعاؤه في كل عملية حساسة (فتح محادثة، جلب رسائل،
 // إرسال، تحديد كمقروء) — لا يكفي أن تكون طرفًا أصليًا في المحادثة وقت إنشائها؛ العلاقة يجب أن
@@ -38,7 +39,7 @@ export async function authorizeMessageThreadAccess(userId: string, threadId: str
         .select("id, cohorts(teacher_id)")
         .eq("child_id", thread.child_id)
         .eq("status", "active");
-      stillTeaches = (activeLinks ?? []).some((l: any) => l.cohorts?.teacher_id === teacher.id);
+      stillTeaches = (activeLinks ?? []).some((link) => firstRelation(link.cohorts)?.teacher_id === teacher.id);
     }
     return { ok: true, role: "teacher", canWrite: stillTeaches, childId: thread.child_id };
   }

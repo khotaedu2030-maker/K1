@@ -31,7 +31,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ chil
       <Shell>
         <main className="placeholder-page">
           <div className="narrow">
-            <p className="lead">افتح هذه الصفحة من قائمة "طلابي" في لوحة المعلم.</p>
+            <p className="lead">افتح هذه الصفحة من قائمة «طلابي» في لوحة المعلم.</p>
             <Link className="btn outline" href="/teacher/students">← طلابي</Link>
           </div>
         </main>

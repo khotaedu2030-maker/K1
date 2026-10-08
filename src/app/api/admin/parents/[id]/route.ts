@@ -3,6 +3,7 @@ import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { adminRoleHasPermission } from "@/lib/admin-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { firstRelation } from "@/lib/supabase-relation";
 
 // جلب تفصيلي محدود عند الطلب فقط (لا Preload) — يفتح عند نقر صف ولي أمر بلوحة الإدارة.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -33,10 +34,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const makeupByChild = new Map<string, number>();
   (makeupCredits ?? []).forEach((m: { child_id: string }) => makeupByChild.set(m.child_id, (makeupByChild.get(m.child_id) ?? 0) + 1));
 
-  const childrenWithTransfers = await Promise.all((children ?? []).map(async (c: any) => {
+  const childrenWithTransfers = await Promise.all((children ?? []).map(async (c) => {
     const subscription = c.subscriptions?.[0];
-    if (!subscription || subscription.status !== "active" || !subscription.cohorts) return { ...c, transferTargets: [] };
-    const currentCohort = subscription.cohorts;
+    const currentCohort = firstRelation(subscription?.cohorts);
+    if (!subscription || subscription.status !== "active" || !currentCohort) return { ...c, transferTargets: [] };
     let candidateQuery = admin
       .from("cohorts")
       .select("id, title, status, capacity, grade_band, grade, cycle_id")
@@ -58,17 +59,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   return NextResponse.json({
     parent,
-    children: childrenWithTransfers.map((c: { id: string; first_name: string; grade: number; transferTargets: { id: string; title: string }[]; subscriptions: { id: string; status: string; cohort_id: string; cohorts: { id: string; title: string; grade_band: string; grade: number | null; cycle_id: string | null } | null }[] | null }) => ({
-      id: c.id,
-      firstName: c.first_name,
-      grade: c.grade,
-      subscriptionId: c.subscriptions?.[0]?.id ?? null,
-      subscriptionStatus: c.subscriptions?.[0]?.status ?? null,
-      cohortTitle: c.subscriptions?.[0]?.cohorts?.title ?? null,
-      currentCohortId: c.subscriptions?.[0]?.cohort_id ?? null,
-      transferTargets: c.transferTargets,
-      makeupAvailable: makeupByChild.get(c.id) ?? 0,
-    })),
+    children: childrenWithTransfers.map((c) => {
+      const subscription = c.subscriptions?.[0];
+      const cohort = firstRelation(subscription?.cohorts);
+      return {
+        id: c.id,
+        firstName: c.first_name,
+        grade: c.grade,
+        subscriptionId: subscription?.id ?? null,
+        subscriptionStatus: subscription?.status ?? null,
+        cohortTitle: cohort?.title ?? null,
+        currentCohortId: subscription?.cohort_id ?? null,
+        transferTargets: c.transferTargets,
+        makeupAvailable: makeupByChild.get(c.id) ?? 0,
+      };
+    }),
     recentPayments: payments ?? [],
   });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Shell from "@/components/Shell";
@@ -17,6 +17,7 @@ type PublicQuestion = {
 };
 
 type TrackMeta = { id: TrackId; title: string; subtitle: string; description: string };
+type TestResult = { level: string; correctAnswers: number; total: number; confidence: string };
 
 const levelDescriptions: Record<string, string> = {
   A1: "مستوى مبتدئ. تستطيع فهم واستخدام عبارات أساسية في المواقف اليومية البسيطة.",
@@ -40,7 +41,8 @@ function LevelTestInner() {
   const [correctIndex, setCorrectIndex] = useState<number | null>(null);
   const [maxQuestions, setMaxQuestions] = useState(0);
   const [finished, setFinished] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<TestResult | null>(null);
+  const [queuedQuestion, setQueuedQuestion] = useState<PublicQuestion | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,7 +85,8 @@ function LevelTestInner() {
       (requestedTrack === "general" || requestedTrack === "schools" || requestedTrack === "business") &&
       !selectedTrack
     ) {
-      startTest(requestedTrack);
+      const timer = window.setTimeout(() => void startTest(requestedTrack), 0);
+      return () => window.clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedTrack]);
@@ -121,17 +124,18 @@ function LevelTestInner() {
       setFinished(true);
     } else {
       // نحتفظ بالسؤال التالي جاهزًا عند الضغط على "التالي"
-      (window as any).__khotaNextQuestion = data.nextQuestion;
+      setQueuedQuestion(data.nextQuestion);
     }
   }
 
   function nextQuestion() {
-    const next = (window as any).__khotaNextQuestion as PublicQuestion | undefined;
+    const next = queuedQuestion;
     if (!next) return;
     setQuestion(next);
     setSelectedAnswer(null);
     setAnswerLocked(false);
     setCorrectIndex(null);
+    setQueuedQuestion(null);
   }
 
   function resetTest() {
@@ -144,6 +148,7 @@ function LevelTestInner() {
     setCorrectIndex(null);
     setFinished(false);
     setResult(null);
+    setQueuedQuestion(null);
     setError(null);
   }
 

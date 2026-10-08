@@ -42,6 +42,15 @@ export function normalizeSaudiStoredPhoneInput(phone: string): string | null {
   return null;
 }
 
+// يحوّل رقم التخزين الدولي إلى الصيغة المحلية التي تظهر في النماذج.
+export function toSaudiLocalPhone(phone: string | null | undefined): string {
+  if (!phone) return "";
+  const digits = phone.replace(/\D/g, "");
+  if (/^05\d{8}$/.test(digits)) return digits;
+  if (/^9665\d{8}$/.test(digits)) return `0${digits.slice(3)}`;
+  return "";
+}
+
 // خاص ببوابة الدفع Paylink فقط — لا علاقة له بـAuth/OTP/enroll، ولا يُستخدَم فيها. الجوال
 // يُخزَّن دائمًا بصيغة +966XXXXXXXXX (عبر normalizeSaudiPhone أعلاه)، لكن Paylink يتوقّع الصيغة
 // المحلية 05XXXXXXXX. يقبل الصيغتين المخزَّنتين المحتملتين (محلية أو دولية) ويرفض غيرهما

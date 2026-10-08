@@ -4,6 +4,7 @@ import StudentSessionCard from "./StudentSessionCard";
 import { getActiveStudentSession } from "@/lib/student-mode";
 import { getToneLevel } from "@/lib/grade-config";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { firstRelation } from "@/lib/supabase-relation";
 
 export default async function P() {
   const session = await getActiveStudentSession();
@@ -36,7 +37,7 @@ export default async function P() {
         id: sessions[0].id,
         startsAt: sessions[0].starts_at,
         endsAt: sessions[0].ends_at,
-        title: (sessions[0] as any).cohorts?.title ?? "جلستك",
+        title: firstRelation(sessions[0].cohorts)?.title ?? "جلستك",
       }
     : null;
 

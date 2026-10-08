@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { requireTeacher } from "@/lib/require-teacher";
 import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
+import { firstRelation } from "@/lib/supabase-relation";
 
 // إنشاء أو تحديث "خطوة هذا الأسبوع". يقبل goalId لتحديث هدف قائم (حالة/تقدّم)،
 // أو بياناته الكاملة لإنشاء هدف جديد.
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
       .select("child_id, cohorts(teacher_id)")
       .eq("child_id", existing.child_id)
       .eq("status", "active");
-    const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacherCheck.teacherId);
+    const belongsToTeacher = (link ?? []).some((item) => firstRelation(item.cohorts)?.teacher_id === teacherCheck.teacherId);
     if (!belongsToTeacher) return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
 
     const resourceLimit = await checkRateLimit({ request: req, scope: "goals:submit:student", identifier: existing.child_id, limit: 20, windowSeconds: 600 });
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
     .select("child_id, cohorts(teacher_id)")
     .eq("child_id", childId)
     .eq("status", "active");
-  const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacherCheck.teacherId);
+  const belongsToTeacher = (link ?? []).some((item) => firstRelation(item.cohorts)?.teacher_id === teacherCheck.teacherId);
   if (!belongsToTeacher) return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
 
   const resourceLimit = await checkRateLimit({ request: req, scope: "goals:submit:student", identifier: childId, limit: 20, windowSeconds: 600 });

@@ -8,12 +8,10 @@ import { useEffect, useRef, useState } from "react";
 export default function Reveal({
   children,
   delay = 0,
-  as: Tag = "div",
   className = "",
 }: {
   children: React.ReactNode;
   delay?: number;
-  as?: keyof React.JSX.IntrinsicElements;
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -36,14 +34,13 @@ export default function Reveal({
     return () => observer.disconnect();
   }, []);
 
-  const Component = Tag as any;
   return (
-    <Component
+    <div
       ref={ref}
       className={`reveal${visible ? " reveal-in" : ""} ${className}`.trim()}
       style={{ transitionDelay: `${delay}ms` }}
     >
       {children}
-    </Component>
+    </div>
   );
 }

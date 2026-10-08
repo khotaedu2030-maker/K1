@@ -1,6 +1,7 @@
 import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { firstRelation } from "@/lib/supabase-relation";
 
 const PAGE_SIZE = 40;
 
@@ -48,9 +49,9 @@ export default async function AdminPaymentsPage({ searchParams }: { searchParams
               <tr><th>ولي الأمر</th><th>المبلغ</th><th>الحالة</th><th>المزوّد</th><th>مرجع العملية</th><th>تاريخ الدفع</th><th>تاريخ الإنشاء</th></tr>
             </thead>
             <tbody>
-              {(payments ?? []).map((p: any) => (
+              {(payments ?? []).map((p) => (
                 <tr key={p.id}>
-                  <td>{p.parents?.full_name ?? "—"}</td>
+                  <td>{firstRelation(p.parents)?.full_name ?? "—"}</td>
                   <td>{p.amount_sar} ر.س</td>
                   <td>{STATUS_LABELS[p.status] ?? p.status}</td>
                   <td>{p.provider ?? "—"}</td>

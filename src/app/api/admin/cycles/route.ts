@@ -31,16 +31,6 @@ function validateCycleFields(input: {
   return null;
 }
 
-function statusLabel(status: string) {
-  return ({
-    draft: "مسودة",
-    registration_open: "التسجيل مفتوح",
-    in_progress: "جارية",
-    completed: "مكتملة",
-    archived: "مؤرشفة",
-  } as Record<string, string>)[status] ?? "غير معروفة";
-}
-
 function blockerLabel(code: string, count: number) {
   const labels: Record<string, string> = {
     unresolved_attendance: "جلسات مكتملة بلا سجلات حضور",
