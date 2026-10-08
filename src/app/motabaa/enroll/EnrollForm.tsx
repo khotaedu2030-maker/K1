@@ -23,17 +23,20 @@ export default function EnrollForm({
   cohortId,
   details,
   initialParent,
+  existingChildren,
 }: {
   grade: number;
   cohortId: string;
   details: EnrollDetails;
   initialParent: { name: string; email: string; phone: string; hasProfile: boolean };
+  existingChildren: { id: string; firstName: string }[];
 }) {
   const router = useRouter();
   const [parentName, setParentName] = useState(initialParent.name);
   const [email, setEmail] = useState(initialParent.email);
   const [phone, setPhone] = useState(initialParent.phone);
   const [childName, setChildName] = useState("");
+  const [selectedChildId, setSelectedChildId] = useState(existingChildren[0]?.id ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,7 +57,7 @@ export default function EnrollForm({
 
     // نفس صيغة +966 المخزَّنة — يضمن مطابقة رقم الجوال بصيغة واحدة موحَّدة في جدول parents.
     const internationalPhone = normalizeSaudiPhone(phone);
-    const payload = { parentName, email: normalizedEmail, phone: internationalPhone, childName, grade, cohortId };
+    const payload = { parentName, email: normalizedEmail, phone: internationalPhone, grade, cohortId, ...(selectedChildId ? { childId: selectedChildId } : { childName }) };
 
     // /api/enroll يتطلب الآن جلسة Supabase Auth حقيقية — لا يُستدعى مباشرة بلا جلسة إطلاقًا،
     // منعًا لحجز مقعد قبل أي تحقق OTP فعلي. إن لم تكن هناك جلسة، نُخزِّن بيانات النموذج مؤقتًا
@@ -155,12 +158,23 @@ export default function EnrollForm({
               </label>
             </>
           )}
-          <label>
-            اسم الطفل
-            <input value={childName} onChange={(e: ChangeEvent<HTMLInputElement>) => setChildName(e.target.value)} />
-          </label>
+          {existingChildren.length > 0 && (
+            <label>
+              الطفل
+              <select value={selectedChildId} onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedChildId(e.target.value)}>
+                {existingChildren.map((c) => <option key={c.id} value={c.id}>{c.firstName}</option>)}
+                <option value="">إضافة طفل جديد</option>
+              </select>
+            </label>
+          )}
+          {!selectedChildId && (
+            <label>
+              اسم الطفل
+              <input value={childName} onChange={(e: ChangeEvent<HTMLInputElement>) => setChildName(e.target.value)} />
+            </label>
+          )}
           {error && <p role="alert" style={{ color: "var(--p)" }}>{error}</p>}
-          <button className="btn" disabled={!parentName || !email || !phone || !childName || loading} onClick={submit}>
+          <button className="btn" disabled={!parentName || !email || !phone || (!selectedChildId && !childName) || loading} onClick={submit}>
             {loading ? "جارٍ الحفظ..." : "المتابعة ←"}
           </button>
           <p style={{ color: "var(--gray)", fontSize: 13 }}>

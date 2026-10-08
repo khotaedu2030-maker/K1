@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { resolveGradeBand, getGradeLabelArabic, GRADE_BANDS, type GradeBand } from "@/lib/grade-config";
-import { formatDaysList, formatDayCount, formatSessionCount, formatSeatCount, formatCohortDisplayName, formatTimeRangeAr, formatClockAr } from "@/lib/plan-display";
+import { formatDaysList, formatDayCount, formatSessionCount, formatSeatCount, formatCohortDisplayName, formatTimeRangeAr, formatClockAr, isPlanPurchasable } from "@/lib/plan-display";
 
 // الكتالوج فيه منتجان الآن: motabaa (1-6) وfocus_room (7-12). هذا الربط كتالوجي/تجاري بحت —
 // لا علاقة له ببنية الصف نفسها، ولذلك يبقى هنا محليًا لا داخل grade-config.ts (الذي يقتصر على
@@ -19,6 +19,7 @@ export type PlanRow = {
   name: string;
   day_patterns: string[];
   price_sar: number | null;
+  active: boolean;
   days_per_week: number | null;
   sessions_per_month: number | null;
 };
@@ -52,7 +53,7 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
   const product = productForBand(gradeBand);
 
   const availablePlans = useMemo(() => plans.filter((p) => p.product === product), [plans, product]);
-  const effectivePlanId = planId ?? availablePlans[0]?.id ?? null;
+  const effectivePlanId = availablePlans.find((p) => p.id === planId && isPlanPurchasable(p))?.id ?? availablePlans.find(isPlanPurchasable)?.id ?? null;
 
   const matchingCohorts = useMemo(
     () =>
@@ -160,7 +161,8 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
                   return (
                     <button
                       key={p.id}
-                      className={`plan-tile${effectivePlanId === p.id ? " on" : ""}${recommended ? " recommended" : ""}`}
+                      className={`plan-tile${effectivePlanId === p.id ? " on" : ""}${recommended && isPlanPurchasable(p) ? " recommended" : ""}`}
+                      disabled={!isPlanPurchasable(p)}
                       onClick={() => {
                         setPlanId(p.id);
                         setCohortId(null);
@@ -182,10 +184,10 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
                         {p.sessions_per_month ? ` • ${formatSessionCount(p.sessions_per_month)} شهريًا` : ""}
                       </p>
                       <div className="plan-tile-price">
-                        {p.price_sar ? (
+                        {isPlanPurchasable(p) ? (
                           <>{p.price_sar} <small>ر.س / شهريًا</small></>
                         ) : (
-                          <small>السعر يُعلن قريبًا</small>
+                          <small>غير متاحة حاليًا</small>
                         )}
                       </div>
                     </button>
@@ -270,7 +272,7 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
               </div>
             </>
           )}
-          {selectedPlan?.price_sar && (
+          {selectedPlan && isPlanPurchasable(selectedPlan) && (
             <div className="plans-sticky-row" style={{ fontWeight: 800, fontSize: 19, borderBottom: 0 }}>
               <span>الاشتراك</span><span>{selectedPlan.price_sar} ر.س شهريًا</span>
             </div>

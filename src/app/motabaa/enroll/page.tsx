@@ -29,13 +29,14 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
   };
 
   let initialParent = { name: "", email: "", phone: "", hasProfile: false };
+  let existingChildren: { id: string; firstName: string }[] = [];
   try {
     const authed = await createSupabaseServerClient();
     const { data: { user } } = await authed.auth.getUser();
     if (user) {
       const { data: parent } = await authed
         .from("parents")
-        .select("full_name, phone")
+        .select("id, full_name, phone")
         .eq("user_id", user.id)
         .maybeSingle();
       initialParent = {
@@ -44,6 +45,11 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
         phone: toSaudiLocalPhone(parent?.phone),
         hasProfile: Boolean(parent?.full_name && parent?.phone),
       };
+      if (parent && grade > 0) {
+        // RLS (children_of_own_parent) + parent_id يضمنان أن القائمة لأبنائه فقط، و/api/enroll يعيد التحقق من الملكية.
+        const { data: kids } = await authed.from("children").select("id, first_name").eq("parent_id", parent.id).eq("grade", grade).order("created_at");
+        existingChildren = (kids ?? []).map((k) => ({ id: k.id as string, firstName: k.first_name as string }));
+      }
     }
   } catch {
     // يبقى النموذج العام متاحًا، والتحقق النهائي يتم في API بعد تسجيل الدخول.
@@ -77,7 +83,7 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
     }
   }
 
-  return <EnrollForm grade={grade} cohortId={cohortId} details={details} initialParent={initialParent} />;
+  return <EnrollForm grade={grade} cohortId={cohortId} details={details} initialParent={initialParent} existingChildren={existingChildren} />;
 }
 
 export default function P({ searchParams }: { searchParams: Promise<{ grade?: string; cohort?: string }> }) {

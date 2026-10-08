@@ -28,6 +28,12 @@ export function formatDaysList(daysOfWeek: number[], separator = " • "): strin
     .join(separator);
 }
 
+// خطة قابلة للشراء فقط إذا كانت فعّالة ولها سعر موجب صالح.
+export function isPlanPurchasable(plan: { active?: boolean | null; price_sar?: number | null }): boolean {
+  const price = Number(plan.price_sar);
+  return plan.active === true && Number.isFinite(price) && price > 0;
+}
+
 // صياغة عربية صحيحة لعدد الأيام: مفرد/مثنى/جمع قليل (3-10)/جمع كثرة (11+).
 export function formatDayCount(n: number): string {
   if (n === 1) return "يوم واحد";
