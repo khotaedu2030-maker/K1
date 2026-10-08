@@ -11,10 +11,9 @@ const links = [
   ["الرسائل", "/parent/messages"],
   ["التوصيات", "/parent/recommendations"],
   ["الاشتراك", "/parent/subscriptions"],
+  ["المدفوعات", "/parent/payments"],
+  ["بيانات الحساب", "/parent/profile"],
 ];
-// "المدفوعات" (/parent/payments) أُزيلت من هذه القائمة عمدًا — الصفحة لا تزال "قيد التطوير"
-// فعليًا (تحقّق مباشر من محتواها)، وتفاصيل الاشتراك/السعر المتاحة فعليًا موجودة بالفعل في
-// "الاشتراك" أعلاه. المسار نفسه لم يُحذَف، فقط أُزيل من التنقّل الأساسي لولي الأمر.
 
 export default async function P() {
   const context = await resolveParentContext();

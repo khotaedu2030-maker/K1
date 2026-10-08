@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import EnterStudentModeButton from "./EnterStudentModeButton";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getGradeLabelArabic } from "@/lib/grade-config";
@@ -36,7 +37,7 @@ export default async function P() {
           <h1 className="title" style={{ fontSize: 34 }}>الأبناء</h1>
 
           {(!children || children.length === 0) && (
-            <p className="lead" style={{ marginTop: 20 }}>لا يوجد أبناء مسجّلون بعد.</p>
+            <EmptyState title="لا يوجد أبناء مسجّلون بعد" description="سجّل طفلك في إحدى الخطط ليظهر هنا ويمكنك متابعة جلساته وتقدّمه." actionHref="/motabaa/plans" actionLabel="استعرض الخطط" />
           )}
 
           {(children ?? []).map((c) => (

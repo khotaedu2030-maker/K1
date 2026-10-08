@@ -7,6 +7,9 @@ import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-iden
 import { getRuntimeSettings } from "@/lib/platform-settings";
 import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const RETRY_WINDOW_MS = 10 * 60 * 1000;
+
 // إنشاء اشتراك جديد بحالة pending_payment — يتطلب الآن جلسة Supabase Auth حقيقية (Email OTP
 // مُتحقَّق فعليًا) قبل أي شيء آخر. لا يعود ممكنًا لمستخدم غير متحقق حجز مقعد — هذا هو الإصلاح
 // الجوهري لهذه الجولة: كان هذا المسار عامًا بالكامل سابقًا، ينشئ child + pending_payment قبل
@@ -41,7 +44,11 @@ export async function POST(req: Request) {
   const parsed = await readJsonBodyLimited(req, 16 * 1024);
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
-  const { parentName, phone, childName, grade, cohortId } = body ?? {};
+  const { parentName, phone, childName, grade, cohortId, childId } = body ?? {};
+  const requestedChildId = typeof childId === "string" ? childId.trim() : "";
+  if (childId != null && childId !== "" && !UUID_RE.test(requestedChildId)) {
+    return NextResponse.json({ error: "معرّف الطفل غير صالح" }, { status: 400 });
+  }
 
   const bodyEmail = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   if (bodyEmail && bodyEmail !== email) {
@@ -49,8 +56,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "البريد المدخل لا يطابق الحساب المسجل دخوله." }, { status: 409 });
   }
 
-  if (!parentName || !phone || !childName || !cohortId) {
+  if (!parentName || !phone || (!childName && !requestedChildId) || !cohortId) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  }
+
+  const cleanParentName = String(parentName).trim();
+  const cleanChildName = String(childName ?? "").trim();
+  if (cleanParentName.length < 2 || cleanParentName.length > 100 || (!requestedChildId && (cleanChildName.length < 2 || cleanChildName.length > 80))) {
+    return NextResponse.json({ error: "تحقق من اسم ولي الأمر واسم الطفل" }, { status: 400 });
   }
 
   // Server-side validation/normalization فعلي — لا نعتمد على أن العميل التزم بالتطبيع فعليًا
@@ -112,7 +125,7 @@ export async function POST(req: Request) {
   if (!plan || !plan.active || plan.product !== cohort.product) {
     return NextResponse.json({ error: "هذه الباقة غير متاحة حاليًا" }, { status: 409 });
   }
-  if (plan.price_sar === null) {
+  if (!(Number(plan.price_sar) > 0)) {
     return NextResponse.json({ error: "لم يُعتمَد سعر لهذه الباقة بعد" }, { status: 409 });
   }
   // P0: دفاع إضافي عن قيد قاعدة البيانات (enforce_cohort_days_match_plan) — رسالة واضحة بدل
@@ -237,7 +250,7 @@ export async function POST(req: Request) {
         // لا صف بهذا البريد ولا بهذا الجوال ولا بهذا الحساب إطلاقًا — إنشاء مباشر.
         const { data: newParent, error: parentError } = await supabase
           .from("parents")
-          .insert({ user_id: user.id, full_name: parentName, phone: normalizedPhone, email })
+          .insert({ user_id: user.id, full_name: cleanParentName, phone: normalizedPhone, email })
           .select("id")
           .single();
         if (parentError) {
@@ -249,15 +262,101 @@ export async function POST(req: Request) {
     }
   }
 
-  const { data: child, error: childError } = await supabase
-    .from("children")
-    .insert({ parent_id: parent.id, first_name: childName, grade: gradeNumber })
-    .select("id")
-    .single();
-  if (childError) {
-    console.error(`[enroll] فشل إنشاء child لولي الأمر ${parent.id}:`, childError.message);
-    return NextResponse.json({ error: "تعذّر حفظ بيانات الطفل" }, { status: 500 });
+  // المصدر النهائي للملف هو ما أكّده صاحب الجلسة في النموذج. يحدث أيضًا للصفوف القديمة
+  // التي رُبطت للتو بالبريد/الجوال، حتى لا يبقى اسم قديم أو مشوّه ظاهرًا في اللوحة.
+  const { error: profileError } = await supabase
+    .from("parents")
+    .update({ full_name: cleanParentName, phone: normalizedPhone, email })
+    .eq("id", parent.id)
+    .eq("user_id", user.id);
+  if (profileError) {
+    console.error(`[enroll] فشل تحديث ملف ولي الأمر ${parent.id}:`, profileError.message);
+    return NextResponse.json({ error: "تعذّر تحديث بيانات ولي الأمر" }, { status: 500 });
   }
+
+  // الطفل: إمّا طفل موجود يملكه ولي الأمر نفسه (childId يُتحقَّق منه هنا في الخادم)،
+  // أو طفل جديد يُنشأ فقط عند غياب childId. لا دمج بالاسم مع طفل قديم مسجَّل.
+  let child: { id: string };
+  let childCreated = false;
+  const recentWindowIso = new Date(Date.now() - RETRY_WINDOW_MS).toISOString();
+  const namePattern = cleanChildName.replace(/[\\%_]/g, "\\$&");
+  // طفل أُنشئ للتو بلا أي اشتراك = إعادة إرسال/طلب متزامن لنفس النموذج، لا طفل مختلف.
+  async function findRecentUnsubscribedChildren() {
+    const { data, error } = await supabase
+      .from("children")
+      .select("id, subscriptions(id, status, cohort_id)")
+      .eq("parent_id", parent.id)
+      .eq("grade", gradeNumber)
+      .ilike("first_name", namePattern)
+      .gte("created_at", recentWindowIso)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+    const rows = (data ?? []).filter((c: { subscriptions?: { status: string; cohort_id: string | null }[] | null }) => (c.subscriptions ?? []).every((s) => s.status === "pending_payment" && s.cohort_id === cohortId)) as { id: string }[];
+    return { error, rows };
+  }
+  if (requestedChildId) {
+    const { data: owned, error: ownedError } = await supabase
+      .from("children")
+      .select("id, grade")
+      .eq("id", requestedChildId)
+      .eq("parent_id", parent.id)
+      .maybeSingle();
+    if (ownedError) {
+      console.error(`[enroll] خطأ استعلام أثناء التحقق من ملكية الطفل لولي الأمر ${parent.id}:`, ownedError.message);
+      return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
+    }
+    if (!owned) return NextResponse.json({ error: "الطفل غير موجود" }, { status: 404 });
+    if (owned.grade !== gradeNumber) {
+      return NextResponse.json({ error: "صف الطفل المحفوظ لا يطابق الصف المختار" }, { status: 409 });
+    }
+    child = owned;
+  } else {
+    const recent = await findRecentUnsubscribedChildren();
+    if (recent.error) {
+      console.error(`[enroll] خطأ استعلام أثناء البحث عن محاولة سابقة لولي الأمر ${parent.id}:`, recent.error.message);
+      return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
+    }
+    if (recent.rows[0]) {
+      child = recent.rows[0];
+    } else {
+      const { data: newChild, error: childError } = await supabase
+        .from("children")
+        .insert({ parent_id: parent.id, first_name: cleanChildName, grade: gradeNumber })
+        .select("id")
+        .single();
+      if (childError) {
+        console.error(`[enroll] فشل إنشاء child لولي الأمر ${parent.id}:`, childError.message);
+        return NextResponse.json({ error: "تعذّر حفظ بيانات الطفل" }, { status: 500 });
+      }
+      child = newChild;
+      childCreated = true;
+      // سباق: طلبان متزامنان أنشآ طفلين — يبقى الأقدم (created_at, id) ويحذف الآخر نفسه فقط.
+      const after = await findRecentUnsubscribedChildren();
+      const oldest = after.rows[0];
+      if (oldest && oldest.id !== child.id) {
+        await supabase.from("children").delete().eq("id", child.id);
+        child = oldest;
+        childCreated = false;
+      }
+    }
+  }
+
+  // اشتراك قائم لنفس الطفل والمجموعة: لا نُنشئ حجزًا مكرَّرًا (المنع الفعلي هنا لأن RPC لا يفحصه).
+  const { data: existingSubs, error: existingSubsError } = await supabase
+    .from("subscriptions")
+    .select("id, status")
+    .eq("child_id", child.id)
+    .eq("cohort_id", cohortId)
+    .in("status", ["pending_payment", "active", "paused"]);
+  if (existingSubsError) {
+    console.error(`[enroll] خطأ استعلام أثناء فحص الاشتراكات القائمة للطفل ${child.id}:`, existingSubsError.message);
+    return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
+  }
+  const livePending = (existingSubs ?? []).find((s: { status: string }) => s.status === "pending_payment");
+  if ((existingSubs ?? []).some((s: { status: string }) => s.status !== "pending_payment")) {
+    return NextResponse.json({ error: "هذا الطفل مسجَّل بالفعل في هذه المجموعة" }, { status: 409 });
+  }
+  if (livePending) return NextResponse.json({ subscriptionId: livePending.id });
 
   // الخطوة الذرّية الفعلية: قفل المجموعة + إعادة فحص المقاعد + إدراج الاشتراك كوحدة واحدة —
   // هذا ما يمنع تجاوز السعة فعليًا عند التسجيل المتزامن، وليس الفحص أعلاه.
@@ -273,7 +372,7 @@ export async function POST(req: Request) {
     // (الاشتراك فشل قبل إنشائه) — حذفه آمن هنا فقط، ولا نلمس صف ولي الأمر (قد يكون موجودًا
     // مسبقًا ومُستخدَمًا لأطفال آخرين). إن فشل الحذف نفسه، لا نُفشل الطلب بسببه — نوثّق الحالة
     // في السجلات فقط؛ هذا Best-effort لا معاملة إضافية جديدة (لا إعادة معمارية هنا).
-    await supabase.from("children").delete().eq("id", child.id);
+    if (childCreated) await supabase.from("children").delete().eq("id", child.id);
 
     const map: Record<string, string> = {
       cohort_not_found: "مجموعة غير موجودة",
@@ -283,6 +382,22 @@ export async function POST(req: Request) {
     const known = Object.keys(map).find((k) => subError.message.includes(k));
     console.error(`[enroll] فشل إنشاء الاشتراك للمستخدم ${user.id}:`, subError.message);
     return NextResponse.json({ error: known ? map[known] : "تعذّر إنشاء الاشتراك، حاول مرة أخرى" }, { status: 409 });
+  }
+
+  // سباق: طلبان متزامنان مرّا فحص الاشتراك أعلاه. الأقدم (created_at, id) يبقى ويُلغي الآخر اشتراكه هو
+  // فقط (ما زال pending_payment وبلا دفعات)، فينتهي الطرفان بنفس subscriptionId.
+  const { data: sameCohortPending } = await supabase
+    .from("subscriptions")
+    .select("id")
+    .eq("child_id", child.id)
+    .eq("cohort_id", cohortId)
+    .eq("status", "pending_payment")
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+  const keeper = (sameCohortPending ?? [])[0] as { id: string } | undefined;
+  if (keeper && keeper.id !== subscriptionId) {
+    await supabase.from("subscriptions").update({ status: "cancelled" }).eq("id", subscriptionId).eq("status", "pending_payment");
+    return NextResponse.json({ subscriptionId: keeper.id });
   }
 
   return NextResponse.json({ subscriptionId });

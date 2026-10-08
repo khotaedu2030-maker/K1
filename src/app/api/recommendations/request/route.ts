@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
+import { firstRelation } from "@/lib/supabase-relation";
 
 // طلب "جلسة تقوية فردية مركّزة" من بطاقة التوصية.
 // يتحقق أن التوصية فعلًا تخص طفل ولي الأمر المسجّل دخوله، ثم:
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
     .eq("id", recommendationId)
     .maybeSingle();
 
-  if (!recommendation || (recommendation as any).children?.parent_id !== parent.id) {
+  if (!recommendation || firstRelation(recommendation.children)?.parent_id !== parent.id) {
     return NextResponse.json({ error: "توصية غير موجودة أو لا تخص حسابك" }, { status: 403 });
   }
 

@@ -43,7 +43,8 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" | "signup" }) {
     if (mode !== "signup") return;
     const timeout = window.setTimeout(() => {
       try {
-        const pending = JSON.parse(sessionStorage.getItem("khota_pending_enrollment") ?? "null") as { parentName?: string; phone?: string } | null;
+        const pending = JSON.parse(sessionStorage.getItem("khota_pending_enrollment") ?? "null") as { parentName?: string; phone?: string; email?: string } | null;
+        if (pending?.email) setEmail((current) => current || String(pending.email));
         if (pending?.parentName) setParentName(pending.parentName);
         if (pending?.phone) setPhone(pending.phone);
       } catch {
@@ -230,9 +231,11 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" | "signup" }) {
     );
   }
 
-  const accountLink = mode === "signup"
-    ? `/login${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`
-    : `/signup${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`;
+  const accountParams = new URLSearchParams();
+  if (nextParam) accountParams.set("next", nextParam);
+  if (email.trim()) accountParams.set("email", email.trim().toLowerCase());
+  const accountQuery = accountParams.toString() ? `?${accountParams.toString()}` : "";
+  const accountLink = mode === "signup" ? `/login${accountQuery}` : `/signup${accountQuery}`;
 
   return (
     <div className="form">

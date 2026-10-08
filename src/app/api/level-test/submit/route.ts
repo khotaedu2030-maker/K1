@@ -107,7 +107,9 @@ export async function POST(req: Request) {
     const matchedQuestion = track.questions.find((q) => String(q.id) === row.question_id);
     const qid: QuestionId = matchedQuestion ? matchedQuestion.id : row.question_id;
     answeredIds.push(qid);
-    history.push({ questionId: qid, correct: row.correct, difficulty: row.difficulty, skill: row.skill as any });
+    const skill = track.questions.find((question) => question.skill === row.skill)?.skill;
+    if (!skill) return NextResponse.json({ error: "بيانات إجابة غير صالحة" }, { status: 500 });
+    history.push({ questionId: qid, correct: row.correct, difficulty: row.difficulty, skill });
   }
 
   const nextDifficulty = getNextDifficulty(session.target_difficulty, correct);

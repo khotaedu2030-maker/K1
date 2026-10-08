@@ -4,6 +4,20 @@
 
 export const WEEKDAY_NAMES_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
+// "HH:MM[:SS]" -> "4:30 م" (أرقام لاتينية + ص/م).
+export function formatClockAr(time: string): string {
+  const [h, m] = String(time).split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return String(time);
+  const suffix = h >= 12 ? "م" : "ص";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
+}
+
+// نص كامل بلا رموز اتجاه (مثل "-" أو "–") حتى لا ينقلب ترتيب الفترة في RTL: "من 4:30 م إلى 5:30 م".
+export function formatTimeRangeAr(start: string, end: string): string {
+  return `من ${formatClockAr(start)} إلى ${formatClockAr(end)}`;
+}
+
 // يرتّب الأيام حسب ترتيب الأسبوع الصحيح دائمًا (0=الأحد..6=السبت)، بصرف النظر عن ترتيبها
 // كما وصلت من القاعدة، ثم يعيدها كنص عربي واضح مفصول — لا JSON، لا enum خام.
 export function formatDaysList(daysOfWeek: number[], separator = " • "): string {
@@ -12,6 +26,12 @@ export function formatDaysList(daysOfWeek: number[], separator = " • "): strin
     .map((d) => WEEKDAY_NAMES_AR[d] ?? "")
     .filter(Boolean)
     .join(separator);
+}
+
+// خطة قابلة للشراء فقط إذا كانت فعّالة ولها سعر موجب صالح.
+export function isPlanPurchasable(plan: { active?: boolean | null; price_sar?: number | null }): boolean {
+  const price = Number(plan.price_sar);
+  return plan.active === true && Number.isFinite(price) && price > 0;
 }
 
 // صياغة عربية صحيحة لعدد الأيام: مفرد/مثنى/جمع قليل (3-10)/جمع كثرة (11+).

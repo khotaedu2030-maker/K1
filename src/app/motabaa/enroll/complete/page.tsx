@@ -23,21 +23,19 @@ export default function CompleteEnrollmentPage() {
     if (submittedRef.current) return;
     submittedRef.current = true;
 
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      setStatus("missing");
-      return;
-    }
-
-    let payload: Record<string, unknown>;
-    try {
-      payload = JSON.parse(raw);
-    } catch {
-      setStatus("missing");
-      return;
-    }
-
     (async () => {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        setStatus("missing");
+        return;
+      }
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        setStatus("missing");
+        return;
+      }
       const res = await fetch("/api/enroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -102,8 +102,8 @@ export default async function P() {
   let strongest: string | null = null;
   let weakest: string | null = null;
   if (snapshots && snapshots.length >= 2) {
-    const first = snapshots[0] as any;
-    const latest = snapshots[snapshots.length - 1] as any;
+    const first = snapshots[0] as unknown as Record<string, number | null>;
+    const latest = snapshots[snapshots.length - 1] as unknown as Record<string, number | null>;
     let bestDelta = -Infinity;
     let worstDelta = Infinity;
     for (const key of Object.keys(dimLabels)) {

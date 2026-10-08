@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import RecommendationCard from "./RecommendationCard";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -45,7 +46,7 @@ export default async function P() {
           <h1 className="title" style={{ fontSize: 34 }}>التوصيات التعليمية</h1>
 
           {(!recommendations || recommendations.length === 0) && (
-            <p className="lead" style={{ marginTop: 20 }}>لا توجد توصيات حتى الآن.</p>
+            <EmptyState title="لا توجد توصيات حتى الآن" description="ستظهر هنا توصيات المعلم بعد متابعة أداء طفلك." />
           )}
 
           <div style={{ marginTop: 24 }}>

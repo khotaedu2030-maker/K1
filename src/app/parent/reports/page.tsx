@@ -1,8 +1,10 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-const dims: { key: string; label: string }[] = [
+type ScoreKey = "reading_score" | "writing_spelling_score" | "mathematics_score" | "english_score" | "focus_score" | "independence_score";
+const dims: { key: ScoreKey; label: string }[] = [
   { key: "reading_score", label: "القراءة" },
   { key: "writing_spelling_score", label: "الإملاء" },
   { key: "mathematics_score", label: "الرياضيات" },
@@ -62,12 +64,12 @@ export default async function P() {
           </div>
 
           {!first || !latest ? (
-            <p style={{ color: "var(--gray)" }}>لا توجد تقييمات مسجّلة بعد لعرض التقدّم.</p>
+            <EmptyState title="لا توجد تقييمات بعد" description="سيظهر تقدّم طفلك هنا بعد تسجيل أول تقييم من المعلم." actionHref="/parent/schedule" actionLabel="عرض الجلسات" />
           ) : (
             <div className="dashcard">
               {dims.map((d) => {
-                const from = (first as any)[d.key];
-                const to = (latest as any)[d.key];
+                const from = first[d.key];
+                const to = latest[d.key];
                 if (from == null || to == null) return null;
                 return (
                   <div className="taskline" key={d.key}>

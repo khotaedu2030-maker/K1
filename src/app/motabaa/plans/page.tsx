@@ -19,7 +19,7 @@ async function getData() {
 
     const { data: plans, error: plansError } = await supabase
       .from("plans")
-      .select("id,product,name,day_patterns,price_sar,days_per_week,sessions_per_month")
+      .select("id,product,name,day_patterns,price_sar,active,days_per_week,sessions_per_month")
       .in("product", ["motabaa", "focus_room"])
       .order("id");
     if (plansError) throw plansError;

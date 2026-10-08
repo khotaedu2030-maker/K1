@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatSessionCount } from "@/lib/plan-display";
@@ -14,16 +14,22 @@ export default function PaymentClient({
   subscriptionId,
   amountSar,
   summary,
+  paymentsEnabled,
 }: {
   subscriptionId: string;
   amountSar: number | null;
   summary: PaymentSummary;
+  paymentsEnabled: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(searchParams.get("paid") === "1");
+  const [error, setError] = useState<string | null>(() => {
+    if (searchParams.get("failed") === "1") return "تعذّر تأكيد الدفع. حاول مرة أخرى، أو تواصل معنا إذا استمرت المشكلة.";
+    if (searchParams.get("cancelled") === "1") return "تم إلغاء عملية الدفع.";
+    return null;
+  });
   const [redirecting, setRedirecting] = useState(false);
   // إقرارات ما قبل الدفع — غير محدَّدة افتراضيًا، يجب تفعيل الاثنتين قبل تمكين أي زر دفع.
   // ⚠️ لا تُخزَّن هذه الموافقة في قاعدة البيانات حاليًا (يتطلب تعديل schema، خارج نطاق هذه
@@ -31,14 +37,6 @@ export default function PaymentClient({
   const [agreedPolicies, setAgreedPolicies] = useState(false);
   const [agreedGuardian, setAgreedGuardian] = useState(false);
   const canConfirm = agreedPolicies && agreedGuardian;
-
-  // عودة من Paylink عبر /api/payments/paylink/callback — لا نثق بهذه الحالة كدليل دفع بحد
-  // ذاتها (التحقق الفعلي تم Server-side قبل إعادة التوجيه)، نستخدمها فقط لعرض الحالة المناسبة.
-  useEffect(() => {
-    if (searchParams.get("paid") === "1") setDone(true);
-    else if (searchParams.get("failed") === "1") setError("تعذّر تأكيد الدفع. حاول مرة أخرى، أو تواصل معنا إذا استمرت المشكلة.");
-    else if (searchParams.get("cancelled") === "1") setError("تم إلغاء عملية الدفع.");
-  }, [searchParams]);
 
   async function payWithPaylink() {
     setLoading(true);
@@ -122,7 +120,14 @@ export default function PaymentClient({
       )}
 
       <div className="dashcard">
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingBottom: 16, borderBottom: "1px solid var(--line)" }}>
+        {!paymentsEnabled && (
+          <div role="status" style={{ padding: 16, borderRadius: 14, background: "var(--cream)", border: "1px solid var(--line)", marginBottom: 16 }}>
+            <span className="badge">الدفع الإلكتروني متوقف مؤقتًا</span>
+            <h2 style={{ fontSize: 20, margin: "12px 0 6px" }}>تم حفظ طلب تسجيلك</h2>
+            <p style={{ color: "var(--gray)", margin: 0 }}>سيتواصل معك فريق خُطى لإكمال الاشتراك. لن يُطلب منك دفع أي مبلغ من هذه الصفحة حاليًا.</p>
+          </div>
+        )}
+        {paymentsEnabled && <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingBottom: 16, borderBottom: "1px solid var(--line)" }}>
           <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "var(--n)", cursor: "pointer" }}>
             <input
               type="checkbox"
@@ -148,13 +153,19 @@ export default function PaymentClient({
             />
             <span>أقرّ بأنني ولي أمر الطالب أو مخوَّل نظامًا بإدارة اشتراكه وتقديم البيانات اللازمة للخدمة.</span>
           </label>
-        </div>
+        </div>}
 
         {error && <p role="alert" style={{ color: "var(--p)" }}>{error}</p>}
 
-        <button className="btn" disabled={loading || redirecting || !canConfirm} onClick={payWithPaylink} style={{ marginTop: 16, width: "100%", justifyContent: "center" }}>
-          {redirecting ? "جارٍ التحويل إلى صفحة الدفع..." : loading ? "جارٍ التجهيز..." : "الدفع الآن"}
-        </button>
+        {paymentsEnabled ? (
+          <button className="btn" disabled={loading || redirecting || !canConfirm} onClick={payWithPaylink} style={{ marginTop: 16, width: "100%", justifyContent: "center" }}>
+            {redirecting ? "جارٍ التحويل إلى صفحة الدفع..." : loading ? "جارٍ التجهيز..." : "الدفع الآن"}
+          </button>
+        ) : (
+          <Link className="btn outline" href="/parent/subscriptions" style={{ marginTop: 16, width: "100%", justifyContent: "center" }}>
+            متابعة طلب الاشتراك
+          </Link>
+        )}
 
         {process.env.NODE_ENV !== "production" && (
           <details style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed var(--line)" }}>

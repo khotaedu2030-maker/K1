@@ -6,9 +6,7 @@ import { usePathname } from "next/navigation";
 import AdminAccountMenu from "./AdminAccountMenu";
 import { adminRoleHasPermission } from "@/lib/admin-permissions";
 
-// كل قسم من الـ17 مذكورين صراحةً بالطلب — أي قسم بلا صفحة حقيقية بعد يقود لصفحة تعرض بوضوح
-// "قيد التطوير" (لا 404، ولا بيانات وهمية) بدل اختراع محتوى. القسم يبقى بالتنقّل دائمًا حتى
-// يعرف الأدمن أن الميزة موجودة على الخارطة، لا مخفية.
+// أقسام الإدارة المعتمدة. كل رابط يقود إلى صفحة تشغيلية حقيقية، والصلاحية هنا تتحكم بالعرض فقط.
 // permission غير معرَّف = متاح لكل دور إداري نشط معروف (مثل نظرة عامة). إخفاء الرابط هنا واجهة
 // فقط — الحماية الفعلية تبقى دائمًا على مستوى الصفحة/الـAPI (getAdminIdentity/requirePermission).
 const SECTIONS: { label: string; href: string; permission?: string }[] = [

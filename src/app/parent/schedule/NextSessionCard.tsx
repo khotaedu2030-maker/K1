@@ -42,7 +42,7 @@ export default function NextSessionCard({ session }: { session: NextSession | nu
           {formatSessionDay(session.startsAt)} {formatSessionDate(session.startsAt)}
         </strong>
         <span style={{ color: "var(--gray)", fontSize: 15 }}>
-          {formatSessionTime(session.startsAt)} – {formatSessionTime(session.endsAt)}
+          من {formatSessionTime(session.startsAt)} إلى {formatSessionTime(session.endsAt)}
         </span>
       </div>
 

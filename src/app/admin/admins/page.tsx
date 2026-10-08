@@ -30,7 +30,7 @@ export default async function AdminAdminsPage() {
       {(admins ?? []).length === 0 ? <p className="admin-empty-state">لا يوجد إداريون.</p> : (
         <table className="admin-table">
           <thead><tr><th>الاسم</th><th>البريد الإلكتروني</th><th>الدور</th><th>الحالة</th><th>تاريخ الإضافة</th><th>إجراء</th></tr></thead>
-          <tbody>{(admins ?? []).map((item: any) => (
+          <tbody>{(admins ?? []).map((item) => (
             <tr key={item.id}>
               <td>{item.full_name}</td>
               <td dir="ltr" style={{ fontSize: 12 }}>{item.user_id ? emailByUserId.get(item.user_id) ?? "—" : "—"}</td>

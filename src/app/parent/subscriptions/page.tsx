@@ -1,7 +1,9 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import PauseRequestForm from "./PauseRequestForm";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { firstRelation } from "@/lib/supabase-relation";
 
 // نستخدم هنا فقط (تنسيق تاريخ عربي بسيط لتاريخ خام YYYY-MM-DD، بلا وقت) — لا علاقة له
 // بمنطق الاشتراك نفسه، عرض فقط.
@@ -84,17 +86,17 @@ export default async function P() {
           <h1 className="title" style={{ fontSize: 34 }}>الاشتراك</h1>
 
           {(!subscriptions || subscriptions.length === 0) && (
-            <p className="lead" style={{ marginTop: 20 }}>لا يوجد اشتراك بعد.</p>
+            <EmptyState title="لا يوجد اشتراك بعد" description="عند تسجيل طفلك في إحدى الخطط سيظهر اشتراكه وحالته هنا." actionHref="/motabaa/plans" actionLabel="استعرض الخطط" />
           )}
 
-          {(subscriptions ?? []).map((s: any) => (
+          {(subscriptions ?? []).map((s) => (
             <div className="dashcard" key={s.id} style={{ marginBottom: 16 }}>
-              <b>{childName.get(s.child_id)} — {s.plans?.name}</b>
+              <b>{childName.get(s.child_id)} — {firstRelation(s.plans)?.name}</b>
               <div className="taskline"><span>الحالة</span><span className="badge">{statusLabel[s.status] ?? s.status}</span></div>
               {s.start_date && <div className="taskline"><span>تاريخ البداية</span><span>{formatPlainDateArabic(s.start_date)}</span></div>}
               {s.renewal_date && <div className="taskline"><span>نهاية الدورة الحالية</span><span>{formatPlainDateArabic(s.renewal_date)}</span></div>}
 
-              {(pausesBySub.get(s.id) ?? []).map((p: any) => (
+              {(pausesBySub.get(s.id) ?? []).map((p) => (
                 <div className="taskline" key={p.id}>
                   <span>تجميد {formatPlainDateArabic(p.start_date)} ← {formatPlainDateArabic(p.end_date)}</span>
                   <span className="badge">{pauseStatusLabel[p.status] ?? p.status}</span>

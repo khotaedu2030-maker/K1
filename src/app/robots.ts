@@ -23,6 +23,6 @@ export default function robots(): MetadataRoute.Robots {
         "/qudurat/",
       ],
     },
-    sitemap: "/sitemap.xml",
+    sitemap: "https://www.khota.sa/sitemap.xml",
   };
 }

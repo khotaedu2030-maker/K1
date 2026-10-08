@@ -1,12 +1,13 @@
 import "server-only";
 import { ABSENCE_POLICY, isAbsenceReasonCreditEligible, isMonthlyCapApplicable, type AttendanceReason, type CreditSourceType } from "@/lib/policies";
 import { getRuntimeSettings } from "@/lib/platform-settings";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 // نقطة الإصدار المركزية الوحيدة لأي رصيد تعويضي في النظام — سواء من غياب طالب فردي (عبر تقرير
 // المعلم) أو إلغاء جلسة كاملة (معلم/منصة). كل الاستدعاءات الأخرى تمر من هنا، لا تُكرَّر منطق
 // الأهلية أو السقف الشهري في أكثر من مكان.
 export async function issueMakeupCreditIfEligible(
-  admin: any,
+  admin: ReturnType<typeof createSupabaseAdminClient>,
   params: {
     childId: string;
     subscriptionId?: string | null;

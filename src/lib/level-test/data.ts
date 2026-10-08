@@ -940,6 +940,7 @@ export const tracks: Track[] = [
 export type PublicQuestion = Omit<Question, "answer">;
 
 export function toPublicQuestion(q: Question): PublicQuestion {
-  const { answer, ...rest } = q;
+  const { answer: _answer, ...rest } = q;
+  void _answer;
   return rest;
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { firstRelation } from "@/lib/supabase-relation";
 
 export default async function P() {
   const supabase = await createSupabaseServerClient();
@@ -22,13 +23,15 @@ export default async function P() {
   }
 
   const { data: teacher } = await supabase.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
+  const oneHourAgo = new Date();
+  oneHourAgo.setUTCHours(oneHourAgo.getUTCHours() - 1);
 
   const { data: sessions } = teacher
     ? await supabase
         .from("sessions")
         .select("id, starts_at, status, cohorts(title)")
         .eq("teacher_id", teacher.id)
-        .gte("starts_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
+        .gte("starts_at", oneHourAgo.toISOString())
         .order("starts_at", { ascending: true })
         .limit(30)
     : { data: [] };
@@ -45,10 +48,10 @@ export default async function P() {
           )}
 
           <div style={{ marginTop: 24 }}>
-            {(sessions ?? []).map((s: any) => (
+            {(sessions ?? []).map((s) => (
               <div className="session-row" key={s.id}>
                 <div>
-                  <b>{s.cohorts?.title ?? "مجموعة"}</b>
+                  <b>{firstRelation(s.cohorts)?.title ?? "مجموعة"}</b>
                   <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
                     {new Date(s.starts_at).toLocaleString("ar-SA", {
                       weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",

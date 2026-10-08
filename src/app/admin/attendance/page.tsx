@@ -3,6 +3,7 @@ import { getAdminIdentity } from "@/lib/admin-identity";
 import { adminRoleHasPermission } from "@/lib/admin-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import AttendanceOverrideButton from "./AttendanceOverrideButton";
+import { firstRelation } from "@/lib/supabase-relation";
 
 const STATUS_LABELS: Record<string, string> = { present: "حاضر", absent: "غائب", late: "متأخر", excused: "معذور" };
 
@@ -13,7 +14,9 @@ export default async function AdminAttendancePage() {
 
   const supabase = createSupabaseAdminClient();
   const today = new Date().toISOString().slice(0, 10);
-  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const weekAgoDate = new Date();
+  weekAgoDate.setUTCDate(weekAgoDate.getUTCDate() - 7);
+  const weekAgo = weekAgoDate.toISOString().slice(0, 10);
 
   const [{ data: recentAttendance }, { data: recentSessions }] = await Promise.all([
     supabase
@@ -25,8 +28,8 @@ export default async function AdminAttendancePage() {
     supabase.from("sessions").select("id, session_date, cohorts(title)").lt("session_date", today).gte("session_date", weekAgo).eq("status", "completed"),
   ]);
 
-  const recordedSessionIds = new Set((recentAttendance ?? []).map((a: any) => a.sessions?.session_date));
-  const unrecorded = (recentSessions ?? []).filter((s: any) => !recordedSessionIds.has(s.session_date));
+  const recordedSessionIds = new Set((recentAttendance ?? []).map((attendance) => firstRelation(attendance.sessions)?.session_date));
+  const unrecorded = (recentSessions ?? []).filter((session) => !recordedSessionIds.has(session.session_date));
 
   return (
     <AdminShell adminName={admin.full_name} role={admin.role}>
@@ -50,11 +53,11 @@ export default async function AdminAttendancePage() {
         <table className="admin-table">
           <thead><tr><th>الطالب</th><th>المجموعة</th><th>التاريخ</th><th>الحالة</th>{canOverride && <th>تصحيح</th>}</tr></thead>
           <tbody>
-            {(recentAttendance ?? []).map((a: any) => (
+            {(recentAttendance ?? []).map((a) => (
               <tr key={a.id}>
-                <td>{a.children?.first_name ?? "—"}</td>
-                <td>{a.sessions?.cohorts?.title ?? "—"}</td>
-                <td>{a.sessions?.session_date ? new Date(a.sessions.session_date).toLocaleDateString("ar-SA") : "—"}</td>
+                <td>{firstRelation(a.children)?.first_name ?? "—"}</td>
+                <td>{firstRelation(firstRelation(a.sessions)?.cohorts)?.title ?? "—"}</td>
+                <td>{firstRelation(a.sessions)?.session_date ? new Date(firstRelation(a.sessions)!.session_date).toLocaleDateString("ar-SA") : "—"}</td>
                 <td>{STATUS_LABELS[a.status] ?? a.status}</td>
                 {canOverride && <td><AttendanceOverrideButton sessionId={a.session_id} childId={a.child_id} currentStatus={a.status} /></td>}
               </tr>

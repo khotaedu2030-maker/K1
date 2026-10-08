@@ -7,7 +7,9 @@ export default async function AdminReportsPage() {
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
 
   const supabase = createSupabaseAdminClient();
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+  const monthAgoDate = new Date();
+  monthAgoDate.setUTCDate(monthAgoDate.getUTCDate() - 30);
+  const monthAgo = monthAgoDate.toISOString();
   const [
     { count: activeSubs },
     { count: pausedSubs },
@@ -48,10 +50,6 @@ export default async function AdminReportsPage() {
         <div className="admin-kpi-card"><strong>{makeupUsedMonth ?? 0}</strong><span>أرصدة تعويض مُستخدَمة</span></div>
       </div>
 
-      <div className="admin-unavailable">
-        <span className="badge">قيد التطوير</span>
-        <p style={{ marginTop: 8 }}>تصدير CSV وتقارير أعمق (استخدام المعلمين، معدلات التسجيل) لم تُبنَ بعد.</p>
-      </div>
     </AdminShell>
   );
 }

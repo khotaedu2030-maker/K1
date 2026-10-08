@@ -2,6 +2,7 @@ import Link from "next/link";
 import Shell from "@/components/Shell";
 import SessionReportForm from "./SessionReportForm";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { firstRelation } from "@/lib/supabase-relation";
 
 export default async function P({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
   const params = await searchParams;
@@ -66,16 +67,16 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sess
     .eq("cohort_id", session.cohort_id)
     .eq("status", "active");
 
-  const students = (subs ?? []).map((s: any) => ({
+  const students = (subs ?? []).map((s) => ({
     childId: s.child_id,
-    firstName: s.children?.first_name ?? "طالب",
+    firstName: firstRelation(s.children)?.first_name ?? "طالب",
   }));
 
   return (
     <Shell>
       <main className="section">
         <div className="narrow">
-          <span className="eyebrow">{(session as any).cohorts?.title ?? "الجلسة"}</span>
+          <span className="eyebrow">{firstRelation(session.cohorts)?.title ?? "الجلسة"}</span>
           <h1 className="title" style={{ fontSize: 32 }}>تقرير الجلسة السريع</h1>
           <p className="lead">
             {new Date(session.starts_at).toLocaleString("ar-SA", { weekday: "long", hour: "2-digit", minute: "2-digit" })}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import Shell from "@/components/Shell";
 import StartThreadButton from "./StartThreadButton";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { firstRelation } from "@/lib/supabase-relation";
 
 export default async function P() {
   const supabase = await createSupabaseServerClient();
@@ -78,8 +79,8 @@ export default async function P() {
             <div className="dashcard" style={{ marginBottom: 20 }}>
               <b>بدء محادثة جديدة</b>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-                {startable.map((s: any, i) => (
-                  <StartThreadButton key={i} childId={s.child_id} cohortId={s.cohort_id} label={s.cohorts?.title ?? "البرنامج"} />
+                {startable.map((s, i) => (
+                  <StartThreadButton key={i} childId={s.child_id} cohortId={s.cohort_id} label={firstRelation(s.cohorts)?.title ?? "البرنامج"} />
                 ))}
               </div>
             </div>

@@ -5,7 +5,8 @@ import PaymentClient from "./PaymentClient";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { resolveParentContext } from "@/lib/pilot-parent";
 import { getGradeLabelArabic } from "@/lib/grade-config";
-import { formatDaysList, formatCohortDisplayName } from "@/lib/plan-display";
+import { formatDaysList, formatCohortDisplayName, formatTimeRangeAr } from "@/lib/plan-display";
+import { areOnlinePaymentsEnabled } from "@/lib/payment-settings";
 
 export default async function P({ searchParams }: { searchParams: Promise<{ sub?: string }> }) {
   const params = await searchParams;
@@ -17,6 +18,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
     days: string | null; sessionsPerMonth: number | null; cohortTitle: string | null; time: string | null;
   } | null = null;
   let ownershipMismatch = false;
+  const paymentsEnabled = areOnlinePaymentsEnabled();
 
   if (subscriptionId) {
     // جلسة Supabase حقيقية مطلوبة قبل عرض شاشة الدفع فعليًا — لا نكتفي بالاعتماد على أن زر
@@ -35,7 +37,12 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
         .eq("id", subscriptionId)
         .maybeSingle();
 
-      const sub = subscription as any;
+      const sub = subscription as unknown as {
+        parent_id: string;
+        children: { grade: number } | null;
+        cohorts: { title: string; product: string; days_of_week: number[]; start_time: string; end_time: string } | null;
+        plans: { name: string; price_sar: number | null; sessions_per_month: number | null } | null;
+      } | null;
       if (sub && sub.parent_id !== context!.parentId) {
         // لا يُسمَح بعرض/دفع اشتراك يعود لولي أمر آخر — لا نكشف أي تفاصيل عنه.
         ownershipMismatch = true;
@@ -48,7 +55,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
           days: sub.cohorts?.days_of_week ? formatDaysList(sub.cohorts.days_of_week as number[], "، ") : null,
           sessionsPerMonth: sub.plans?.sessions_per_month ?? null,
           cohortTitle: sub.cohorts?.title ? formatCohortDisplayName(sub.cohorts.title) : null,
-          time: sub.cohorts ? `${String(sub.cohorts.start_time).slice(0, 5)} – ${String(sub.cohorts.end_time).slice(0, 5)}` : null,
+          time: sub.cohorts ? formatTimeRangeAr(String(sub.cohorts.start_time), String(sub.cohorts.end_time)) : null,
         };
       }
     } catch {
@@ -66,7 +73,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
             <p>هذا الاشتراك غير متاح لحسابك.</p>
           ) : subscriptionId ? (
             <Suspense fallback={null}>
-              <PaymentClient subscriptionId={subscriptionId} amountSar={amountSar} summary={summary} />
+              <PaymentClient subscriptionId={subscriptionId} amountSar={amountSar} summary={summary} paymentsEnabled={paymentsEnabled} />
             </Suspense>
           ) : (
             <p>رابط غير صالح — ابدأ التسجيل من جديد من صفحة الخطط.</p>
