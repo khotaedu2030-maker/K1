@@ -25,6 +25,14 @@ export async function getTeacherIdentity(): Promise<{ userId: string; teacherId:
 }
 
 export async function requireTeacher(): Promise<TeacherCheckResult> {
+  const authed = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await authed.auth.getUser();
+  if (!user) {
+    return { ok: false, response: NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 }) };
+  }
+
   const identity = await getTeacherIdentity();
   if (!identity) {
     return { ok: false, response: NextResponse.json({ error: "هذا الحساب ليس حساب معلم نشط" }, { status: 403 }) };
