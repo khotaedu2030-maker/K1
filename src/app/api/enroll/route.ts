@@ -8,6 +8,7 @@ import { getRuntimeSettings } from "@/lib/platform-settings";
 import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const RETRY_WINDOW_MS = 10 * 60 * 1000;
 
 // إنشاء اشتراك جديد بحالة pending_payment — يتطلب الآن جلسة Supabase Auth حقيقية (Email OTP
 // مُتحقَّق فعليًا) قبل أي شيء آخر. لا يعود ممكنًا لمستخدم غير متحقق حجز مقعد — هذا هو الإصلاح
@@ -273,10 +274,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "تعذّر تحديث بيانات ولي الأمر" }, { status: 500 });
   }
 
-  // الطفل: إمّا طفل موجود يملكه ولي الأمر نفسه (childId يُتحقَّق منه هنا في الخادم، لا في الواجهة)،
-  // أو طفل جديد. بلا childId نعيد استخدام طفل بالاسم والصف نفسيهما بدل تكرار السجل.
+  // الطفل: إمّا طفل موجود يملكه ولي الأمر نفسه (childId يُتحقَّق منه هنا في الخادم)،
+  // أو طفل جديد يُنشأ فقط عند غياب childId. لا دمج بالاسم مع طفل قديم مسجَّل.
   let child: { id: string };
   let childCreated = false;
+  const recentWindowIso = new Date(Date.now() - RETRY_WINDOW_MS).toISOString();
+  const namePattern = cleanChildName.replace(/[\\%_]/g, "\\$&");
+  // طفل أُنشئ للتو بلا أي اشتراك = إعادة إرسال/طلب متزامن لنفس النموذج، لا طفل مختلف.
+  async function findRecentUnsubscribedChildren() {
+    const { data, error } = await supabase
+      .from("children")
+      .select("id, subscriptions(id, status, cohort_id)")
+      .eq("parent_id", parent.id)
+      .eq("grade", gradeNumber)
+      .ilike("first_name", namePattern)
+      .gte("created_at", recentWindowIso)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+    const rows = (data ?? []).filter((c: { subscriptions?: { status: string; cohort_id: string | null }[] | null }) => (c.subscriptions ?? []).every((s) => s.status === "pending_payment" && s.cohort_id === cohortId)) as { id: string }[];
+    return { error, rows };
+  }
   if (requestedChildId) {
     const { data: owned, error: ownedError } = await supabase
       .from("children")
@@ -294,20 +311,13 @@ export async function POST(req: Request) {
     }
     child = owned;
   } else {
-    const { data: sameChild, error: sameChildError } = await supabase
-      .from("children")
-      .select("id")
-      .eq("parent_id", parent.id)
-      .eq("grade", gradeNumber)
-      .ilike("first_name", cleanChildName.replace(/[\\%_]/g, "\\$&"))
-      .limit(1)
-      .maybeSingle();
-    if (sameChildError) {
-      console.error(`[enroll] خطأ استعلام أثناء البحث عن طفل مطابق لولي الأمر ${parent.id}:`, sameChildError.message);
+    const recent = await findRecentUnsubscribedChildren();
+    if (recent.error) {
+      console.error(`[enroll] خطأ استعلام أثناء البحث عن محاولة سابقة لولي الأمر ${parent.id}:`, recent.error.message);
       return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
     }
-    if (sameChild) {
-      child = sameChild;
+    if (recent.rows[0]) {
+      child = recent.rows[0];
     } else {
       const { data: newChild, error: childError } = await supabase
         .from("children")
@@ -320,6 +330,14 @@ export async function POST(req: Request) {
       }
       child = newChild;
       childCreated = true;
+      // سباق: طلبان متزامنان أنشآ طفلين — يبقى الأقدم (created_at, id) ويحذف الآخر نفسه فقط.
+      const after = await findRecentUnsubscribedChildren();
+      const oldest = after.rows[0];
+      if (oldest && oldest.id !== child.id) {
+        await supabase.from("children").delete().eq("id", child.id);
+        child = oldest;
+        childCreated = false;
+      }
     }
   }
 
@@ -364,6 +382,22 @@ export async function POST(req: Request) {
     const known = Object.keys(map).find((k) => subError.message.includes(k));
     console.error(`[enroll] فشل إنشاء الاشتراك للمستخدم ${user.id}:`, subError.message);
     return NextResponse.json({ error: known ? map[known] : "تعذّر إنشاء الاشتراك، حاول مرة أخرى" }, { status: 409 });
+  }
+
+  // سباق: طلبان متزامنان مرّا فحص الاشتراك أعلاه. الأقدم (created_at, id) يبقى ويُلغي الآخر اشتراكه هو
+  // فقط (ما زال pending_payment وبلا دفعات)، فينتهي الطرفان بنفس subscriptionId.
+  const { data: sameCohortPending } = await supabase
+    .from("subscriptions")
+    .select("id")
+    .eq("child_id", child.id)
+    .eq("cohort_id", cohortId)
+    .eq("status", "pending_payment")
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+  const keeper = (sameCohortPending ?? [])[0] as { id: string } | undefined;
+  if (keeper && keeper.id !== subscriptionId) {
+    await supabase.from("subscriptions").update({ status: "cancelled" }).eq("id", subscriptionId).eq("status", "pending_payment");
+    return NextResponse.json({ subscriptionId: keeper.id });
   }
 
   return NextResponse.json({ subscriptionId });
