@@ -52,12 +52,10 @@ const sections: LegalSection[] = [
     title: "الخطط والاشتراك",
     body: (
       <>
-        <p style={{ margin: 0 }}>الخطط المتاحة حاليًا:</p>
-        <ul style={{ margin: "8px 0 0", paddingInlineStart: 20, display: "grid", gap: 4 }}>
-          <li>الانطلاقة — 399 ر.س، 8 جلسات شهريًا.</li>
-          <li>الأساسية — 529 ر.س، 12 جلسة شهريًا.</li>
-          <li>المكثفة — 679 ر.س، 16 جلسة شهريًا.</li>
-        </ul>
+        <p style={{ margin: 0 }}>
+          الخطط وأسعارها وعدد جلساتها الشهرية تُعرض في صفحة <Link href="/motabaa/plans" style={{ color: "var(--t)", fontWeight: 700 }}>الخطط</Link>،
+          وهي المرجع المعتمد للسعر والتفاصيل وقت الاشتراك.
+        </p>
         <p style={{ margin: "10px 0 0" }}>
           تظهر تفاصيل الخطة النهائية والسعر والجدول للمستخدم قبل تأكيد الدفع في كل مرة.
         </p>

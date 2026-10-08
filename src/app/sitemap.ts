@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 // صفحات عامة تسويقية فقط — لا مسارات محمية (parent/teacher/admin/student)، ولا API، ولا مسارات
 // قديمة مخفية عمدًا من رحلة KHOTA الحالية (English/قدرات).
-const PRODUCTION_DOMAIN = "https://khota.sa";
+const PRODUCTION_DOMAIN = "https://www.khota.sa";
 
 const PUBLIC_ROUTES = [
   "/",

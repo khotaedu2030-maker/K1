@@ -18,8 +18,8 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   // النطاق المُعطى صراحةً هذه الجولة. إن لم يكن نهائيًا بعد، عدِّل هذا السطر فقط عند التأكد.
-  metadataBase: new URL("https://khota.sa"),
-  alternates: { canonical: "/" },
+  metadataBase: new URL("https://www.khota.sa"),
+  alternates: { canonical: "./" },
   title: {
     default: "خُطى | KHOTA — الشريك التعليمي للأسرة بعد المدرسة",
     template: "%s | خُطى",
