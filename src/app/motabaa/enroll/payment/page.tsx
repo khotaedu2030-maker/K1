@@ -5,7 +5,7 @@ import PaymentClient from "./PaymentClient";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { resolveParentContext } from "@/lib/pilot-parent";
 import { getGradeLabelArabic } from "@/lib/grade-config";
-import { formatDaysList, formatCohortDisplayName } from "@/lib/plan-display";
+import { formatDaysList, formatCohortDisplayName, formatTimeRangeAr } from "@/lib/plan-display";
 import { areOnlinePaymentsEnabled } from "@/lib/payment-settings";
 
 export default async function P({ searchParams }: { searchParams: Promise<{ sub?: string }> }) {
@@ -55,7 +55,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
           days: sub.cohorts?.days_of_week ? formatDaysList(sub.cohorts.days_of_week as number[], "، ") : null,
           sessionsPerMonth: sub.plans?.sessions_per_month ?? null,
           cohortTitle: sub.cohorts?.title ? formatCohortDisplayName(sub.cohorts.title) : null,
-          time: sub.cohorts ? `${String(sub.cohorts.start_time).slice(0, 5)} – ${String(sub.cohorts.end_time).slice(0, 5)}` : null,
+          time: sub.cohorts ? formatTimeRangeAr(String(sub.cohorts.start_time), String(sub.cohorts.end_time)) : null,
         };
       }
     } catch {

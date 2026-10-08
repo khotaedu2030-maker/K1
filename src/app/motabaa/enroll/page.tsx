@@ -3,7 +3,7 @@ import Shell from "@/components/Shell";
 import EnrollForm from "./EnrollForm";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getGradeLabelArabic, parseAndValidateGrade } from "@/lib/grade-config";
-import { formatDaysList, formatCohortDisplayName } from "@/lib/plan-display";
+import { formatDaysList, formatCohortDisplayName, formatTimeRangeAr } from "@/lib/plan-display";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { toSaudiLocalPhone } from "@/lib/phone";
 
@@ -69,7 +69,7 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
         details.days = days;
         details.sessionsPerMonth = sessionsPerMonth;
         details.cohortTitle = formatCohortDisplayName(cohort.title);
-        details.time = `${String(cohort.start_time).slice(0, 5)} – ${String(cohort.end_time).slice(0, 5)}`;
+        details.time = formatTimeRangeAr(String(cohort.start_time), String(cohort.end_time));
         details.price = priceSar ? `${priceSar} ر.س` : "السعر يُعلن قريبًا";
       }
     } catch {

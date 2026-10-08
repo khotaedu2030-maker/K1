@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { resolveGradeBand, getGradeLabelArabic, GRADE_BANDS, type GradeBand } from "@/lib/grade-config";
-import { formatDaysList, formatDayCount, formatSessionCount, formatSeatCount, formatCohortDisplayName } from "@/lib/plan-display";
+import { formatDaysList, formatDayCount, formatSessionCount, formatSeatCount, formatCohortDisplayName, formatTimeRangeAr, formatClockAr } from "@/lib/plan-display";
 
 // الكتالوج فيه منتجان الآن: motabaa (1-6) وfocus_room (7-12). هذا الربط كتالوجي/تجاري بحت —
 // لا علاقة له ببنية الصف نفسها، ولذلك يبقى هنا محليًا لا داخل grade-config.ts (الذي يقتصر على
@@ -228,7 +228,7 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
                     <div>
                       <b style={{ display: "block" }}>{formatCohortDisplayName(c.title)}</b>
                       <span style={{ color: "var(--gray)", fontSize: 13 }}>
-                        {c.start_time.slice(0, 5)} – {c.end_time.slice(0, 5)}
+                        {formatTimeRangeAr(c.start_time, c.end_time)}
                       </span>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -266,7 +266,7 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
               </div>
               <div className="plans-sticky-row">
                 <span>الموعد</span>
-                <span>{selectedCohort.start_time.slice(0, 5)}</span>
+                <span>{formatClockAr(selectedCohort.start_time)}</span>
               </div>
             </>
           )}
