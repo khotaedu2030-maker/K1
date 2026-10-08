@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import PauseRequestForm from "./PauseRequestForm";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { firstRelation } from "@/lib/supabase-relation";
@@ -85,7 +86,7 @@ export default async function P() {
           <h1 className="title" style={{ fontSize: 34 }}>الاشتراك</h1>
 
           {(!subscriptions || subscriptions.length === 0) && (
-            <p className="lead" style={{ marginTop: 20 }}>لا يوجد اشتراك بعد.</p>
+            <EmptyState title="لا يوجد اشتراك بعد" description="عند تسجيل طفلك في إحدى الخطط سيظهر اشتراكه وحالته هنا." actionHref="/motabaa/plans" actionLabel="استعرض الخطط" />
           )}
 
           {(subscriptions ?? []).map((s) => (

@@ -884,3 +884,24 @@ header.transparent + #main-content > main > .hero-editorial-v28:first-child{marg
 .admin-drawer-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
 .admin-drawer-row span:first-child{color:var(--gray)}
 @media (max-width:640px){.admin-drawer-panel{width:100%;max-width:100%}}
+
+/* Footer: no horizontal overflow at any width; CTA wraps/stacks on narrow screens */
+footer{overflow-x:clip}
+.footer-top>*{min-width:0}
+.footer-top h3{max-width:100%;overflow-wrap:anywhere}
+.footer-top .btn{max-width:100%;white-space:normal;text-align:center}
+.foot>*{min-width:0}
+.foot a{max-width:100%;overflow-wrap:anywhere}
+.copy>*{min-width:0}
+@media(max-width:900px){
+  .footer-top{flex-direction:column;align-items:stretch;gap:24px;padding-bottom:40px;margin-bottom:40px}
+  .footer-top .btn{width:100%}
+}
+
+/* Unified empty state card */
+.empty-state{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:44px 24px;margin:28px auto;max-width:560px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px}
+.empty-state-motif{margin-bottom:4px}
+.empty-state-title{margin:0;font-size:20px;font-weight:800;line-height:1.5}
+.empty-state-text{margin:0 0 6px;color:var(--gray);line-height:1.9;max-width:44ch}
+
+.plan-tile:disabled{opacity:.55;cursor:not-allowed;transform:none;box-shadow:none}

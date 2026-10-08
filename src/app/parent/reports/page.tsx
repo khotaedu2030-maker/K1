@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type ScoreKey = "reading_score" | "writing_spelling_score" | "mathematics_score" | "english_score" | "focus_score" | "independence_score";
@@ -63,7 +64,7 @@ export default async function P() {
           </div>
 
           {!first || !latest ? (
-            <p style={{ color: "var(--gray)" }}>لا توجد تقييمات مسجّلة بعد لعرض التقدّم.</p>
+            <EmptyState title="لا توجد تقييمات بعد" description="سيظهر تقدّم طفلك هنا بعد تسجيل أول تقييم من المعلم." actionHref="/parent/schedule" actionLabel="عرض الجلسات" />
           ) : (
             <div className="dashcard">
               {dims.map((d) => {

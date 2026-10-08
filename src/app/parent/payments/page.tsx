@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import { resolveParentContext } from "@/lib/pilot-parent";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { areOnlinePaymentsEnabled } from "@/lib/payment-settings";
@@ -22,7 +23,7 @@ export default async function ParentPaymentsPage() {
           <h1 className="title" style={{ fontSize: 34 }}>المدفوعات</h1>
           {!enabled && <div className="dashcard" style={{ marginTop: 20, borderColor: "var(--g)" }}><span className="badge">الدفع الإلكتروني متوقف مؤقتًا</span><p style={{ color: "var(--gray)", marginBottom: 0 }}>طلبات التسجيل محفوظة، وسيتواصل معك فريق خُطى لإكمال الاشتراك.</p></div>}
           {(payments ?? []).length === 0 ? (
-            <div className="dashcard" style={{ marginTop: 20 }}><p style={{ margin: 0, color: "var(--gray)" }}>لا توجد عمليات دفع على حسابك.</p></div>
+            <EmptyState title="لا توجد مدفوعات بعد" description="ستظهر هنا عمليات الدفع وحالتها بعد إتمام اشتراكك." actionHref="/parent/subscriptions" actionLabel="عرض الاشتراكات" />
           ) : (
             <div style={{ marginTop: 20 }}>{(payments ?? []).map((payment) => <div className="dashcard" key={payment.id} style={{ marginBottom: 12 }}>
               <div className="taskline"><b>{Number(payment.amount_sar).toLocaleString("ar-SA")} ر.س</b><span className="badge">{STATUS[payment.status] ?? payment.status}</span></div>
