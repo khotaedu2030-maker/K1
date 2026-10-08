@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
+import { adminRoleHasPermission } from "@/lib/admin-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 // جلب تفصيلي محدود عند الطلب فقط (لا Preload) — يفتح عند نقر صف ولي أمر بلوحة الإدارة.
@@ -20,7 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .select("id, first_name, grade, subscriptions(id, status, cohort_id, cohorts(id, title, grade_band, grade, cycle_id))")
       .eq("parent_id", id)
       .limit(20),
-    adminCheck.role === "super_admin" || adminCheck.role === "finance_admin"
+    adminRoleHasPermission(adminCheck.role, "payment.read")
       ? admin.from("payments").select("status, amount_sar, paid_at").eq("parent_id", id).order("created_at", { ascending: false }).limit(5)
       : Promise.resolve({ data: [] }),
   ]);
