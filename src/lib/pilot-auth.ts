@@ -9,8 +9,17 @@
 export const PILOT_SESSION_COOKIE = "khota_pilot_session";
 export const PILOT_SESSION_MAX_AGE_SECONDS = 60 * 60 * 6; // 6 ساعات
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// A pilot login can access only one explicitly configured demo parent; never select
+// a parent by recency, by an unsigned subscription cookie, or from user input.
+export function getConfiguredPilotParentId(): string | null {
+  const id = process.env.KHOTA_PILOT_PARENT_ID?.trim() ?? "";
+  return UUID_RE.test(id) ? id : null;
+}
+
 export function isPilotAuthEnabled(): boolean {
-  return process.env.NODE_ENV !== "production" && process.env.KHOTA_PILOT_AUTH === "true";
+  return process.env.NODE_ENV !== "production" && process.env.KHOTA_PILOT_AUTH === "true" && getConfiguredPilotParentId() !== null;
 }
 
 function base64url(bytes: Uint8Array): string {
@@ -45,17 +54,19 @@ async function getHmacKey(): Promise<CryptoKey> {
 // (HMAC-SHA256) بمفتاح سري لا يظهر في الكوكي نفسه، فلا يمكن تزويرها بدون معرفة KHOTA_PILOT_SECRET.
 export async function createPilotSessionToken(): Promise<string> {
   const key = await getHmacKey();
-  const payload = JSON.stringify({ role: "pilot-parent", iat: Date.now() });
+  const parentId = getConfiguredPilotParentId();
+  if (!isPilotAuthEnabled() || !parentId) throw new Error("Pilot login is not configured for a dedicated parent.");
+  const payload = JSON.stringify({ role: "pilot-parent", parentId, iat: Date.now() });
   const payloadB64 = base64url(new TextEncoder().encode(payload));
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadB64));
   const signatureB64 = base64url(new Uint8Array(signature));
   return `${payloadB64}.${signatureB64}`;
 }
 
-export async function verifyPilotSessionToken(token: string | undefined | null): Promise<boolean> {
-  if (!token) return false;
+export async function verifyPilotSessionParentId(token: string | undefined | null): Promise<string | null> {
+  if (!isPilotAuthEnabled() || !token) return null;
   const parts = token.split(".");
-  if (parts.length !== 2) return false;
+  if (parts.length !== 2) return null;
   const [payloadB64, signatureB64] = parts;
 
   try {
@@ -66,14 +77,22 @@ export async function verifyPilotSessionToken(token: string | undefined | null):
       base64urlToBytes(signatureB64),
       new TextEncoder().encode(payloadB64)
     );
-    if (!valid) return false;
+    if (!valid) return null;
 
-    const payload = JSON.parse(new TextDecoder().decode(base64urlToBytes(payloadB64)));
-    if (typeof payload.iat !== "number") return false;
+    const payload: unknown = JSON.parse(new TextDecoder().decode(base64urlToBytes(payloadB64)));
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+    const session = payload as { role?: unknown; parentId?: unknown; iat?: unknown };
+    const configuredId = getConfiguredPilotParentId();
+    if (session.role !== "pilot-parent" || session.parentId !== configuredId || typeof session.iat !== "number" || !Number.isFinite(session.iat)) return null;
 
-    const ageMs = Date.now() - payload.iat;
-    return ageMs >= 0 && ageMs <= PILOT_SESSION_MAX_AGE_SECONDS * 1000;
+    const ageMs = Date.now() - session.iat;
+    return ageMs >= 0 && ageMs <= PILOT_SESSION_MAX_AGE_SECONDS * 1000 ? configuredId : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+// Shared middleware contract remains boolean, but only a parent-bound token is valid.
+export async function verifyPilotSessionToken(token: string | undefined | null): Promise<boolean> {
+  return (await verifyPilotSessionParentId(token)) !== null;
 }
