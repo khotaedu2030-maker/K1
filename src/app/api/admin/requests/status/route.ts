@@ -21,10 +21,15 @@ export async function POST(req: Request) {
   const parsed = await readJsonBodyLimited(req, MAX_BODY_BYTES);
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
 
-  const kind = parsed.body?.kind;
+  const rawKind = parsed.body?.kind;
   const id = typeof parsed.body?.id === "string" ? parsed.body.id : "";
   const status = typeof parsed.body?.status === "string" ? parsed.body.status : "";
-  if ((kind !== "contact" && kind !== "premium") || !UUID_RE.test(id) || !STATUS_BY_KIND[kind].has(status)) {
+
+  if (rawKind !== "contact" && rawKind !== "premium") {
+    return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });
+  }
+  const kind: keyof typeof STATUS_BY_KIND = rawKind;
+  if (!UUID_RE.test(id) || !STATUS_BY_KIND[kind].has(status)) {
     return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });
   }
 
