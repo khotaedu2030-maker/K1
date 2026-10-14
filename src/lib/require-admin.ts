@@ -2,7 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { adminRoleHasPermission } from "@/lib/admin-permissions";
+import { adminRoleHasPermission, isKnownAdminRole } from "@/lib/admin-permissions";
 
 // فحص صلاحية الإدارة المركزي — بدل تكرار getUser() + بحث جدول admins داخل كل route إداري.
 // مصدر الحقيقة الوحيد لأدوار/صلاحيات الإدارة هو src/lib/admin-permissions.ts (يستهلكه أيضًا
@@ -33,8 +33,12 @@ export async function requireAdmin(): Promise<AdminCheckResult> {
   }
 
   const admin = createSupabaseAdminClient();
-  const { data: adminRow } = await admin.from("admins").select("id, role").eq("user_id", user.id).eq("active", true).maybeSingle();
-  if (!adminRow) {
+  const { data: adminRow, error } = await admin.from("admins").select("id, role").eq("user_id", user.id).eq("active", true).maybeSingle();
+  if (error) {
+    console.error("[require-admin] admin lookup failed:", error.message);
+    return { ok: false, response: NextResponse.json({ error: "تعذّر التحقق من صلاحية الإدارة" }, { status: 503 }) };
+  }
+  if (!adminRow || !isKnownAdminRole(adminRow.role)) {
     return { ok: false, response: NextResponse.json({ error: "هذا الحساب ليس حساب إدارة" }, { status: 403 }) };
   }
 
