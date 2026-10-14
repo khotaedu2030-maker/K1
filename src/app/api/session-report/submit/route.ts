@@ -123,7 +123,7 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: session } = await admin.from("sessions").select("id, teacher_id, cohort_id, status, ends_at").eq("id", sessionId).maybeSingle();
+  const { data: session } = await admin.from("sessions").select("id, teacher_id, cohort_id, status, starts_at, ends_at").eq("id", sessionId).maybeSingle();
   if (!session || session.teacher_id !== teacherCheck.teacherId) {
     return NextResponse.json({ error: "هذه الجلسة لا تخص حسابك" }, { status: 403 });
   }
@@ -152,6 +152,9 @@ export async function POST(req: Request) {
   }
 
   const settings = await getRuntimeSettings();
+  if (session.starts_at && Date.now() < new Date(session.starts_at).getTime()) {
+    return NextResponse.json({ error: "لا يمكن إرسال تقرير قبل بدء الجلسة" }, { status: 409 });
+  }
   if (session.ends_at && Date.now() > new Date(session.ends_at).getTime() + settings.attendanceLockHours * 60 * 60 * 1000) {
     return NextResponse.json({ error: "انتهت مهلة تعديل حضور هذه الجلسة" }, { status: 409 });
   }

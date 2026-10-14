@@ -129,9 +129,8 @@ export async function POST(req: Request) {
   // وليس نقطة الحماية الفعلية — تلك داخل enroll_subscription_atomic أدناه، التي تقفل صف
   // المجموعة وتعيد فحص المقاعد من الصفر ذرّيًا قبل أي إدراج، فلا تسابق ممكن بين طلبين متزامنين.
   const { data: seatsAvailable } = await supabase.rpc("cohort_available_seats", { p_cohort_id: cohortId });
-  if ((seatsAvailable ?? 0) <= 0) {
-    return NextResponse.json({ error: "اكتمل عدد المقاعد في هذه المجموعة" }, { status: 409 });
-  }
+  // الرفض يُؤجَّل إلى ما بعد فحص التسجيل المكرر أدناه، حتى لا تُحجب إعادة محاولة ولي أمر يحتفظ أصلًا بالمقعد الأخير.
+  const noSeatsAvailable = (seatsAvailable ?? 0) <= 0;
 
   // ---------------------------------------------------------------------
   // هوية ولي الأمر — تُحسَم بالكامل قبل إنشاء أي child أو subscription.
@@ -247,6 +246,47 @@ export async function POST(req: Request) {
         parent = newParent;
       }
     }
+  }
+
+  // إعادة المحاولة لنفس التسجيل (نفس ولي الأمر + نفس الطفل + نفس المجموعة) لا تُنشئ طفلًا ولا
+  // اشتراكًا ولا مقعدًا جديدًا: نعيد الاشتراك المعلّق نفسه. المطابقة محصورة بأطفال ولي الأمر
+  // نفسه فقط. لا نعيد استخدام اشتراك معلّق تجاوز مهلة 24 ساعة (يُنهيه مسار الدفع كمنتهي).
+  const normalizedChildName = String(childName).trim().toLowerCase();
+  const { data: siblings, error: siblingsError } = await supabase
+    .from("children")
+    .select("id, first_name")
+    .eq("parent_id", parent.id)
+    .eq("grade", gradeNumber);
+  if (siblingsError) {
+    console.error(`[enroll] خطأ استعلام أثناء البحث عن تسجيل مكرر لولي الأمر ${parent.id}:`, siblingsError.message);
+    return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
+  }
+  const sameChildIds = (siblings ?? [])
+    .filter((c) => String(c.first_name).trim().toLowerCase() === normalizedChildName)
+    .map((c) => c.id);
+  if (sameChildIds.length > 0) {
+    const { data: liveSubs, error: liveSubsError } = await supabase
+      .from("subscriptions")
+      .select("id, status, created_at")
+      .in("child_id", sameChildIds)
+      .eq("cohort_id", cohortId)
+      .in("status", ["pending_payment", "active"])
+      .order("created_at", { ascending: true });
+    if (liveSubsError) {
+      console.error(`[enroll] خطأ استعلام أثناء البحث عن اشتراك قائم لولي الأمر ${parent.id}:`, liveSubsError.message);
+      return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
+    }
+    if ((liveSubs ?? []).some((s) => s.status === "active")) {
+      return NextResponse.json({ error: "هذا الطالب مسجَّل بالفعل في هذه المجموعة" }, { status: 409 });
+    }
+    const reusable = (liveSubs ?? []).find(
+      (s) => s.status === "pending_payment" && Date.now() - new Date(s.created_at).getTime() <= 24 * 60 * 60 * 1000
+    );
+    if (reusable) return NextResponse.json({ subscriptionId: reusable.id });
+  }
+
+  if (noSeatsAvailable) {
+    return NextResponse.json({ error: "اكتمل عدد المقاعد في هذه المجموعة" }, { status: 409 });
   }
 
   const { data: child, error: childError } = await supabase

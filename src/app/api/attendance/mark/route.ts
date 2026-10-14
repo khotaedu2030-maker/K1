@@ -83,7 +83,11 @@ export async function POST(req: Request) {
 
   const { error } = await admin
     .from("attendance")
-    .upsert({ session_id: sessionId, child_id: childId, status: "present" }, { onConflict: "session_id,child_id" });
+    .upsert(
+      { session_id: sessionId, child_id: childId, status: "present" },
+      // تقرير المعلم هو المرجع النهائي: لا نكتب فوق صف حضور موجود (ON CONFLICT DO NOTHING).
+      { onConflict: "session_id,child_id", ignoreDuplicates: true }
+    );
 
   if (error) {
     console.error("[attendance] save failed:", error.message);

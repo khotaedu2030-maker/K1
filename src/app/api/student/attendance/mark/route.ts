@@ -65,7 +65,8 @@ export async function POST(req: Request) {
     .from("attendance")
     .upsert(
       { session_id: sessionRowId, child_id: session.childId, status: "present" },
-      { onConflict: "session_id,child_id" }
+      // تقرير المعلم هو المرجع النهائي: لا نكتب فوق صف حضور موجود (ON CONFLICT DO NOTHING).
+      { onConflict: "session_id,child_id", ignoreDuplicates: true }
     );
   if (error) {
     console.error("[student-attendance] save failed:", error.message);
