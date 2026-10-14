@@ -34,3 +34,6 @@ jobs:
 
       - name: Release readiness QA
         run: npm run qa:release
+
+      - name: E2E readiness QA
+        run: npm run qa:e2e
