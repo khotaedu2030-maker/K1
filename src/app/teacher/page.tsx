@@ -2,6 +2,14 @@ import Link from "next/link";
 import Shell from "@/components/Shell";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { sessionStatusLabelAr } from "@/lib/arabic-time";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+
+type TeacherDashboardSession = {
+  id: string;
+  starts_at: string | null;
+  status: string;
+  cohorts: SupabaseRelation<{ title: string | null }>;
+};
 
 export default async function P() {
   const supabase = await createSupabaseServerClient();
@@ -45,10 +53,10 @@ export default async function P() {
           <div className="dashcard" style={{ marginTop: 20 }}>
             <b>جلسات اليوم</b>
             {todaySessions && todaySessions.length > 0 ? (
-              todaySessions.map((s: any) => (
+              (todaySessions as TeacherDashboardSession[]).map((s) => (
                 <div className="session-row" key={s.id}>
                   <div>
-                    <b>{s.cohorts?.title ?? "مجموعة"}</b>
+                    <b>{supabaseRelationOne(s.cohorts)?.title ?? "مجموعة"}</b>
                     <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
                       {s.starts_at ? new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" }) : ""}
                       {" • "}

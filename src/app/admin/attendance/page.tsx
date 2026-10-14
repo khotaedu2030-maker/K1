@@ -2,10 +2,20 @@ import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { adminRoleHasPermission } from "@/lib/admin-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 import AttendanceOverrideButton from "./AttendanceOverrideButton";
 import { addRiyadhCalendarDays, formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
 
 const STATUS_LABELS: Record<string, string> = { present: "حاضر", absent: "غائب", late: "متأخر", excused: "معذور" };
+
+type AttendanceRow = {
+  id: string;
+  session_id: string;
+  child_id: string;
+  status: string;
+  children: SupabaseRelation<{ first_name: string | null }>;
+  sessions: SupabaseRelation<{ session_date: string; cohorts: SupabaseRelation<{ title: string | null }> }>;
+};
 
 export default async function AdminAttendancePage() {
   const admin = await getAdminIdentity("attendance.read");
@@ -60,11 +70,11 @@ export default async function AdminAttendancePage() {
         <table className="admin-table">
           <thead><tr><th>الطالب</th><th>المجموعة</th><th>التاريخ</th><th>الحالة</th>{canOverride && <th>تصحيح</th>}</tr></thead>
           <tbody>
-            {(recentAttendance ?? []).map((a: any) => (
+            {((recentAttendance ?? []) as AttendanceRow[]).map((a) => (
               <tr key={a.id}>
-                <td>{a.children?.first_name ?? "—"}</td>
-                <td>{a.sessions?.cohorts?.title ?? "—"}</td>
-                <td>{a.sessions?.session_date ? new Date(a.sessions.session_date).toLocaleDateString("ar-SA") : "—"}</td>
+                <td>{supabaseRelationOne(a.children)?.first_name ?? "—"}</td>
+                <td>{supabaseRelationOne(supabaseRelationOne(a.sessions)?.cohorts)?.title ?? "—"}</td>
+                <td>{supabaseRelationOne(a.sessions)?.session_date ? new Date(supabaseRelationOne(a.sessions)!.session_date).toLocaleDateString("ar-SA") : "—"}</td>
                 <td>{STATUS_LABELS[a.status] ?? a.status}</td>
                 {canOverride && <td><AttendanceOverrideButton sessionId={a.session_id} childId={a.child_id} currentStatus={a.status} /></td>}
               </tr>

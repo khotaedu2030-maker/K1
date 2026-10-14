@@ -11,6 +11,15 @@ const dimLabels: Record<string, string> = {
   independence_score: "الاستقلالية",
 };
 
+type ProgressSnapshot = {
+  reading_score: number | null;
+  writing_spelling_score: number | null;
+  mathematics_score: number | null;
+  english_score: number | null;
+  focus_score: number | null;
+  independence_score: number | null;
+};
+
 // خُطى الأسبوعي — يُولَّد بالكامل من بيانات حقيقية عند كل طلب، ولا يُخزَّن كنص ثابت.
 export default async function P() {
   const supabase = await createSupabaseServerClient();
@@ -102,13 +111,15 @@ export default async function P() {
   let strongest: string | null = null;
   let weakest: string | null = null;
   if (snapshots && snapshots.length >= 2) {
-    const first = snapshots[0] as any;
-    const latest = snapshots[snapshots.length - 1] as any;
+    const first = snapshots[0] as ProgressSnapshot;
+    const latest = snapshots[snapshots.length - 1] as ProgressSnapshot;
     let bestDelta = -Infinity;
     let worstDelta = Infinity;
-    for (const key of Object.keys(dimLabels)) {
-      if (first[key] == null || latest[key] == null) continue;
-      const delta = latest[key] - first[key];
+    for (const key of Object.keys(dimLabels) as (keyof ProgressSnapshot)[]) {
+      const firstScore = first[key];
+      const latestScore = latest[key];
+      if (firstScore == null || latestScore == null) continue;
+      const delta = latestScore - firstScore;
       if (delta > bestDelta) { bestDelta = delta; strongest = dimLabels[key]; }
       if (delta < worstDelta) { worstDelta = delta; weakest = dimLabels[key]; }
     }

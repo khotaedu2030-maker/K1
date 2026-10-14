@@ -941,5 +941,6 @@ export type PublicQuestion = Omit<Question, "answer">;
 
 export function toPublicQuestion(q: Question): PublicQuestion {
   const { answer, ...rest } = q;
+  void answer;
   return rest;
 }

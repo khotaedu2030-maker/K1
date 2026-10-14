@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Shell from "@/components/Shell";
@@ -17,6 +17,28 @@ type PublicQuestion = {
 };
 
 type TrackMeta = { id: TrackId; title: string; subtitle: string; description: string };
+type TestResult = { level: string; correctAnswers: number; total: number; confidence: string };
+type StartTestResponse = { error?: string; sessionId: string; question: PublicQuestion; maxQuestions: number };
+type SubmitAnswerResponse = {
+  error?: string;
+  correctIndex: number;
+  finished: boolean;
+  nextQuestion: PublicQuestion | null;
+  result?: TestResult;
+};
+
+function isTrackId(value: string | null): value is TrackId {
+  return value === "general" || value === "schools" || value === "business";
+}
+
+async function requestTestStart(trackId: TrackId) {
+  const res = await fetch("/api/level-test/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ trackId }),
+  });
+  return { res, data: await res.json() as StartTestResponse };
+}
 
 const levelDescriptions: Record<string, string> = {
   A1: "مستوى مبتدئ. تستطيع فهم واستخدام عبارات أساسية في المواقف اليومية البسيطة.",
@@ -40,25 +62,22 @@ function LevelTestInner() {
   const [correctIndex, setCorrectIndex] = useState<number | null>(null);
   const [maxQuestions, setMaxQuestions] = useState(0);
   const [finished, setFinished] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<TestResult | null>(null);
+  const [loading, setLoading] = useState(() => isTrackId(requestedTrack));
   const [error, setError] = useState<string | null>(null);
+  const autoStartRequest = useRef<{ trackId: TrackId; promise: ReturnType<typeof requestTestStart> } | null>(null);
+  const nextQuestionRef = useRef<PublicQuestion | null>(null);
 
   useEffect(() => {
     fetch("/api/level-test/tracks")
       .then((r) => r.json())
-      .then((d) => setTracksMeta(d.tracks ?? []));
+      .then((d: { tracks?: TrackMeta[] }) => setTracksMeta(d.tracks ?? []));
   }, []);
 
   async function startTest(trackId: TrackId) {
     setLoading(true);
     setError(null);
-    const res = await fetch("/api/level-test/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trackId }),
-    });
-    const data = await res.json();
+    const { res, data } = await requestTestStart(trackId);
     if (!res.ok) {
       setError(data.error ?? "تعذّر بدء الاختبار.");
       setLoading(false);
@@ -78,14 +97,36 @@ function LevelTestInner() {
   }
 
   useEffect(() => {
-    if (
-      requestedTrack &&
-      (requestedTrack === "general" || requestedTrack === "schools" || requestedTrack === "business") &&
-      !selectedTrack
-    ) {
-      startTest(requestedTrack);
+    if (!isTrackId(requestedTrack)) return;
+    if (autoStartRequest.current?.trackId !== requestedTrack) {
+      autoStartRequest.current = { trackId: requestedTrack, promise: requestTestStart(requestedTrack) };
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let active = true;
+    autoStartRequest.current.promise.then(({ res, data }) => {
+      if (!active) return;
+      if (!res.ok) {
+        setError(data.error ?? "تعذّر بدء الاختبار.");
+        setLoading(false);
+        return;
+      }
+      setSelectedTrack(requestedTrack);
+      setSessionId(data.sessionId);
+      setQuestion(data.question);
+      setMaxQuestions(data.maxQuestions);
+      setAnsweredCount(0);
+      setSelectedAnswer(null);
+      setAnswerLocked(false);
+      setCorrectIndex(null);
+      setFinished(false);
+      setResult(null);
+      setLoading(false);
+    }).catch(() => {
+      if (active) {
+        setError("تعذّر بدء الاختبار.");
+        setLoading(false);
+      }
+    });
+    return () => { active = false; };
   }, [requestedTrack]);
 
   async function submitAnswer() {
@@ -104,7 +145,7 @@ function LevelTestInner() {
         selectedIndex: selectedAnswer,
       }),
     });
-    const data = await res.json();
+    const data = await res.json() as SubmitAnswerResponse;
     setLoading(false);
 
     if (!res.ok) {
@@ -117,17 +158,26 @@ function LevelTestInner() {
     setAnsweredCount((prev) => prev + 1);
 
     if (data.finished) {
+      if (!data.result) {
+        setError("استجابة الاختبار غير مكتملة.");
+        return;
+      }
       setResult(data.result);
       setFinished(true);
     } else {
+      if (!data.nextQuestion) {
+        setError("استجابة الاختبار غير مكتملة.");
+        return;
+      }
       // نحتفظ بالسؤال التالي جاهزًا عند الضغط على "التالي"
-      (window as any).__khotaNextQuestion = data.nextQuestion;
+      nextQuestionRef.current = data.nextQuestion;
     }
   }
 
   function nextQuestion() {
-    const next = (window as any).__khotaNextQuestion as PublicQuestion | undefined;
+    const next = nextQuestionRef.current;
     if (!next) return;
+    nextQuestionRef.current = null;
     setQuestion(next);
     setSelectedAnswer(null);
     setAnswerLocked(false);
@@ -135,6 +185,7 @@ function LevelTestInner() {
   }
 
   function resetTest() {
+    nextQuestionRef.current = null;
     setSelectedTrack(null);
     setSessionId(null);
     setQuestion(null);

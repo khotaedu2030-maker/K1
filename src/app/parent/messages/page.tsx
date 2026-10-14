@@ -2,6 +2,13 @@ import Link from "next/link";
 import Shell from "@/components/Shell";
 import StartThreadButton from "./StartThreadButton";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+
+type StartableSubscription = {
+  child_id: string;
+  cohort_id: string | null;
+  cohorts: SupabaseRelation<{ title: string | null }>;
+};
 
 export default async function P() {
   const supabase = await createSupabaseServerClient();
@@ -64,7 +71,9 @@ export default async function P() {
     : { data: [] };
 
   const existingThreadCohorts = new Set((threads ?? []).map((t) => t.cohort_id));
-  const startable = (activeSubs ?? []).filter((s) => s.cohort_id && !existingThreadCohorts.has(s.cohort_id));
+  const startable = ((activeSubs ?? []) as StartableSubscription[]).filter(
+    (s): s is StartableSubscription & { cohort_id: string } => Boolean(s.cohort_id) && !existingThreadCohorts.has(s.cohort_id!)
+  );
 
   return (
     <Shell>
@@ -78,8 +87,8 @@ export default async function P() {
             <div className="dashcard" style={{ marginBottom: 20 }}>
               <b>بدء محادثة جديدة</b>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-                {startable.map((s: any, i) => (
-                  <StartThreadButton key={i} childId={s.child_id} cohortId={s.cohort_id} label={s.cohorts?.title ?? "البرنامج"} />
+                {startable.map((s) => (
+                  <StartThreadButton key={s.cohort_id} childId={s.child_id} cohortId={s.cohort_id} label={supabaseRelationOne(s.cohorts)?.title ?? "البرنامج"} />
                 ))}
               </div>
             </div>

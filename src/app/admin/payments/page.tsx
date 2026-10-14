@@ -1,8 +1,20 @@
 import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 
 const PAGE_SIZE = 40;
+
+type PaymentRow = {
+  id: string;
+  amount_sar: number;
+  status: string;
+  provider: string | null;
+  provider_ref: string | null;
+  paid_at: string | null;
+  created_at: string;
+  parents: SupabaseRelation<{ full_name: string | null }>;
+};
 
 export default async function AdminPaymentsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const admin = await getAdminIdentity("payment.read");
@@ -48,9 +60,9 @@ export default async function AdminPaymentsPage({ searchParams }: { searchParams
               <tr><th>ولي الأمر</th><th>المبلغ</th><th>الحالة</th><th>المزوّد</th><th>مرجع العملية</th><th>تاريخ الدفع</th><th>تاريخ الإنشاء</th></tr>
             </thead>
             <tbody>
-              {(payments ?? []).map((p: any) => (
+              {((payments ?? []) as PaymentRow[]).map((p) => (
                 <tr key={p.id}>
-                  <td>{p.parents?.full_name ?? "—"}</td>
+                  <td>{supabaseRelationOne(p.parents)?.full_name ?? "—"}</td>
                   <td>{p.amount_sar} ر.س</td>
                   <td>{STATUS_LABELS[p.status] ?? p.status}</td>
                   <td>{p.provider ?? "—"}</td>

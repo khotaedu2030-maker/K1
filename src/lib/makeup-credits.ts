@@ -1,4 +1,5 @@
 import "server-only";
+import type { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { ABSENCE_POLICY, isAbsenceReasonCreditEligible, isMonthlyCapApplicable, type AttendanceReason, type CreditSourceType } from "@/lib/policies";
 import { getRuntimeSettings } from "@/lib/platform-settings";
 
@@ -6,7 +7,7 @@ import { getRuntimeSettings } from "@/lib/platform-settings";
 // المعلم) أو إلغاء جلسة كاملة (معلم/منصة). كل الاستدعاءات الأخرى تمر من هنا، لا تُكرَّر منطق
 // الأهلية أو السقف الشهري في أكثر من مكان.
 export async function issueMakeupCreditIfEligible(
-  admin: any,
+  admin: ReturnType<typeof createSupabaseAdminClient>,
   params: {
     childId: string;
     subscriptionId?: string | null;

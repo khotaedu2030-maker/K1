@@ -7,7 +7,7 @@ export default async function AdminReportsPage() {
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
 
   const supabase = createSupabaseAdminClient();
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+  const monthAgo = new Date(new Date().getTime() - 30 * 86400000).toISOString();
   const [
     { count: activeSubs },
     { count: pausedSubs },

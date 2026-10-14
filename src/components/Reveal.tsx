@@ -16,7 +16,7 @@ export default function Reveal({
   as?: keyof React.JSX.IntrinsicElements;
   className?: string;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLElement | null>(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -36,7 +36,7 @@ export default function Reveal({
     return () => observer.disconnect();
   }, []);
 
-  const Component = Tag as any;
+  const Component = Tag as React.ElementType;
   return (
     <Component
       ref={ref}

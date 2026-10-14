@@ -3,6 +3,17 @@ import StudentShell from "@/components/StudentShell";
 import { getActiveStudentSession } from "@/lib/student-mode";
 import { getToneLevel } from "@/lib/grade-config";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+
+type StudentScheduleRow = {
+  id: string;
+  starts_at: string;
+  status: string;
+  cohorts: SupabaseRelation<{
+    title: string | null;
+    teachers: SupabaseRelation<{ full_name: string | null }>;
+  }>;
+};
 
 const statusLabel: Record<string, string> = {
   scheduled: "قادمة",
@@ -46,21 +57,24 @@ export default async function P() {
         </div>
       )}
 
-      {(sessions ?? []).map((s: any) => (
-        <div className="student-card" key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <b style={{ fontSize: junior ? 18 : 15 }}>
-              {new Date(s.starts_at).toLocaleDateString("ar-SA", { weekday: "long" })}
-            </b>
-            <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
-              {new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
-              {!junior && s.cohorts?.title ? ` • ${s.cohorts.title}` : ""}
-              {!junior && s.cohorts?.teachers?.full_name ? ` • ${s.cohorts.teachers.full_name}` : ""}
-            </p>
+      {((sessions ?? []) as StudentScheduleRow[]).map((s) => {
+        const cohort = supabaseRelationOne(s.cohorts);
+        return (
+          <div className="student-card" key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <b style={{ fontSize: junior ? 18 : 15 }}>
+                {new Date(s.starts_at).toLocaleDateString("ar-SA", { weekday: "long" })}
+              </b>
+              <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
+                {new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                {!junior && cohort?.title ? ` • ${cohort.title}` : ""}
+                {!junior && supabaseRelationOne(cohort?.teachers)?.full_name ? ` • ${supabaseRelationOne(cohort?.teachers)?.full_name}` : ""}
+              </p>
+            </div>
+            <span className="badge">{statusLabel[s.status] ?? s.status}</span>
           </div>
-          <span className="badge">{statusLabel[s.status] ?? s.status}</span>
-        </div>
-      ))}
+        );
+      })}
     </StudentShell>
   );
 }

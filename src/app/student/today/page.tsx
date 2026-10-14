@@ -4,6 +4,14 @@ import StudentSessionCard from "./StudentSessionCard";
 import { getActiveStudentSession } from "@/lib/student-mode";
 import { getToneLevel } from "@/lib/grade-config";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+
+type StudentNextSessionRow = {
+  id: string;
+  starts_at: string;
+  ends_at: string | null;
+  cohorts: SupabaseRelation<{ title: string | null }>;
+};
 
 export default async function P() {
   const session = await getActiveStudentSession();
@@ -31,12 +39,13 @@ export default async function P() {
         .limit(1)
     : { data: [] };
 
-  const nextSession = sessions?.[0]
+  const nextSessionRow = sessions?.[0] as StudentNextSessionRow | undefined;
+  const nextSession = nextSessionRow?.ends_at
     ? {
-        id: sessions[0].id,
-        startsAt: sessions[0].starts_at,
-        endsAt: sessions[0].ends_at,
-        title: (sessions[0] as any).cohorts?.title ?? "جلستك",
+        id: nextSessionRow.id,
+        startsAt: nextSessionRow.starts_at,
+        endsAt: nextSessionRow.ends_at,
+        title: supabaseRelationOne(nextSessionRow.cohorts)?.title ?? "جلستك",
       }
     : null;
 
