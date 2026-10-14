@@ -6,6 +6,14 @@ import { getRiyadhDayOfWeek, getRiyadhMinutesSinceMidnight } from "@/lib/riyadh-
 import { getRuntimeSettings } from "@/lib/platform-settings";
 import { resolveGradeBand } from "@/lib/grade-config";
 
+function isValidTimeHHMM(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return false;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
 export async function POST(req: Request) {
   const adminCheck = await requirePermission("cohort.manage");
   if (!adminCheck.ok) return adminCheck.response;
@@ -33,7 +41,7 @@ export async function POST(req: Request) {
   const startTime = typeof body?.startTime === "string" ? body.startTime : "";
   const endTime = typeof body?.endTime === "string" ? body.endTime : "";
   const meetingUrl = typeof body?.meetingUrl === "string" ? body.meetingUrl.trim() : "";
-  const status = body?.status === "closed" ? "closed" : "open";
+  const status = body?.status === undefined ? "open" : body.status;
 
   if (!title) return NextResponse.json({ error: "اسم المجموعة مطلوب" }, { status: 400 });
   let gradeBand: string;
@@ -45,18 +53,41 @@ export async function POST(req: Request) {
   if (!Number.isInteger(capacity) || capacity < 1 || capacity > 20) {
     return NextResponse.json({ error: "السعة يجب أن تكون رقمًا صحيحًا بين 1 و20" }, { status: 400 });
   }
-  if (daysOfWeek.length === 0 || daysOfWeek.some((d: number) => !Number.isInteger(d) || d < 0 || d > 6)) {
-    return NextResponse.json({ error: "أيام الأسبوع غير صالحة" }, { status: 400 });
+  if (
+    daysOfWeek.length === 0 ||
+    daysOfWeek.some((d: number) => !Number.isInteger(d) || d < 0 || d > 6) ||
+    new Set(daysOfWeek).size !== daysOfWeek.length
+  ) {
+    return NextResponse.json({ error: "أيام الأسبوع غير صالحة أو مكررة" }, { status: 400 });
   }
-  if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
+  if (!isValidTimeHHMM(startTime) || !isValidTimeHHMM(endTime) || startTime >= endTime) {
     return NextResponse.json({ error: "وقت البداية/النهاية غير صالح" }, { status: 400 });
   }
+  if (status !== "open" && status !== "closed") {
+    return NextResponse.json({ error: "حالة المجموعة غير صالحة" }, { status: 400 });
+  }
   if (!planId) return NextResponse.json({ error: "الباقة مطلوبة" }, { status: 400 });
+  if (meetingUrl) {
+    if (meetingUrl.length > 2048) return NextResponse.json({ error: "رابط الجلسة طويل جدًا" }, { status: 400 });
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(meetingUrl);
+    } catch {
+      return NextResponse.json({ error: "رابط الجلسة غير صالح" }, { status: 400 });
+    }
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return NextResponse.json({ error: "رابط الجلسة غير صالح" }, { status: 400 });
+    }
+  }
 
   const admin = createSupabaseAdminClient();
 
   if (cycleId) {
-    const { data: cycle } = await admin.from("cycles").select("id, status, enabled_grade_bands").eq("id", cycleId).maybeSingle();
+    const { data: cycle, error: cycleError } = await admin.from("cycles").select("id, status, enabled_grade_bands").eq("id", cycleId).maybeSingle();
+    if (cycleError) {
+      console.error("[admin-cohorts] cycle lookup failed:", cycleError.message);
+      return NextResponse.json({ error: "تعذّر التحقق من الدورة" }, { status: 500 });
+    }
     if (!cycle) return NextResponse.json({ error: "الدورة غير موجودة" }, { status: 400 });
     if (["completed", "archived"].includes(cycle.status)) return NextResponse.json({ error: "لا يمكن ربط مجموعة بدورة مكتملة أو مؤرشفة" }, { status: 409 });
     if (Array.isArray(cycle.enabled_grade_bands) && cycle.enabled_grade_bands.length > 0 && !cycle.enabled_grade_bands.includes(gradeBand)) {
@@ -67,7 +98,11 @@ export async function POST(req: Request) {
   // الباقة يجب أن تكون فعّالة، من نفس المنتج (motabaa)، وعدد أيامها يطابق أيام المجموعة
   // المُدخَلة بالضبط — قيد قاعدة البيانات (enforce_cohort_days_match_plan) يرفض غير ذلك
   // برسالة خام؛ نتحقق هنا أولًا لرسالة عربية واضحة بدل خطأ Trigger خام.
-  const { data: plan } = await admin.from("plans").select("id, product, active, days_per_week").eq("id", planId).maybeSingle();
+  const { data: plan, error: planError } = await admin.from("plans").select("id, product, active, days_per_week").eq("id", planId).maybeSingle();
+  if (planError) {
+    console.error("[admin-cohorts] plan lookup failed:", planError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من الباقة" }, { status: 500 });
+  }
   if (!plan || !plan.active || plan.product !== "motabaa") {
     return NextResponse.json({ error: "باقة غير صالحة" }, { status: 400 });
   }
@@ -75,22 +110,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `هذه الباقة تتطلب ${plan.days_per_week} أيام بالضبط` }, { status: 400 });
   }
 
-  const { data: existingTitle } = await admin.from("cohorts").select("id").eq("title", title).maybeSingle();
+  const { data: existingTitle, error: titleLookupError } = await admin.from("cohorts").select("id").eq("title", title).maybeSingle();
+  if (titleLookupError) {
+    console.error("[admin-cohorts] title lookup failed:", titleLookupError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من اسم المجموعة" }, { status: 500 });
+  }
   if (existingTitle) return NextResponse.json({ error: "يوجد بالفعل مجموعة بنفس الاسم" }, { status: 409 });
 
   let teacherIdFinal: string | null = null;
   if (teacherId) {
-    const { data: teacher } = await admin.from("teachers").select("id").eq("id", teacherId).eq("active", true).maybeSingle();
+    const { data: teacher, error: teacherError } = await admin.from("teachers").select("id").eq("id", teacherId).eq("active", true).maybeSingle();
+    if (teacherError) {
+      console.error("[admin-cohorts] teacher lookup failed:", teacherError.message);
+      return NextResponse.json({ error: "تعذّر التحقق من المعلم" }, { status: 500 });
+    }
     if (!teacher) return NextResponse.json({ error: "معلم غير موجود أو غير نشط" }, { status: 400 });
 
     // فحص تعارض المعلم — نفس منطق التحقق بمعلم الجلسة البديل (بيانات جلسات فعلية موثوقة)،
     // مُطبَّق هنا وقائيًا على أي جلسات مستقبلية قد تتداخل زمنيًا مع أيام/وقت المجموعة الجديدة.
-    const { data: teacherSessions } = await admin
+    const { data: teacherSessions, error: teacherSessionsError } = await admin
       .from("sessions")
       .select("starts_at, ends_at")
       .eq("teacher_id", teacherId)
       .eq("status", "scheduled")
       .gte("session_date", new Date().toISOString().slice(0, 10));
+    if (teacherSessionsError) {
+      console.error("[admin-cohorts] teacher session lookup failed:", teacherSessionsError.message);
+      return NextResponse.json({ error: "تعذّر التحقق من تعارض جدول المعلم" }, { status: 500 });
+    }
     const [newStartH, newStartM] = startTime.split(":").map(Number);
     const [newEndH, newEndM] = endTime.split(":").map(Number);
     const hasConflict = (teacherSessions ?? []).some((s: { starts_at: string | null; ends_at: string | null }) => {
