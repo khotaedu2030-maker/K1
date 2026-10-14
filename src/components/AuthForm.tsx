@@ -7,10 +7,15 @@ import { supabase } from "@/lib/supabase";
 // لا نسمح بإعادة توجيه إلا لمسار داخلي فعلي يبدأ بـ / — يمنع Open Redirect عبر next مُعدَّل
 // (// أو http:// أو https:// أو أي رابط خارجي).
 function safeNextPath(raw: string | null): string | null {
-  if (!raw) return null;
-  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
-  if (raw.toLowerCase().includes("http://") || raw.toLowerCase().includes("https://")) return null;
-  return raw;
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return null;
+  try {
+    const base = new URL("https://khota.local");
+    const resolved = new URL(raw, base);
+    if (resolved.origin !== base.origin) return null;
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return null;
+  }
 }
 
 function isAllowedNextForRole(role: "admin" | "teacher" | "parent", path: string | null): path is string {
@@ -272,12 +277,35 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" | "signup" }) {
           <p style={{ color: "var(--gray)" }}>أرسلنا رمز التحقق إلى بريدك الإلكتروني.</p>
           <label>
             رمز التحقق
-            <input dir="ltr" value={code} onChange={(e: ChangeEvent<HTMLInputElement>) => setCode(e.target.value)} />
+            <input
+              dir="ltr"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={8}
+              value={code}
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                setCode(e.target.value.replace(/\D/g, "").slice(0, 8))
+              }
+            />
           </label>
           {error && <p role="alert" style={{ color: "var(--p)" }}>{error}</p>}
-          <button className="btn" disabled={loading} onClick={verifyOtp}>
-            {loading ? "جارٍ التحقق..." : "دخول"}
-          </button>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="btn" disabled={loading || code.length < 6} onClick={verifyOtp}>
+              {loading ? "جارٍ التحقق..." : "دخول"}
+            </button>
+            <button
+              type="button"
+              className="btn outline"
+              disabled={loading}
+              onClick={() => {
+                setCode("");
+                setError(null);
+                setStep("email");
+              }}
+            >
+              تغيير البريد
+            </button>
+          </div>
         </>
       )}
       {mode !== "staff" && (

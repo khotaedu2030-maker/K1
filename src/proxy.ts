@@ -2,12 +2,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { STUDENT_SESSION_COOKIE, isStudentModeAllowedApiPath } from "@/lib/student-mode-constants";
 import { isPilotAuthEnabled, verifyPilotSessionToken, PILOT_SESSION_COOKIE } from "@/lib/pilot-auth";
+import { validateUnsafeRequestOrigin } from "@/lib/request-security";
 
 // حارس صلاحيات على مستوى الـ Routes نفسها — قبل أن تصل الصفحة أو الـ API لأي كود تنفيذ.
 // هذا مكمّل للتحقق الدقيق (الدور الصحيح، ملكية البيانات) الذي يبقى داخل كل صفحة/route عبر
 // استعلام قاعدة البيانات — لكنه يمنع الوصول غير المصرَّح به من الأساس، بصرف النظر عمّا تعرضه الواجهة.
 const AUTH_REQUIRED_PREFIXES = ["/parent", "/teacher", "/admin", "/student"];
 const PARENT_AREA_PREFIXES = ["/parent", "/teacher", "/admin"];
+const CROSS_ORIGIN_API_EXEMPTIONS = new Set(["/api/payments/paylink/webhook"]);
 
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request });
@@ -16,6 +18,24 @@ export async function proxy(request: NextRequest) {
   const studentCookieId = request.cookies.get(STUDENT_SESSION_COOKIE)?.value;
   const isProtectedPage = AUTH_REQUIRED_PREFIXES.some((p) => path.startsWith(p));
   const isApiPath = path.startsWith("/api/");
+
+  // Browser-level CSRF defense for every unsafe API call. Paylink's signed server-to-server
+  // webhook is the only deliberate cross-origin POST and remains protected by its own
+  // payment verification logic.
+  if (isApiPath && !CROSS_ORIGIN_API_EXEMPTIONS.has(path)) {
+    const requestSecurity = validateUnsafeRequestOrigin(request);
+    if (!requestSecurity.ok) {
+      return NextResponse.json(
+        { error: "الطلب غير مسموح من هذا المصدر" },
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+  }
+
+  if (path.startsWith("/api/auth/")) {
+    response.headers.set("Cache-Control", "no-store, max-age=0");
+    response.headers.set("Pragma", "no-cache");
+  }
 
   // لا حاجة لأي عمل إضافي إن لم تكن هذه صفحة محمية، ولا API، ولا يوجد كوكي Student Mode إطلاقًا —
   // هذا يغطي الغالبية العظمى من حركة الموقع العام بلا أي تكلفة إضافية (لا استدعاء Supabase).
