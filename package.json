@@ -9,7 +9,8 @@
     "lint": "eslint",
     "qa:plan-days": "node scripts/qa-plan-days.mjs",
     "qa:roles": "node scripts/role-boundary-audit.mjs",
-    "paylink:smoke": "node --env-file=.env.local scripts/paylink-smoke.mjs"
+    "paylink:smoke": "node --env-file=.env.local scripts/paylink-smoke.mjs",
+    "qa": "npm run qa:plan-days && npm run qa:roles"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
