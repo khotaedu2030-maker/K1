@@ -2,7 +2,16 @@ import Link from "next/link";
 import Shell from "@/components/Shell";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-const dims: { key: string; label: string }[] = [
+type ProgressSnapshot = {
+  reading_score: number | null;
+  writing_spelling_score: number | null;
+  mathematics_score: number | null;
+  english_score: number | null;
+  focus_score: number | null;
+  independence_score: number | null;
+};
+
+const dims: { key: keyof ProgressSnapshot; label: string }[] = [
   { key: "reading_score", label: "القراءة" },
   { key: "writing_spelling_score", label: "الإملاء" },
   { key: "mathematics_score", label: "الرياضيات" },
@@ -44,8 +53,8 @@ export default async function P() {
         .order("snapshot_date", { ascending: true })
     : { data: [] };
 
-  const first = snapshots?.[0] ?? null;
-  const latest = snapshots && snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+  const first = (snapshots?.[0] as ProgressSnapshot | undefined) ?? null;
+  const latest = snapshots?.length ? snapshots[snapshots.length - 1] as ProgressSnapshot : null;
 
   return (
     <Shell>
@@ -66,8 +75,8 @@ export default async function P() {
           ) : (
             <div className="dashcard">
               {dims.map((d) => {
-                const from = (first as any)[d.key];
-                const to = (latest as any)[d.key];
+                const from = first[d.key];
+                const to = latest[d.key];
                 if (from == null || to == null) return null;
                 return (
                   <div className="taskline" key={d.key}>
