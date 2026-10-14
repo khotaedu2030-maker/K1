@@ -52,16 +52,24 @@ export async function POST(req: Request) {
   if (sessionRejection) return sessionRejection;
 
   const alreadyCancelled = session.status === "cancelled";
+  if (!alreadyCancelled && session.status !== "scheduled") {
+    return NextResponse.json({ error: "لا يمكن إلغاء جلسة غير مجدولة" }, { status: 409 });
+  }
+
   const effectiveCancelledBy =
     (alreadyCancelled && (session.cancelled_by === "teacher" || session.cancelled_by === "platform"))
       ? session.cancelled_by
       : cancelledBy;
 
-  const { data: activeSubs } = await admin
+  const { data: activeSubs, error: activeSubsError } = await admin
     .from("subscriptions")
     .select("id, child_id")
     .eq("cohort_id", session.cohort_id)
     .eq("status", "active");
+  if (activeSubsError) {
+    console.error("[session-cancel] active subscriptions query failed:", activeSubsError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من الطلاب المستحقين للتعويض" }, { status: 500 });
+  }
 
   let issuedCount = 0;
   for (const sub of activeSubs ?? []) {

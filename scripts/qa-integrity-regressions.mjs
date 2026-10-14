@@ -21,6 +21,8 @@ assert.match(makeup, /return \{ issued: true \}/, "successful issuance result mu
 
 assert.match(cancel, /"error" in result/, "session cancellation must detect makeup persistence failure");
 assert.match(cancel, /alreadyCancelled/, "cancel retry path must remain recoverable/idempotent");
+assert.match(cancel, /session\.status !== "scheduled"/, "only scheduled sessions may be newly cancelled");
+assert.match(cancel, /activeSubsError/, "active subscription lookup errors must block cancellation");
 assert.match(report, /"error" in makeupResult/, "session report must fail visibly when eligible makeup credit cannot persist");
 
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
