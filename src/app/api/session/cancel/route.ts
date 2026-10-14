@@ -40,7 +40,7 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: session } = await admin.from("sessions").select("id, teacher_id, cohort_id, status").eq("id", sessionId).maybeSingle();
+  const { data: session } = await admin.from("sessions").select("id, teacher_id, cohort_id, status, cancelled_by").eq("id", sessionId).maybeSingle();
   if (!session) return NextResponse.json({ error: "جلسة غير موجودة" }, { status: 404 });
 
   if (cancelledBy === "teacher" && session.teacher_id !== teacherId) {
@@ -51,18 +51,11 @@ export async function POST(req: Request) {
   const sessionRejection = rateLimitRejectionResponse(sessionLimit);
   if (sessionRejection) return sessionRejection;
 
-  if (session.status === "cancelled") {
-    return NextResponse.json({ ok: true, alreadyCancelled: true });
-  }
-
-  const { error: updateError } = await admin
-    .from("sessions")
-    .update({ status: "cancelled", cancelled_by: cancelledBy })
-    .eq("id", sessionId);
-  if (updateError) {
-    console.error("[session-cancel] update failed:", updateError.message);
-    return NextResponse.json({ error: "تعذّر إلغاء الجلسة" }, { status: 500 });
-  }
+  const alreadyCancelled = session.status === "cancelled";
+  const effectiveCancelledBy =
+    (alreadyCancelled && (session.cancelled_by === "teacher" || session.cancelled_by === "platform"))
+      ? session.cancelled_by
+      : cancelledBy;
 
   const { data: activeSubs } = await admin
     .from("subscriptions")
@@ -76,11 +69,25 @@ export async function POST(req: Request) {
       childId: sub.child_id,
       subscriptionId: sub.id,
       sourceSessionId: sessionId,
-      sourceType: cancelledBy === "teacher" ? "teacher_cancellation" : "platform_cancellation",
+      sourceType: effectiveCancelledBy === "teacher" ? "teacher_cancellation" : "platform_cancellation",
       issuedBy: actorUserId,
     });
+    if ("error" in result) {
+      return NextResponse.json({ error: "تعذّر إصدار رصيد التعويض، حاول مرة أخرى" }, { status: 500 });
+    }
     if (result.issued) issuedCount++;
   }
 
-  return NextResponse.json({ ok: true, creditsIssued: issuedCount });
+  if (!alreadyCancelled) {
+    const { error: updateError } = await admin
+      .from("sessions")
+      .update({ status: "cancelled", cancelled_by: cancelledBy })
+      .eq("id", sessionId);
+    if (updateError) {
+      console.error("[session-cancel] update failed:", updateError.message);
+      return NextResponse.json({ error: "تعذّر إلغاء الجلسة" }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ ok: true, creditsIssued: issuedCount, ...(alreadyCancelled ? { alreadyCancelled: true } : {}) });
 }
