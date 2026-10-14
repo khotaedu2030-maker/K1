@@ -9,6 +9,25 @@ import { areOnlinePaymentsEnabled } from "@/lib/payment-settings";
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
+// Only explicitly final Paylink states allow a fresh invoice. An unknown state
+// might still represent a payable invoice, so it must never release a retry.
+const FINAL_UNPAID_PAYLINK_STATUSES = new Set(["canceled", "cancelled", "failed", "expired", "rejected", "declined"]);
+
+async function markPendingPaymentFailed(admin: AdminClient, paymentId: string): Promise<boolean> {
+  const { data: updated, error } = await admin
+    .from("payments")
+    .update({ status: "failed" })
+    .eq("id", paymentId)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) {
+    console.error("[paylink-create] unable to close pending payment safely:", error?.message ?? "no matching pending row");
+    return false;
+  }
+  return true;
+}
+
 // يعالج سجل payment "pending" موجود مسبقًا لنفس الاشتراك — يُستدعى من مسارَين: الفحص المسبق
 // العادي، ومسار تعارض unique violation (السباق الحقيقي بين طلبَين متزامنَين). لا يُنشئ فاتورة
 // جديدة أبدًا بنفسه؛ يُعيد استجابة نهائية دائمًا (paymentUrl/alreadyPaid/خطأ) إلا إذا
@@ -39,7 +58,15 @@ async function checkExistingPending(
     if (foundTransactionNo) {
       // معاملة موجودة فعليًا لدى Paylink — نحفظ مرجعها الآن، ثم نكمل بنفس منطق
       // Paid/Pending/Canceled أدناه بلا إنشاء فاتورة ثانية.
-      await admin.from("payments").update({ provider_ref: foundTransactionNo }).eq("id", existingPending.id);
+      const { error: referenceError } = await admin
+        .from("payments")
+        .update({ provider_ref: foundTransactionNo })
+        .eq("id", existingPending.id)
+        .eq("status", "pending");
+      if (referenceError) {
+        console.error("[paylink-create] reconciliation reference write failed:", referenceError.message);
+        return NextResponse.json({ error: options.nullRefMessage }, { status: 503 });
+      }
       providerRef = foundTransactionNo;
     } else {
       // لا معاملة مؤكَّدة لدى Paylink بعد استعلام ناجح (رجع فارغًا فعليًا، لا فشل) — القرار
@@ -50,7 +77,9 @@ async function checkExistingPending(
         return NextResponse.json({ error: options.nullRefMessage }, { status: 503 });
       }
       // أقدم من 24 ساعة، وتأكَّدنا فعليًا (استعلام ناجح لا فشل) من عدم وجود معاملة — آمن الآن.
-      await admin.from("payments").update({ status: "failed" }).eq("id", existingPending.id);
+      if (!(await markPendingPaymentFailed(admin, existingPending.id))) {
+        return NextResponse.json({ error: options.nullRefMessage }, { status: 503 });
+      }
       if (options.allowContinue) return null; // يُكمِل المستدعي لإنشاء محاولة جديدة بأمان.
       return NextResponse.json({ error: "انتهت صلاحية محاولة دفع سابقة، حاول مرة أخرى" }, { status: 503 });
     }
@@ -73,14 +102,19 @@ async function checkExistingPending(
     if (verifyResult.ok) return NextResponse.json({ alreadyPaid: true });
     return NextResponse.json({ error: verifyResult.error }, { status: verifyResult.status });
   }
-  if (status && status !== "paid" && status !== "pending" && status !== "processing") {
-    // ملغاة أو غير قابلة للدفع فعليًا لدى Paylink — آمن الآن لتعليمها failed.
-    await admin.from("payments").update({ status: "failed" }).eq("id", existingPending.id);
+  if (FINAL_UNPAID_PAYLINK_STATUSES.has(status)) {
+    if (!(await markPendingPaymentFailed(admin, existingPending.id))) {
+      return NextResponse.json({ error: options.nullRefMessage }, { status: 503 });
+    }
     if (options.allowContinue) return null; // يُكمِل المستدعي لإنشاء محاولة جديدة بأمان.
     return NextResponse.json(
       { error: "انتهت صلاحية محاولة دفع سابقة، حاول مرة أخرى" },
       { status: 503 }
     );
+  }
+  if (status !== "pending" && status !== "processing") {
+    console.error("[paylink-create] unexpected invoice state; preserving pending payment:", status);
+    return NextResponse.json({ error: "تعذّر تحديد حالة فاتورة سابقة، حاول لاحقًا" }, { status: 503 });
   }
   // لا تزال Pending/Processing فعليًا لدى Paylink — نُعيد نفس رابط الدفع، لا فاتورة جديدة.
   // (حتى لو كان سجل payment أو subscription نفسه أقدم من 24 ساعة — فاتورة Paylink فعلية لا
@@ -345,9 +379,15 @@ export async function POST(req: Request) {
       if (verifyResult.ok) return NextResponse.json({ alreadyPaid: true });
       return NextResponse.json({ error: verifyResult.error }, { status: verifyResult.status });
     }
-    if (reconciledStatus && reconciledStatus !== "paid" && reconciledStatus !== "pending" && reconciledStatus !== "processing") {
-      await admin.from("payments").update({ status: "failed" }).eq("id", newPayment.id);
+    if (FINAL_UNPAID_PAYLINK_STATUSES.has(reconciledStatus)) {
+      if (!(await markPendingPaymentFailed(admin, newPayment.id))) {
+        return NextResponse.json({ error: "تعذّر إتمام مصالحة الدفع، حاول لاحقًا" }, { status: 503 });
+      }
       return NextResponse.json({ error: "بوابة الدفع غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل." }, { status: 502 });
+    }
+    if (reconciledStatus !== "pending" && reconciledStatus !== "processing") {
+      console.error("[paylink-create] unexpected reconciled invoice state:", reconciledStatus);
+      return NextResponse.json({ error: "تعذّر تحديد حالة فاتورة سابقة، حاول لاحقًا" }, { status: 503 });
     }
     const reconciledUrl = invoiceCheck.invoice.url;
     if (typeof reconciledUrl === "string" && reconciledUrl) {

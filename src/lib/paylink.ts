@@ -148,15 +148,21 @@ export async function createPaylinkInvoice(input: CreateInvoiceInput): Promise<C
       // حالة غامضة حقيقية: الفاتورة قد تكون أُنشئت فعليًا لدى Paylink رغم استجابة خطأ لنا
       // (انقطاع مؤقت وقت الرد تحديدًا). 502/503/504 تحديدًا تستدعي مصالحة قبل أي قرار "failed"
       // نهائي — لا نفترض الفشل التام هنا. 400/401/403 ليست غامضة (الطلب نفسه رُفض بوضوح).
-      const ambiguous = res.status === 502 || res.status === 503 || res.status === 504;
+      const ambiguous = res.status >= 500 || res.status === 408 || res.status === 429;
       return { ok: false, error: userFacingPaylinkError(), ambiguous };
     }
     const data = await res.json().catch(() => null);
     const paymentUrl = data?.url;
     const transactionNo = data?.transactionNo;
-    if (!paymentUrl || typeof paymentUrl !== "string" || !transactionNo) {
-      console.error("[paylink] استجابة addInvoice بلا url أو transactionNo صالحَين");
-      return { ok: false, error: "استجابة Paylink غير مكتملة", ambiguous: false };
+    if (
+      typeof paymentUrl !== "string" || !paymentUrl.trim() ||
+      (typeof transactionNo !== "string" && typeof transactionNo !== "number") ||
+      !String(transactionNo).trim()
+    ) {
+      // A successful HTTP response does not prove no invoice was created.
+      // Reconcile by orderNumber instead of permitting a duplicate attempt.
+      console.error("[paylink] استجابة addInvoice ناجحة لكن بلا url أو transactionNo صالحَين");
+      return { ok: false, error: "استجابة Paylink غير مكتملة", ambiguous: true };
     }
     return { ok: true, paymentUrl, transactionNo: String(transactionNo) };
   } catch (err) {
@@ -191,9 +197,41 @@ export async function getPaylinkTransactionsByOrderNumber(orderNumber: string): 
       return { ok: false, error: userFacingPaylinkError() };
     }
     const data = await res.json().catch(() => null);
-    // الاستجابة قد تكون مصفوفة مباشرة أو كائنًا يحوي مصفوفة — نتعامل مع الاحتمالين دفاعيًا.
-    const transactions = Array.isArray(data) ? data : Array.isArray(data?.transactions) ? data.transactions : [];
-    return { ok: true, transactions };
+    // Only an explicit empty array proves no transactions were reported. Any
+    // unknown response shape is indeterminate, never proof of "no invoice".
+    const transactions: unknown =
+      Array.isArray(data) ? data :
+      data && typeof data === "object" && !Array.isArray(data) &&
+      Array.isArray((data as Record<string, unknown>).transactions)
+        ? (data as Record<string, unknown>).transactions
+        : null;
+    if (!Array.isArray(transactions)) {
+      console.error("[paylink] getTransactionsOfOrderNumber returned an unrecognized response shape");
+      return { ok: false, error: userFacingPaylinkError() };
+    }
+    const transactionNumbers: string[] = [];
+    for (const item of transactions) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        console.error("[paylink] getTransactionsOfOrderNumber returned a malformed transaction");
+        return { ok: false, error: userFacingPaylinkError() };
+      }
+      const rawId = (item as Record<string, unknown>).transactionNo;
+      if (
+        (typeof rawId !== "string" && typeof rawId !== "number") ||
+        !String(rawId).trim() || String(rawId).length > 200
+      ) {
+        console.error("[paylink] getTransactionsOfOrderNumber returned a transaction without a valid transactionNo");
+        return { ok: false, error: userFacingPaylinkError() };
+      }
+      transactionNumbers.push(String(rawId));
+    }
+    if (new Set(transactionNumbers).size > 1) {
+      // Multiple distinct invoices require manual reconciliation. Picking the first
+      // could conceal an already-paid transaction and produce a duplicate charge.
+      console.error("[paylink] getTransactionsOfOrderNumber returned multiple different transaction numbers");
+      return { ok: false, error: userFacingPaylinkError() };
+    }
+    return { ok: true, transactions: transactions as Record<string, unknown>[] };
   } catch (err) {
     console.error("[paylink] خطأ اتصال أثناء getTransactionsOfOrderNumber:", err instanceof Error ? err.message : err);
     return { ok: false, error: "تعذّر الاتصال بـPaylink" };

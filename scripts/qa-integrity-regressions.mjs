@@ -187,4 +187,22 @@ const cancelWriteAt = cancellation.indexOf('.update({ status: "cancelled", cance
 const creditIssueAt = cancellation.indexOf('for (const sub of activeSubs ?? [])');
 assert.ok(cancelWriteAt !== -1 && creditIssueAt !== -1 && cancelWriteAt < creditIssueAt, "cancellation must commit before issuing compensation");
 
+
+const pilotIdentity = read("src/lib/pilot-auth.ts");
+const pilotResolver = read("src/lib/pilot-parent.ts");
+const pilotLogin = read("src/app/api/pilot-auth/login/route.ts");
+assert.match(pilotIdentity, /KHOTA_PILOT_PARENT_ID/, "pilot authentication must require explicit demo parent config");
+assert.match(pilotIdentity, /session\.parentId !== configuredId/, "pilot tokens must remain bound to the configured demo identity");
+assert.match(pilotResolver, /verifyPilotSessionParentId\(token\)/, "pilot parent resolution must rely on a signed parent-bound token");
+assert.ok(!pilotResolver.includes('.order("created_at"'), "pilot parent resolution must never choose a latest unlinked parent");
+assert.ok(!pilotResolver.includes("khota_pilot_last_subscription"), "pilot parent resolution must not trust an unbound subscription cookie");
+assert.match(pilotLogin, /\.is\("user_id", null\)/, "pilot login must allow only unlinked dedicated demo parents");
+
+const paylinkGateway = read("src/lib/paylink.ts");
+const paylinkCreate = read("src/app/api/payments/paylink/create/route.ts");
+assert.match(paylinkGateway, /unknown response shape|unrecognized response shape/, "Paylink unknown response must not be treated as zero transactions");
+assert.match(paylinkGateway, /ambiguous: true/, "Paylink ambiguous invoice outcomes must remain pending");
+assert.match(paylinkCreate, /FINAL_UNPAID_PAYLINK_STATUSES\.has\(status\)/, "only recognized terminal invoice states can clear pending rows");
+assert.match(paylinkCreate, /if \(!\(await markPendingPaymentFailed/, "pending payment release must check write success");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");

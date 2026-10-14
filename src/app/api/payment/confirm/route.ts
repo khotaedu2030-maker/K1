@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isPilotAuthEnabled } from "@/lib/pilot-auth";
 import { activateSubscriptionAfterPayment } from "@/lib/activate-subscription";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -61,16 +60,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, alreadyActive: true });
   }
 
-  // كوكي اختيارية: تربط جلسة Pilot اللاحقة بهذا الاشتراك تحديدًا بدل الرجوع إلى "أحدث ولي أمر
-  // ضيف" العام — أدق وأضيق نطاقًا. لا قيمة حساسة (معرّف اشتراك فقط).
-  const res = NextResponse.json({ ok: true, sessionsCreated: result.sessionsCreated });
-  if (isPilotAuthEnabled()) {
-    res.cookies.set("khota_pilot_last_subscription", subscriptionId, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 30, // 30 دقيقة — نافذة كافية لإكمال رحلة الدفع ثم الدخول التجريبي مباشرة
-    });
-  }
-  return res;
+  // Pilot identity is bound to a signed, dedicated demo parent; manual confirmation
+  // must never plant an unbound subscription identifier in browser cookies.
+  return NextResponse.json({ ok: true, sessionsCreated: result.sessionsCreated });
 }
