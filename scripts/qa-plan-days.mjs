@@ -41,7 +41,7 @@ const seededCohorts = [
   ["Focus Room 10-12 — المجموعة A", "focus-3", [0, 1, 3]],
 ];
 
-for (const [title, planId, days] of seededCohorts) {
+for (const [, planId, days] of seededCohorts) {
   assertCohortMatchesPlan(planId, days);
 }
 console.log(`✓ Part 2 (بيانات Wave 1 المزروعة) — كل المجموعات السبع (${seededCohorts.length}) متطابقة مع خططها`);
