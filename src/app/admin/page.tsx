@@ -2,6 +2,7 @@ import Link from "next/link";
 import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { addRiyadhCalendarDays, formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
 
 type TodaySession = {
   id: string;
@@ -14,7 +15,9 @@ type TodaySession = {
 
 async function getOverviewData() {
   const supabase = createSupabaseAdminClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const todayCalendar = getRiyadhCalendarDate(new Date());
+  const today = formatRiyadhCalendarDate(todayCalendar);
+  const weekAgo = formatRiyadhCalendarDate(addRiyadhCalendarDays(todayCalendar, -7));
 
   const [
     { count: children },
@@ -26,7 +29,7 @@ async function getOverviewData() {
     { count: newPremiumRequests },
     { count: unusedMakeupCredits },
     { count: activeTeachers },
-    { count: unrecordedAttendanceSessions },
+    { data: recentCompletedSessions },
   ] = await Promise.all([
     supabase.from("children").select("*", { count: "exact", head: true }),
     supabase.from("subscriptions").select("*", { count: "exact", head: true }).eq("status", "active"),
@@ -43,10 +46,19 @@ async function getOverviewData() {
     supabase.from("teachers").select("*", { count: "exact", head: true }).eq("active", true),
     supabase
       .from("sessions")
-      .select("id", { count: "exact", head: true })
+      .select("id")
+      .eq("status", "completed")
       .lt("session_date", today)
-      .gte("session_date", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)),
+      .gte("session_date", weekAgo),
   ]);
+
+  const recentSessionIds = (recentCompletedSessions ?? []).map((session: { id: string }) => session.id);
+  const { data: recentAttendance } = recentSessionIds.length
+    ? await supabase.from("attendance").select("session_id").in("session_id", recentSessionIds)
+    : { data: [] as { session_id: string }[] };
+
+  const sessionsWithAttendance = new Set((recentAttendance ?? []).map((row: { session_id: string }) => row.session_id));
+  const unrecordedAttendanceSessions = recentSessionIds.filter((id) => !sessionsWithAttendance.has(id)).length;
 
   return {
     children: children ?? 0,
@@ -58,7 +70,7 @@ async function getOverviewData() {
     newPremiumRequests: newPremiumRequests ?? 0,
     unusedMakeupCredits: unusedMakeupCredits ?? 0,
     activeTeachers: activeTeachers ?? 0,
-    unrecordedAttendanceSessions: unrecordedAttendanceSessions ?? 0,
+    unrecordedAttendanceSessions,
   };
 }
 
@@ -143,7 +155,7 @@ export default async function AdminOverviewPage() {
         <div className="dashcard" style={{ marginTop: 20, borderColor: "var(--p)" }}>
           <span className="badge" style={{ color: "var(--p)" }}>تنبيه تشغيلي</span>
           <p style={{ marginTop: 8 }}>
-            {d.unrecordedAttendanceSessions} جلسة خلال آخر 7 أيام قد لا يكون حضورها مسجَّلًا بالكامل —
+            {d.unrecordedAttendanceSessions} جلسة مكتملة خلال آخر 7 أيام بلا أي سجل حضور —
             راجع <Link href="/admin/attendance" style={{ color: "var(--t)", fontWeight: 700 }}>صفحة الحضور</Link>.
           </p>
         </div>
