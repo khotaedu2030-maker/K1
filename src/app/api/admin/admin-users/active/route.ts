@@ -13,9 +13,11 @@ export async function POST(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
   const targetAdminId = typeof body?.targetAdminId === "string" ? body.targetAdminId.trim() : "";
-  const active = body?.active === true;
+  const active = body?.active;
   const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
-  if (!UUID_RE.test(targetAdminId) || reason.length < 2 || reason.length > 500) return NextResponse.json({ error: "المعرّف والسبب مطلوبان" }, { status: 400 });
+  if (!UUID_RE.test(targetAdminId) || typeof active !== "boolean" || reason.length < 2 || reason.length > 500) {
+    return NextResponse.json({ error: "المعرّف والحالة والسبب مطلوبة بقيم صحيحة" }, { status: 400 });
+  }
 
   const admin = createSupabaseAdminClient();
   const { data: rpcResult, error: rpcError } = await admin.rpc("admin_set_active_atomic", { p_target_admin_id: targetAdminId, p_active: active, p_actor: check.adminId, p_reason: reason });
