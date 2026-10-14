@@ -196,7 +196,7 @@ export async function POST(req: Request) {
     .eq("id", subscription.plan_id)
     .maybeSingle();
 
-  if (!plan || plan.price_sar == null) {
+  if (!plan || plan.price_sar == null || !Number.isFinite(Number(plan.price_sar)) || Number(plan.price_sar) <= 0) {
     return NextResponse.json({ error: "تعذّر تحديد سعر الخطة" }, { status: 500 });
   }
 

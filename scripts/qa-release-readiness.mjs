@@ -49,7 +49,8 @@ check("webhook, callback and verification are never blocked by the payments flag
 check("enroll API rejects inactive or unpriced plans", () => {
   const src = read("src/app/api/enroll/route.ts");
   assert.ok(src.includes("!plan.active"));
-  assert.ok(src.includes("plan.price_sar === null"));
+  assert.ok(src.includes("!Number.isFinite(Number(plan.price_sar)) || Number(plan.price_sar) <= 0"));
+  assert.ok(read("src/app/api/payments/paylink/create/route.ts").includes("!Number.isFinite(Number(plan.price_sar)) || Number(plan.price_sar) <= 0"));
 });
 
 // ---- المسارات غير الجاهزة ----
