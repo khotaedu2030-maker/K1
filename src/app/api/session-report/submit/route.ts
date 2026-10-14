@@ -123,7 +123,11 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: session } = await admin.from("sessions").select("id, teacher_id, cohort_id, status, starts_at, ends_at").eq("id", sessionId).maybeSingle();
+  const { data: session, error: sessionError } = await admin.from("sessions").select("id, teacher_id, cohort_id, status, starts_at, ends_at").eq("id", sessionId).maybeSingle();
+  if (sessionError) {
+    console.error("[session-report] session lookup failed:", sessionError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من الجلسة" }, { status: 503 });
+  }
   if (!session || session.teacher_id !== teacherCheck.teacherId) {
     return NextResponse.json({ error: "هذه الجلسة لا تخص حسابك" }, { status: 403 });
   }
@@ -137,7 +141,7 @@ export async function POST(req: Request) {
 
   const { data: activeSubscriptions, error: subscriptionsError } = await admin
     .from("subscriptions")
-    .select("child_id")
+    .select("id, child_id")
     .eq("cohort_id", session.cohort_id)
     .eq("status", "active");
   if (subscriptionsError) {
@@ -146,6 +150,7 @@ export async function POST(req: Request) {
   }
 
   const activeChildIds = new Set((activeSubscriptions ?? []).map((subscription) => subscription.child_id));
+  const activeSubscriptionByChild = new Map((activeSubscriptions ?? []).map((subscription) => [subscription.child_id, subscription.id]));
   const sameChildSet = submittedChildIds.size === activeChildIds.size && [...submittedChildIds].every((childId) => activeChildIds.has(childId));
   if (!sameChildSet) {
     return NextResponse.json({ error: "تغيّرت قائمة طلاب المجموعة. حدّث الصفحة وحاول مرة أخرى." }, { status: 409 });
@@ -224,29 +229,27 @@ export async function POST(req: Request) {
   }
 
   // الجلسة لا تُعلَّم مكتملة إلا بعد نجاح حفظ الحضور، فيبقى إعادة الإرسال ممكنًا عند الفشل.
-  const { error: sessionUpdateError } = await admin
+  const { data: completedSession, error: sessionUpdateError } = await admin
     .from("sessions")
     .update({ status: "completed" })
-    .eq("id", sessionId);
+    .eq("id", sessionId)
+    .neq("status", "cancelled")
+    .select("id")
+    .maybeSingle();
   if (sessionUpdateError) {
     console.error("[session-report] session update failed:", sessionUpdateError.message);
     return NextResponse.json({ error: "تعذّر إكمال الجلسة" }, { status: 500 });
+  }
+  if (!completedSession) {
+    return NextResponse.json({ error: "تغيّرت حالة الجلسة قبل إكمال التقرير" }, { status: 409 });
   }
 
   for (const e of entries) {
     if (e.attended) continue;
 
-    const { data: activeSub } = await admin
-      .from("subscriptions")
-      .select("id")
-      .eq("child_id", e.childId)
-      .eq("cohort_id", session.cohort_id)
-      .eq("status", "active")
-      .maybeSingle();
-
     const makeupResult = await issueMakeupCreditIfEligible(admin, {
       childId: e.childId,
-      subscriptionId: activeSub?.id ?? null,
+      subscriptionId: activeSubscriptionByChild.get(e.childId) ?? null,
       sourceSessionId: sessionId,
       sourceType: "student_absence",
       reason: e.absenceReason ?? "unexcused",
