@@ -21,7 +21,7 @@ function load(rel, env, fakeFetch) {
     module: mod, exports: mod.exports,
     require: (id) => { if (id === "server-only") return {}; throw Error("Unexpected import: " + id); },
     process: { env }, fetch: fakeFetch, console: { error: () => {} },
-    crypto: webcrypto, TextEncoder, TextDecoder, setTimeout,
+    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, setTimeout,
     btoa: (v) => Buffer.from(v, "binary").toString("base64"),
     atob: (v) => Buffer.from(v, "base64").toString("binary"),
   });
