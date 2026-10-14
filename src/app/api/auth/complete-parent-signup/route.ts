@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   const body = parsed.body;
   const fullName = typeof body?.fullName === "string" ? body.fullName.trim() : "";
   const phone = typeof body?.phone === "string" ? normalizeSaudiStoredPhoneInput(body.phone) : null;
-  if (fullName.length < 2) return NextResponse.json({ error: "اسم ولي الأمر مطلوب" }, { status: 400 });
+  if (fullName.length < 2 || fullName.length > 160) return NextResponse.json({ error: "اسم ولي الأمر غير صالح" }, { status: 400 });
   if (!phone) return NextResponse.json({ error: "أدخل رقم جوال سعودي صحيح يبدأ بـ 05" }, { status: 400 });
 
   const admin = createSupabaseAdminClient();
