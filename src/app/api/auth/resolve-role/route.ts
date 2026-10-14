@@ -27,13 +27,25 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: adminRow } = await admin.from("admins").select("id").eq("user_id", user.id).eq("active", true).maybeSingle();
+  const { data: adminRow, error: adminError } = await admin.from("admins").select("id").eq("user_id", user.id).eq("active", true).maybeSingle();
+  if (adminError) {
+    console.error("[resolve-role] admin lookup failed:", adminError.message);
+    return NextResponse.json({ role: "none", error: "تعذّر التحقق من نوع الحساب" }, { status: 503 });
+  }
   if (adminRow) return NextResponse.json({ role: "admin" });
 
-  const { data: teacherRow } = await admin.from("teachers").select("id").eq("user_id", user.id).eq("active", true).maybeSingle();
+  const { data: teacherRow, error: teacherError } = await admin.from("teachers").select("id").eq("user_id", user.id).eq("active", true).maybeSingle();
+  if (teacherError) {
+    console.error("[resolve-role] teacher lookup failed:", teacherError.message);
+    return NextResponse.json({ role: "none", error: "تعذّر التحقق من نوع الحساب" }, { status: 503 });
+  }
   if (teacherRow) return NextResponse.json({ role: "teacher" });
 
-  const { data: parentRow } = await admin.from("parents").select("id").eq("user_id", user.id).maybeSingle();
+  const { data: parentRow, error: parentError } = await admin.from("parents").select("id").eq("user_id", user.id).maybeSingle();
+  if (parentError) {
+    console.error("[resolve-role] parent lookup failed:", parentError.message);
+    return NextResponse.json({ role: "none", error: "تعذّر التحقق من نوع الحساب" }, { status: 503 });
+  }
   if (parentRow) return NextResponse.json({ role: "parent" });
 
   return NextResponse.json({ role: "none" });
