@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { requireTeacher } from "@/lib/require-teacher";
 import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 import {
   calculateIndependenceScore,
   validateIndependenceInputs,
@@ -76,7 +77,8 @@ export async function POST(req: Request) {
     .select("child_id, cohorts(teacher_id)")
     .eq("child_id", childId)
     .eq("status", "active");
-  const belongsToTeacher = (link ?? []).some((l: any) => l.cohorts?.teacher_id === teacherCheck.teacherId);
+  const belongsToTeacher = ((link ?? []) as { cohorts: SupabaseRelation<{ teacher_id: string | null }> }[])
+    .some((item) => supabaseRelationOne(item.cohorts)?.teacher_id === teacherCheck.teacherId);
   if (!belongsToTeacher) {
     return NextResponse.json({ error: "هذا الطالب ليس ضمن مجموعاتك" }, { status: 403 });
   }

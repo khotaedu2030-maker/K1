@@ -106,8 +106,14 @@ export async function POST(req: Request) {
   for (const row of allAnswers ?? []) {
     const matchedQuestion = track.questions.find((q) => String(q.id) === row.question_id);
     const qid: QuestionId = matchedQuestion ? matchedQuestion.id : row.question_id;
+    const skill = typeof row.skill === "string"
+      ? track.questions.find((candidate) => candidate.skill === row.skill)?.skill
+      : undefined;
+    if (!skill) {
+      return NextResponse.json({ error: "سجل مهارة غير صالح" }, { status: 500 });
+    }
     answeredIds.push(qid);
-    history.push({ questionId: qid, correct: row.correct, difficulty: row.difficulty, skill: row.skill as any });
+    history.push({ questionId: qid, correct: row.correct, difficulty: row.difficulty, skill });
   }
 
   const nextDifficulty = getNextDifficulty(session.target_difficulty, correct);
