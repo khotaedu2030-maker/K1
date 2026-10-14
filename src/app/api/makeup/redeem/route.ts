@@ -37,10 +37,18 @@ export async function POST(req: Request) {
   if (!parentIdentity.ok) return NextResponse.json({ error: parentIdentity.error }, { status: parentIdentity.status });
   const parent = { id: parentIdentity.parentId };
 
-  const { data: credit } = await admin.from("makeup_credits").select("child_id").eq("id", creditId).maybeSingle();
+  const { data: credit, error: creditError } = await admin.from("makeup_credits").select("child_id").eq("id", creditId).maybeSingle();
+  if (creditError) {
+    console.error("[makeup] credit lookup failed:", creditError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من الرصيد" }, { status: 503 });
+  }
   if (!credit) return NextResponse.json({ error: "رصيد غير موجود" }, { status: 404 });
 
-  const { data: child } = await admin.from("children").select("parent_id").eq("id", credit.child_id).maybeSingle();
+  const { data: child, error: childError } = await admin.from("children").select("parent_id").eq("id", credit.child_id).maybeSingle();
+  if (childError) {
+    console.error("[makeup] credit child lookup failed:", childError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من ملكية الرصيد" }, { status: 503 });
+  }
   if (!child || child.parent_id !== parent.id) {
     return NextResponse.json({ error: "هذا الرصيد لا يخص أبناءك" }, { status: 403 });
   }
