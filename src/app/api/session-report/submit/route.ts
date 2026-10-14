@@ -244,7 +244,7 @@ export async function POST(req: Request) {
       .eq("status", "active")
       .maybeSingle();
 
-    await issueMakeupCreditIfEligible(admin, {
+    const makeupResult = await issueMakeupCreditIfEligible(admin, {
       childId: e.childId,
       subscriptionId: activeSub?.id ?? null,
       sourceSessionId: sessionId,
@@ -252,6 +252,9 @@ export async function POST(req: Request) {
       reason: e.absenceReason ?? "unexcused",
       issuedBy: teacherCheck.userId,
     });
+    if ("error" in makeupResult) {
+      return NextResponse.json({ error: "تعذّر إصدار رصيد التعويض، حاول مرة أخرى" }, { status: 500 });
+    }
   }
 
   // إعادة استخدام بيانات التقرير نفسها لتغذية Checklist الطالب (Phase 3A) — بلا أي واجهة معلم
