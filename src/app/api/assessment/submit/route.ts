@@ -34,8 +34,11 @@ export async function POST(req: Request) {
   } = body ?? {};
 
   // ---------- Input validation صارم (لا نعتمد على DB CHECK وحدها) ----------
-  if (typeof childId !== "string" || !childId) {
-    return NextResponse.json({ error: "childId مطلوب" }, { status: 400 });
+  if (typeof childId !== "string" || !childId.trim() || childId.length > 100) {
+    return NextResponse.json({ error: "childId غير صالح" }, { status: 400 });
+  }
+  if (teacherNotes !== undefined && teacherNotes !== null && (typeof teacherNotes !== "string" || teacherNotes.length > 2000)) {
+    return NextResponse.json({ error: "ملاحظات المعلم غير صالحة" }, { status: 400 });
   }
   if (!isValidAssessmentType(assessmentType)) {
     return NextResponse.json({ error: "assessmentType غير صالح" }, { status: 400 });
