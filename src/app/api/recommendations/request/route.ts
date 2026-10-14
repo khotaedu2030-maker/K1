@@ -35,15 +35,23 @@ export async function POST(req: Request) {
 
   const parentIdentity = await resolveParentIdentityForUser(user.id);
   if (!parentIdentity.ok) return NextResponse.json({ error: parentIdentity.error }, { status: parentIdentity.status });
-  const { data: parent } = await admin.from("parents").select("id, full_name, phone").eq("id", parentIdentity.parentId).maybeSingle();
+  const { data: parent, error: parentError } = await admin.from("parents").select("id, full_name, phone").eq("id", parentIdentity.parentId).maybeSingle();
+  if (parentError) {
+    console.error("[recommendations] parent lookup failed:", parentError.message);
+    return NextResponse.json({ error: "تعذّر تحميل حساب ولي الأمر" }, { status: 503 });
+  }
   if (!parent) return NextResponse.json({ error: "تعذّر تحميل حساب ولي الأمر" }, { status: 503 });
 
-  const { data: recommendation } = await admin
+  const { data: recommendation, error: recommendationError } = await admin
     .from("recommendations")
     .select("id, subject, reason, child_id, status, children(parent_id, first_name)")
     .eq("id", recommendationId)
     .maybeSingle();
 
+  if (recommendationError) {
+    console.error("[recommendations] recommendation lookup failed:", recommendationError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من التوصية" }, { status: 503 });
+  }
   if (!recommendation || supabaseRelationOne((recommendation as { children: SupabaseRelation<{ parent_id: string }> }).children)?.parent_id !== parent.id) {
     return NextResponse.json({ error: "توصية غير موجودة أو لا تخص حسابك" }, { status: 403 });
   }
