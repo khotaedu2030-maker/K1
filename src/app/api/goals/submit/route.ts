@@ -16,6 +16,14 @@ export async function POST(req: Request) {
   const body = parsed.body;
   const { goalId, childId, weekStart, title, description, category, status, progress } = body ?? {};
 
+  const validStatuses = new Set(["active", "achieved", "partially_achieved", "carried_forward", "cancelled"]);
+  const validDateOnly = (value: unknown): value is string => {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  };
+
   const teacherCheck = await requireTeacher();
   if (!teacherCheck.ok) return teacherCheck.response;
 
@@ -47,12 +55,22 @@ export async function POST(req: Request) {
     const resourceRejection = rateLimitRejectionResponse(resourceLimit);
     if (resourceRejection) return resourceRejection;
 
-    const patch: Record<string, unknown> = {};
-    if (status) {
-      patch.status = status;
-      if (status === "achieved") patch.completed_at = new Date().toISOString();
+    if (status !== undefined && (typeof status !== "string" || !validStatuses.has(status))) {
+      return NextResponse.json({ error: "حالة الهدف غير صالحة" }, { status: 400 });
     }
-    if (typeof progress === "number") patch.progress = progress;
+    if (progress !== undefined && (!Number.isInteger(progress) || progress < 0 || progress > 100)) {
+      return NextResponse.json({ error: "نسبة التقدم يجب أن تكون بين 0 و100" }, { status: 400 });
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (status !== undefined) {
+      patch.status = status;
+      patch.completed_at = status === "achieved" ? new Date().toISOString() : null;
+    }
+    if (progress !== undefined) patch.progress = progress;
+    if (Object.keys(patch).length === 0) {
+      return NextResponse.json({ error: "لا توجد بيانات صالحة للتحديث" }, { status: 400 });
+    }
 
     const { error } = await admin.from("weekly_goals").update(patch).eq("id", goalId);
     if (error) {
@@ -62,8 +80,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  if (!childId || !weekStart || !title) {
-    return NextResponse.json({ error: "بيانات ناقصة لإنشاء هدف جديد" }, { status: 400 });
+  const normalizedTitle = typeof title === "string" ? title.trim() : "";
+  const normalizedDescription = typeof description === "string" ? description.trim() : null;
+  const normalizedCategory = typeof category === "string" ? category.trim() : null;
+  if (typeof childId !== "string" || !childId || !validDateOnly(weekStart) || !normalizedTitle) {
+    return NextResponse.json({ error: "بيانات ناقصة أو غير صالحة لإنشاء هدف جديد" }, { status: 400 });
+  }
+  if (normalizedTitle.length > 200 || (normalizedDescription?.length ?? 0) > 2000 || (normalizedCategory?.length ?? 0) > 100) {
+    return NextResponse.json({ error: "بيانات الهدف تتجاوز الطول المسموح" }, { status: 400 });
   }
 
   const { data: link } = await admin
@@ -82,9 +106,9 @@ export async function POST(req: Request) {
   const { error } = await admin.from("weekly_goals").insert({
     child_id: childId,
     week_start: weekStart,
-    title,
-    description: description ?? null,
-    category: category ?? null,
+    title: normalizedTitle,
+    description: normalizedDescription || null,
+    category: normalizedCategory || null,
     created_by_teacher_id: teacherCheck.teacherId,
   });
   if (error) {
