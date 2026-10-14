@@ -109,4 +109,15 @@ assert.match(levelTestSubmit, /answersError/, "level test must fail closed when 
 assert.match(levelTestSubmit, /if \(!advancedSession\)/, "level test must detect concurrent session advancement");
 assert.match(levelTestSubmit, /if \(!finishedSession\)/, "level test must detect concurrent session completion");
 
+
+const messagingAuth = read("src/lib/messaging-authorization.ts");
+assert.match(messagingAuth, /threadError/, "message authorization must fail closed on thread lookup errors");
+assert.match(messagingAuth, /parentError \|\| childError/, "message parent authorization must fail closed on relationship lookup errors");
+assert.match(messagingAuth, /teacherError/, "message teacher authorization must fail closed on teacher lookup errors");
+assert.match(messagingAuth, /linksError/, "message teacher authorization must fail closed on subscription lookup errors");
+
+const messageSend = read("src/app/api/messages/send/route.ts");
+assert.match(messageSend, /threadId.length > 100/, "message send must bound thread identifiers");
+assert.match(messageSend, /threadUpdateError/, "message send must surface thread timestamp write failures to logs");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
