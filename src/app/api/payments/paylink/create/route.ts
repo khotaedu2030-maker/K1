@@ -5,6 +5,7 @@ import { toPaylinkSaudiMobile } from "@/lib/phone";
 import { createPaylinkInvoice, getPaylinkInvoice, getPaylinkTransactionsByOrderNumber } from "@/lib/paylink";
 import { verifyAndActivatePaylinkPayment } from "@/lib/paylink-verify";
 import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
+import { areOnlinePaymentsEnabled } from "@/lib/payment-settings";
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -101,6 +102,9 @@ export async function POST(req: Request) {
   const context = await resolveParentContext();
   if (!context) {
     return NextResponse.json({ error: "يجب تسجيل الدخول أولًا" }, { status: 401 });
+  }
+  if (!areOnlinePaymentsEnabled()) {
+    return NextResponse.json({ error: "الدفع الإلكتروني متوقف مؤقتًا" }, { status: 503 });
   }
 
   if (declaredBodyExceeds(req, 8 * 1024)) {
