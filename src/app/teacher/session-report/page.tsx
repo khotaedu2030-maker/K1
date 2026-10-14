@@ -2,6 +2,18 @@ import Link from "next/link";
 import Shell from "@/components/Shell";
 import SessionReportForm from "./SessionReportForm";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+
+type TeacherReportSession = {
+  id: string;
+  cohort_id: string;
+  starts_at: string;
+  cohorts: SupabaseRelation<{ title: string | null }>;
+};
+type TeacherReportStudent = {
+  child_id: string;
+  children: SupabaseRelation<{ first_name: string | null }>;
+};
 
 export default async function P({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
   const params = await searchParams;
@@ -60,31 +72,33 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sess
     );
   }
 
+  const reportSession = session as TeacherReportSession;
+
   const { data: subs } = await supabase
     .from("subscriptions")
     .select("child_id, children(first_name)")
-    .eq("cohort_id", session.cohort_id)
+    .eq("cohort_id", reportSession.cohort_id)
     .eq("status", "active");
 
-  const students = (subs ?? []).map((s: any) => ({
+  const students = ((subs ?? []) as TeacherReportStudent[]).map((s) => ({
     childId: s.child_id,
-    firstName: s.children?.first_name ?? "طالب",
+    firstName: supabaseRelationOne(s.children)?.first_name ?? "طالب",
   }));
 
   return (
     <Shell>
       <main className="section">
         <div className="narrow">
-          <span className="eyebrow">{(session as any).cohorts?.title ?? "الجلسة"}</span>
+          <span className="eyebrow">{supabaseRelationOne(reportSession.cohorts)?.title ?? "الجلسة"}</span>
           <h1 className="title" style={{ fontSize: 32 }}>تقرير الجلسة السريع</h1>
           <p className="lead">
-            {new Date(session.starts_at).toLocaleString("ar-SA", { weekday: "long", hour: "2-digit", minute: "2-digit" })}
+            {new Date(reportSession.starts_at).toLocaleString("ar-SA", { weekday: "long", hour: "2-digit", minute: "2-digit" })}
           </p>
 
           {students.length === 0 ? (
             <p style={{ color: "var(--gray)" }}>لا يوجد طلاب مسجّلون في هذه المجموعة حاليًا.</p>
           ) : (
-            <SessionReportForm sessionId={session.id} students={students} />
+            <SessionReportForm sessionId={reportSession.id} students={students} />
           )}
         </div>
       </main>

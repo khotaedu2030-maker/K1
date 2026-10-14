@@ -1,6 +1,13 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+
+type TeacherStudentSubscription = {
+  child_id: string;
+  children: SupabaseRelation<{ first_name: string | null; grade: number | null }>;
+  cohorts: SupabaseRelation<{ title: string | null }>;
+};
 
 export default async function P() {
   const supabase = await createSupabaseServerClient();
@@ -43,24 +50,27 @@ export default async function P() {
           )}
 
           <div style={{ marginTop: 24 }}>
-            {(subs ?? []).map((s: any, i: number) => (
-              <div className="session-row" key={i}>
-                <div>
-                  <b>{s.children?.first_name ?? "طالب"}</b>
-                  <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
-                    الصف {s.children?.grade} • {s.cohorts?.title}
-                  </p>
+            {((subs ?? []) as TeacherStudentSubscription[]).map((s) => {
+              const child = supabaseRelationOne(s.children);
+              return (
+                <div className="session-row" key={s.child_id}>
+                  <div>
+                    <b>{child?.first_name ?? "طالب"}</b>
+                    <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
+                      الصف {child?.grade} • {supabaseRelationOne(s.cohorts)?.title}
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <Link className="btn small outline" href={`/teacher/goals?child=${s.child_id}`}>
+                      خطوة الأسبوع
+                    </Link>
+                    <Link className="btn small" href={`/teacher/assessment?child=${s.child_id}`}>
+                      تقييم دوري
+                    </Link>
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <Link className="btn small outline" href={`/teacher/goals?child=${s.child_id}`}>
-                    خطوة الأسبوع
-                  </Link>
-                  <Link className="btn small" href={`/teacher/assessment?child=${s.child_id}`}>
-                    تقييم دوري
-                  </Link>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </main>
