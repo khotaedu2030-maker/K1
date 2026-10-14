@@ -173,7 +173,7 @@ function loadSessionReport(failAttendance, log, sessionPatch = {}) {
     "next/server": { NextResponse: FakeResponse },
     "@/lib/supabase-admin": { createSupabaseAdminClient: () => fakeClient(rows, log, failAttendance ? { attendance: true } : {}) },
     "@/lib/require-teacher": { requireTeacher: async () => ({ ok: true, userId: "u1", teacherId: "t1" }) },
-    "@/lib/makeup-credits": { issueMakeupCreditIfEligible: async () => { log.push("makeup"); } },
+    "@/lib/makeup-credits": { issueMakeupCreditIfEligible: async () => { log.push("makeup"); return { issued: true }; } },
     "@/lib/platform-settings": { getRuntimeSettings: async () => ({ attendanceLockHours: 24 }) },
     "@/lib/api-rate-limit": rl,
   };
@@ -453,7 +453,7 @@ await check("teacher report remains final authority: it overwrites a self-marked
     "next/server": { NextResponse: FakeResponse },
     "@/lib/supabase-admin": { createSupabaseAdminClient: () => db.client },
     "@/lib/require-teacher": { requireTeacher: async () => ({ ok: true, userId: "u9", teacherId: "t1" }) },
-    "@/lib/makeup-credits": { issueMakeupCreditIfEligible: async () => {} },
+    "@/lib/makeup-credits": { issueMakeupCreditIfEligible: async () => ({ issued: true }) },
     "@/lib/platform-settings": { getRuntimeSettings: async () => ({ attendanceLockHours: 24 }) },
     "@/lib/api-rate-limit": rl,
   };
