@@ -13,12 +13,16 @@ export type ThreadAuthResult =
 export async function authorizeMessageThreadAccess(userId: string, threadId: string): Promise<ThreadAuthResult> {
   const admin = createSupabaseAdminClient();
 
-  const { data: thread } = await admin
+  const { data: thread, error: threadError } = await admin
     .from("message_threads")
     .select("id, child_id, parent_user_id, teacher_user_id")
     .eq("id", threadId)
     .maybeSingle();
 
+  if (threadError) {
+    console.error("[messages] thread lookup failed:", threadError.message);
+    return { ok: false, status: 503, error: "تعذّر التحقق من المحادثة" };
+  }
   if (!thread) return { ok: false, status: 404, error: "محادثة غير موجودة" };
 
   if (thread.parent_user_id === userId) {
@@ -33,8 +37,14 @@ export async function authorizeMessageThreadAccess(userId: string, threadId: str
     }
 
     // "ولي الأمر" هنا يجب أن يكون لا يزال ولي أمر هذا الطفل فعليًا (وليس مجرد كونه طرفًا تاريخيًا)
-    const { data: parent } = await admin.from("parents").select("id").eq("user_id", userId).maybeSingle();
-    const { data: child } = await admin.from("children").select("parent_id").eq("id", thread.child_id).maybeSingle();
+    const [{ data: parent, error: parentError }, { data: child, error: childError }] = await Promise.all([
+      admin.from("parents").select("id").eq("user_id", userId).maybeSingle(),
+      admin.from("children").select("parent_id").eq("id", thread.child_id).maybeSingle(),
+    ]);
+    if (parentError || childError) {
+      console.error("[messages] parent relationship lookup failed:", parentError?.message ?? childError?.message);
+      return { ok: false, status: 503, error: "تعذّر التحقق من ارتباط ولي الأمر" };
+    }
     const stillOwnsChild = Boolean(parent && child && child.parent_id === parent.id);
     return { ok: true, role: "parent", canWrite: stillOwnsChild, childId: thread.child_id };
   }
@@ -42,14 +52,22 @@ export async function authorizeMessageThreadAccess(userId: string, threadId: str
   if (thread.teacher_user_id === userId) {
     // "المعلم" يجب أن يكون لا يزال معلم إحدى المجموعات التي للطفل فيها اشتراك فعّال حاليًا —
     // ينتهي هذا تلقائيًا عند انتهاء الاشتراك، انتقال الطفل لمجموعة أخرى، أو تغيّر معلم المجموعة.
-    const { data: teacher } = await admin.from("teachers").select("id").eq("user_id", userId).eq("active", true).maybeSingle();
+    const { data: teacher, error: teacherError } = await admin.from("teachers").select("id").eq("user_id", userId).eq("active", true).maybeSingle();
+    if (teacherError) {
+      console.error("[messages] teacher lookup failed:", teacherError.message);
+      return { ok: false, status: 503, error: "تعذّر التحقق من حساب المعلم" };
+    }
     let stillTeaches = false;
     if (teacher) {
-      const { data: activeLinks } = await admin
+      const { data: activeLinks, error: linksError } = await admin
         .from("subscriptions")
         .select("id, cohorts(teacher_id)")
         .eq("child_id", thread.child_id)
         .eq("status", "active");
+      if (linksError) {
+        console.error("[messages] teacher relationship lookup failed:", linksError.message);
+        return { ok: false, status: 503, error: "تعذّر التحقق من ارتباط المعلم بالطالب" };
+      }
       stillTeaches = ((activeLinks ?? []) as { cohorts: SupabaseRelation<{ teacher_id: string | null }> }[])
         .some((link) => supabaseRelationOne(link.cohorts)?.teacher_id === teacher.id);
     }
