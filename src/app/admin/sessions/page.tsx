@@ -3,6 +3,16 @@ import SubstituteTeacherControl from "./SubstituteTeacherControl";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
+type SessionRow = {
+  id: string;
+  session_date: string;
+  starts_at: string;
+  status: string;
+  teacher_id: string | null;
+  cohorts: { title: string | null; teacher_id: string | null }[];
+  teachers: { full_name: string | null }[];
+};
+
 export default async function AdminSessionsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const admin = await getAdminIdentity("session.manage");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
@@ -24,7 +34,7 @@ export default async function AdminSessionsPage({ searchParams }: { searchParams
   const { data: sessions } = await query.limit(100);
   const { data: activeTeachers } = await supabase.from("teachers").select("id, full_name").eq("active", true);
 
-  const cohortPrimaryTeacherIds = Array.from(new Set((sessions ?? []).map((s: any) => s.cohorts?.teacher_id).filter(Boolean)));
+  const cohortPrimaryTeacherIds = Array.from(new Set(((sessions ?? []) as SessionRow[]).map((s) => s.cohorts[0]?.teacher_id).filter((id): id is string => Boolean(id))));
   const { data: primaryTeachers } = cohortPrimaryTeacherIds.length
     ? await supabase.from("teachers").select("id, full_name").in("id", cohortPrimaryTeacherIds)
     : { data: [] };
@@ -49,17 +59,17 @@ export default async function AdminSessionsPage({ searchParams }: { searchParams
         <table className="admin-table">
           <thead><tr><th>التاريخ</th><th>الوقت</th><th>المجموعة</th><th>المعلم</th><th>الحالة</th><th></th></tr></thead>
           <tbody>
-            {(sessions ?? []).map((s: any) => {
-              const primaryId = s.cohorts?.teacher_id;
+            {((sessions ?? []) as SessionRow[]).map((s) => {
+              const primaryId = s.cohorts[0]?.teacher_id;
               const isSubstitute = primaryId && s.teacher_id && primaryId !== s.teacher_id;
               const canOverride = s.status === "scheduled" && new Date(s.starts_at) > new Date();
               return (
                 <tr key={s.id}>
                   <td>{new Date(s.session_date).toLocaleDateString("ar-SA")}</td>
                   <td>{s.starts_at ? new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-                  <td>{s.cohorts?.title ?? "—"}</td>
+                  <td>{s.cohorts[0]?.title ?? "—"}</td>
                   <td>
-                    {s.teachers?.full_name ?? "—"}
+                    {s.teachers[0]?.full_name ?? "—"}
                     {isSubstitute && (
                       <div style={{ fontSize: 12, color: "var(--p)", fontWeight: 700 }}>
                         بديل (الأساسي: {primaryTeacherName.get(primaryId) ?? "—"})

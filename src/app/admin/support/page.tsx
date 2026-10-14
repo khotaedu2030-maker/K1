@@ -8,6 +8,22 @@ const STATUS_LABELS: Record<string, string> = { new: "جديدة", in_progress: 
 const PRIORITY_LABELS: Record<string, string> = { normal: "عادية", high: "عالية" };
 const VALID_STATUSES = ["new", "in_progress", "resolved"];
 
+type SupportCaseRow = {
+  id: string;
+  category: string;
+  priority: string;
+  status: string;
+  subject: string;
+  description: string;
+  resolution_note: string | null;
+  created_at: string;
+  parents: { full_name: string | null; phone: string | null }[];
+  children: { first_name: string | null }[];
+  contact_requests: { phone: string | null }[];
+  admins: { full_name: string | null }[];
+};
+type ContactRequestRow = { id: string; full_name: string; message: string };
+
 export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const admin = await getAdminIdentity("support.manage");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
@@ -27,7 +43,7 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
     supabase.from("admins").select("id, full_name").eq("active", true),
     supabase.from("contact_requests").select("id, full_name, email, phone, message, created_at").eq("status", "new").order("created_at", { ascending: false }).limit(30),
   ]);
-  const cases = (casesRaw ?? []) as any[];
+  const cases = (casesRaw ?? []) as SupportCaseRow[];
 
   return (
     <AdminShell adminName={admin.full_name} role={admin.role}>
@@ -44,7 +60,7 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
       {(contacts ?? []).length > 0 && (
         <div className="dashcard" style={{ marginBottom: 20 }}>
           <b>رسائل تواصل جديدة غير مُحوَّلة ({(contacts ?? []).length})</b>
-          {(contacts ?? []).map((contact: any) => (
+          {(contacts ?? []).map((contact: ContactRequestRow) => (
             <div className="taskline" key={contact.id}>
               <span>{contact.full_name} — {contact.message.slice(0, 80)}</span>
               <ConvertButton contactRequestId={contact.id} />
@@ -59,12 +75,12 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
             <thead><tr><th>الطالب/الأسرة</th><th>الموضوع والتفاصيل</th><th>الفئة</th><th>الأولوية</th><th>الحالة</th><th>المسؤول</th><th>التاريخ</th><th>إجراء</th></tr></thead>
             <tbody>{cases.map((supportCase) => (
               <tr key={supportCase.id}>
-                <td>{supportCase.children?.first_name ?? supportCase.parents?.full_name ?? "—"}<span style={{ display: "block", color: "var(--gray)", fontSize: 11 }}>{supportCase.parents?.phone ?? supportCase.contact_requests?.phone ?? ""}</span></td>
+                <td>{supportCase.children[0]?.first_name ?? supportCase.parents[0]?.full_name ?? "—"}<span style={{ display: "block", color: "var(--gray)", fontSize: 11 }}>{supportCase.parents[0]?.phone ?? supportCase.contact_requests[0]?.phone ?? ""}</span></td>
                 <td style={{ maxWidth: 280, fontSize: 12 }}><b>{supportCase.subject}</b><span style={{ display: "block", color: "var(--gray)", marginTop: 4 }}>{supportCase.description}</span>{supportCase.resolution_note && <span style={{ display: "block", marginTop: 4 }}>ملاحظة الحل: {supportCase.resolution_note}</span>}</td>
                 <td>{supportCase.category}</td>
                 <td>{PRIORITY_LABELS[supportCase.priority] ?? supportCase.priority}</td>
                 <td>{STATUS_LABELS[supportCase.status] ?? supportCase.status}</td>
-                <td>{supportCase.admins?.full_name ?? "—"}</td>
+                <td>{supportCase.admins[0]?.full_name ?? "—"}</td>
                 <td style={{ fontSize: 12 }}>{new Date(supportCase.created_at).toLocaleDateString("ar-SA")}</td>
                 <td><SupportCaseActions caseId={supportCase.id} currentStatus={supportCase.status} admins={admins ?? []} /></td>
               </tr>

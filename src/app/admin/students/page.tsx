@@ -5,6 +5,18 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const PAGE_SIZE = 30;
 
+type ChildRow = {
+  id: string;
+  first_name: string;
+  grade: string | null;
+  parents: { full_name: string | null; phone: string | null }[];
+};
+type ChildSubscriptionRow = {
+  child_id: string;
+  status: string;
+  cohorts: { title: string | null }[];
+};
+
 export default async function AdminStudentsPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
   const admin = await getAdminIdentity("student.read");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
@@ -26,8 +38,8 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
   const { data: subs } = childIds.length
     ? await supabase.from("subscriptions").select("child_id, status, cohorts(title)").in("child_id", childIds)
     : { data: [] };
-  const subByChild = new Map<string, { status: string; cohorts: { title: string } | null }>();
-  (subs ?? []).forEach((s: any) => {
+  const subByChild = new Map<string, ChildSubscriptionRow>();
+  ((subs ?? []) as ChildSubscriptionRow[]).forEach((s) => {
     // نفضّل الاشتراك الفعّال إن وُجد أكثر من واحد تاريخيًا لنفس الطفل
     if (!subByChild.has(s.child_id) || s.status === "active") subByChild.set(s.child_id, s);
   });
@@ -52,15 +64,15 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
               <tr><th>الاسم</th><th>الصف</th><th>ولي الأمر</th><th>الجوال</th><th>المجموعة</th><th>حالة الاشتراك</th></tr>
             </thead>
             <tbody>
-              {(children ?? []).map((c: any) => {
+              {((children ?? []) as ChildRow[]).map((c) => {
                 const sub = subByChild.get(c.id);
                 return (
                   <tr key={c.id}>
                     <td>{c.first_name}</td>
                     <td>{c.grade}</td>
-                    <td>{c.parents?.full_name ?? "—"}</td>
-                    <td dir="ltr">{c.parents?.phone ?? "—"}</td>
-                    <td>{sub?.cohorts?.title ?? "—"}</td>
+                    <td>{c.parents[0]?.full_name ?? "—"}</td>
+                    <td dir="ltr">{c.parents[0]?.phone ?? "—"}</td>
+                    <td>{sub?.cohorts[0]?.title ?? "—"}</td>
                     <td>{sub?.status ?? "بلا اشتراك"}</td>
                   </tr>
                 );

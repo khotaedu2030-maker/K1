@@ -22,6 +22,21 @@ const VALID_STATUSES = ["open", "in_review", "resolved"];
 const VALID_SEVERITIES = ["warning", "critical"];
 const VALID_TYPES = Object.keys(TYPE_LABELS);
 
+type ExceptionRow = {
+  id: string;
+  exception_type: string;
+  severity: string;
+  status: string;
+  title: string;
+  description: string;
+  last_detected_at: string;
+  resolution_note: string | null;
+  parents: { full_name: string | null }[];
+  children: { first_name: string | null }[];
+  cohorts: { title: string | null }[];
+  sessions: { session_date: string | null }[];
+};
+
 export default async function AdminExceptionsPage({ searchParams }: { searchParams: Promise<{ status?: string; severity?: string; type?: string }> }) {
   const admin = await getAdminIdentity("exception.manage");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
@@ -35,7 +50,7 @@ export default async function AdminExceptionsPage({ searchParams }: { searchPara
   if (severity) query = query.eq("severity", severity);
   if (type) query = query.eq("exception_type", type);
   const [{ data: exceptionsRaw }, { data: admins }] = await Promise.all([query, supabase.from("admins").select("id, full_name").eq("active", true)]);
-  const exceptions = (exceptionsRaw ?? []) as any[];
+  const exceptions = (exceptionsRaw ?? []) as ExceptionRow[];
 
   return <AdminShell adminName={admin.full_name} role={admin.role}>
     <div className="admin-page-head"><h1>الاستثناءات التشغيلية</h1><SyncButton /></div>
@@ -48,7 +63,7 @@ export default async function AdminExceptionsPage({ searchParams }: { searchPara
         <tbody>{exceptions.map((item) => <tr key={item.id} style={item.severity === "critical" && item.status !== "resolved" ? { background: "rgba(255,177,153,0.12)" } : undefined}>
           <td>{TYPE_LABELS[item.exception_type] ?? item.exception_type}</td>
           <td>{SEVERITY_LABELS[item.severity] ?? item.severity}</td>
-          <td>{item.parents?.full_name ?? "—"}{item.children?.first_name ? ` / ${item.children.first_name}` : ""}{item.cohorts?.title ? ` — ${item.cohorts.title}` : ""}{item.sessions?.session_date ? ` — ${item.sessions.session_date}` : ""}</td>
+          <td>{item.parents[0]?.full_name ?? "—"}{item.children[0]?.first_name ? ` / ${item.children[0].first_name}` : ""}{item.cohorts[0]?.title ? ` — ${item.cohorts[0].title}` : ""}{item.sessions[0]?.session_date ? ` — ${item.sessions[0].session_date}` : ""}</td>
           <td style={{ maxWidth: 300, fontSize: 12 }}><b>{item.title}</b><span style={{ display: "block", color: "var(--gray)", marginTop: 4 }}>{item.description}</span>{item.resolution_note && <span style={{ display: "block", marginTop: 4 }}>ملاحظة الحل: {item.resolution_note}</span>}</td>
           <td>{STATUS_LABELS[item.status] ?? item.status}</td><td style={{ fontSize: 12 }}>{new Date(item.last_detected_at).toLocaleString("ar-SA")}</td>
           <td><ExceptionActions exceptionId={item.id} currentStatus={item.status} admins={admins ?? []} /></td>
