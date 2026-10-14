@@ -12,15 +12,13 @@ type PaymentRow = {
   provider_ref: string | null;
   paid_at: string | null;
   created_at: string;
-  subscriptions:
-    | {
-        child_id: string;
-        plan_id: string;
-        status: string;
-        children: { first_name: string } | null;
-        plans: { name: string } | null;
-      }
-    | null;
+  subscriptions: Array<{
+    child_id: string;
+    plan_id: string;
+    status: string;
+    children: Array<{ first_name: string }>;
+    plans: Array<{ name: string }>;
+  }>;
 };
 
 type RefundRow = {
@@ -177,8 +175,9 @@ export default async function ParentPaymentsPage() {
             <div className="list">
               {payments.map((payment) => {
                 const refunds = refundsByPayment.get(payment.id) ?? [];
-                const childName = payment.subscriptions?.children?.first_name ?? "الطالب";
-                const planName = payment.subscriptions?.plans?.name ?? "الخطة";
+                const subscription = payment.subscriptions?.[0];
+                const childName = subscription?.children?.[0]?.first_name ?? "الطالب";
+                const planName = subscription?.plans?.[0]?.name ?? "الخطة";
                 return (
                   <article key={payment.id}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
