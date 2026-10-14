@@ -91,4 +91,15 @@ assert.match(adminCohorts, /parsedUrl\.protocol !== "http:" && parsedUrl\.protoc
 assert.match(adminCohorts, /teacherSessionsError/, "cohort creation must fail closed when teacher conflict lookup fails");
 assert.match(adminCohorts, /planError/, "cohort creation must fail closed when plan lookup fails");
 
+
+const supportTransition = read("src/app/api/admin/support-cases/transition/route.ts");
+assert.match(supportTransition, /adminLookupError/, "support assignment must fail closed on assignee lookup errors");
+
+const exceptionTransition = read("src/app/api/admin/exceptions/transition/route.ts");
+assert.match(exceptionTransition, /adminLookupError/, "exception assignment must fail closed on assignee lookup errors");
+
+const adminCycles = read("src/app/api/admin/cycles/route.ts");
+assert.match(adminCycles, /currentError/, "cycle update must fail closed on cycle lookup errors");
+assert.match(adminCycles, /if \(!updated\)/, "cycle update must detect concurrent terminal-state transitions");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
