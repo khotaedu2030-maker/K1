@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-identity";
+import { getActiveStaffRole } from "@/lib/parent-role-boundary";
 import { checkRateLimit, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 type ParentRow = { id: string; user_id: string | null };
@@ -28,6 +29,16 @@ export async function POST(req: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول أولًا" }, { status: 401 });
+  }
+
+  try {
+    const staffRole = await getActiveStaffRole(user.id);
+    if (staffRole) {
+      return NextResponse.json({ error: "حسابات فريق خُطى لا يمكن تحويلها إلى حساب ولي أمر." }, { status: 403 });
+    }
+  } catch (error) {
+    console.error("[parent-role-boundary] lookup failed:", error);
+    return NextResponse.json({ error: "تعذّر التحقق من نوع الحساب" }, { status: 503 });
   }
 
   const rateLimit = await checkRateLimit({

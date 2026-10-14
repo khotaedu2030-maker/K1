@@ -5,6 +5,7 @@ import { parseAndValidateGrade, resolveGradeBand } from "@/lib/grade-config";
 import { normalizeSaudiStoredPhoneInput, SAUDI_PHONE_ERROR } from "@/lib/phone";
 import { exactParentEmailPattern, normalizeParentEmail } from "@/lib/parent-identity";
 import { getRuntimeSettings } from "@/lib/platform-settings";
+import { getActiveStaffRole } from "@/lib/parent-role-boundary";
 import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // إنشاء اشتراك جديد بحالة pending_payment — يتطلب الآن جلسة Supabase Auth حقيقية (Email OTP
@@ -22,6 +23,16 @@ export async function POST(req: Request) {
   } = await authed.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "يجب تسجيل الدخول أولًا" }, { status: 401 });
+  }
+
+  try {
+    const staffRole = await getActiveStaffRole(user.id);
+    if (staffRole) {
+      return NextResponse.json({ error: "حسابات فريق خُطى لا يمكن تحويلها إلى حساب ولي أمر." }, { status: 403 });
+    }
+  } catch (error) {
+    console.error("[parent-role-boundary] lookup failed:", error);
+    return NextResponse.json({ error: "تعذّر التحقق من نوع الحساب" }, { status: 503 });
   }
 
   const enrollLimit = await checkRateLimit({ request: req, scope: "enroll:user", identifier: user.id, limit: 5, windowSeconds: 600 });

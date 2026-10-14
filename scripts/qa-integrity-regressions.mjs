@@ -25,4 +25,14 @@ assert.match(cancel, /session\.status !== "scheduled"/, "only scheduled sessions
 assert.match(cancel, /activeSubsError/, "active subscription lookup errors must block cancellation");
 assert.match(report, /"error" in makeupResult/, "session report must fail visibly when eligible makeup credit cannot persist");
 
+
+const parentContext = read("src/lib/pilot-parent.ts");
+const parentSignup = read("src/app/api/auth/complete-parent-signup/route.ts");
+const parentLink = read("src/app/api/auth/link-parent/route.ts");
+const enroll = read("src/app/api/enroll/route.ts");
+assert.match(parentContext, /getActiveStaffRole\(user\.id\)/, "parent context must reject active staff identities");
+assert.match(parentSignup, /getActiveStaffRole\(user\.id\)/, "parent signup must reject active staff identities");
+assert.match(parentLink, /getActiveStaffRole\(user\.id\)/, "parent linking must reject active staff identities");
+assert.match(enroll, /getActiveStaffRole\(user\.id\)/, "enrollment must reject active staff identities");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
