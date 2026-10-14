@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { STUDENT_SESSION_COOKIE } from "@/lib/student-mode-constants";
+import { getActiveStaffRole } from "@/lib/parent-role-boundary";
 
 export { STUDENT_SESSION_COOKIE };
 export { STUDENT_SESSION_TTL_HOURS } from "@/lib/student-mode-constants";
@@ -27,6 +28,13 @@ export async function getActiveStudentSession(): Promise<ActiveStudentSession | 
     data: { user },
   } = await authed.auth.getUser();
   if (!user) return null;
+
+  try {
+    if (await getActiveStaffRole(user.id)) return null;
+  } catch (error) {
+    console.error("[student-mode] staff-role lookup failed:", error);
+    return null;
+  }
 
   const admin = createSupabaseAdminClient();
   const { data: session } = await admin
