@@ -4,6 +4,7 @@ import { requireTeacher } from "@/lib/require-teacher";
 import { issueMakeupCreditIfEligible } from "@/lib/makeup-credits";
 import type { AttendanceReason } from "@/lib/policies";
 import { getRuntimeSettings } from "@/lib/platform-settings";
+import { addRiyadhCalendarDays, formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
 import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 type Entry = {
@@ -263,9 +264,7 @@ export async function POST(req: Request) {
   // إعادة استخدام بيانات التقرير نفسها لتغذية Checklist الطالب (Phase 3A) — بلا أي واجهة معلم
   // جديدة: المواد المُنجزة اليوم تصبح مهام "مكتملة"، ومراجعة الغد المتبقية (Tomorrow Ready)
   // تصبح مهمة "معلَّقة" بتاريخ استحقاق غد — هذا هو نفس ما كتبه المعلم أصلًا، لا بيانات جديدة.
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  const tomorrowStr = formatRiyadhCalendarDate(addRiyadhCalendarDays(getRiyadhCalendarDate(new Date()), 1));
 
   const taskRows: { child_id: string; session_id: string; source_key: string; title: string; subject: string | null; status: string; due_date: string | null }[] = [];
   for (const e of entries) {
