@@ -59,10 +59,27 @@ export async function POST(req: Request) {
   if (error) {
     const message = error.message.toLowerCase();
     if (error.status === 429 || message.includes("rate limit") || message.includes("too many")) {
-      return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
+      return NextResponse.json(
+        { error: RATE_LIMIT_MESSAGE },
+        { status: 429, headers: { "Cache-Control": "no-store" } }
+      );
     }
-    return NextResponse.json({ error: "تعذّر إرسال رمز التحقق." }, { status: 400 });
+
+    // لا نكشف من استجابة الـAPI هل البريد موجود أصلًا أم لا في أوضاع تسجيل الدخول.
+    // هذا يمنع account enumeration؛ المستخدم يرى نفس تجربة "أرسلنا الرمز" ثم يفشل
+    // التحقق بشكل موحّد إن لم يكن هناك حساب حقيقي.
+    if (mode !== "signup") {
+      return NextResponse.json(
+        { ok: true },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "تعذّر إرسال رمز التحقق." },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    );
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }
