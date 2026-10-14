@@ -8,6 +8,14 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 // فقط، الربط الفعلي بالسلوك مؤجَّل لـPhase 3 صراحةً. الحقول المتبقية بالجدول (booking_window_days،
 // default_session_duration_minutes، support_email/phone) لا تُستقبَل من هذا الـbody إطلاقًا —
 // نجلب قيمها الحالية المخزَّنة ونُمرِّرها كما هي، بلا أي احتمال إعادة تعيين غير مقصودة.
+function isValidTimeHHMM(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return false;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
 export async function POST(req: Request) {
   const adminCheck = await requirePermission("settings.manage");
   if (!adminCheck.ok) return adminCheck.response;
@@ -47,7 +55,7 @@ export async function POST(req: Request) {
     !Number.isInteger(makeupLimit) || makeupLimit < 0 || makeupLimit > 10 ||
     !Number.isInteger(pauseMin) || pauseMin < 1 || pauseMin > 28 ||
     !Number.isInteger(pauseMax) || pauseMax < 7 || pauseMax > 28 ||
-    !/^\d{2}:\d{2}$/.test(quietStart) || !/^\d{2}:\d{2}$/.test(quietEnd) ||
+    !isValidTimeHHMM(quietStart) || !isValidTimeHHMM(quietEnd) ||
     !Number.isInteger(seatHoldHours) || seatHoldHours < 1 || seatHoldHours > 72 ||
     !Number.isInteger(attendanceLockHours) || attendanceLockHours < 1 || attendanceLockHours > 168 ||
     !Number.isInteger(cap1_3) || cap1_3 < 1 || cap1_3 > 30 ||
