@@ -16,10 +16,10 @@ export async function POST(req: Request) {
   const parsed = await readJsonBodyLimited(req, 8 * 1024);
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
-  const threadId = body?.threadId as string | undefined;
+  const threadId = typeof body?.threadId === "string" ? body.threadId.trim() : "";
   const rawBody = body?.body as string | undefined;
 
-  if (!threadId) return NextResponse.json({ error: "threadId مطلوب" }, { status: 400 });
+  if (!threadId || threadId.length > 100) return NextResponse.json({ error: "threadId غير صالح" }, { status: 400 });
   const text = (rawBody ?? "").trim();
   if (!text) return NextResponse.json({ error: "لا يمكن إرسال رسالة فارغة" }, { status: 400 });
   if (text.length > 4000) return NextResponse.json({ error: "الرسالة طويلة جدًا" }, { status: 400 });
@@ -54,7 +54,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "تعذّر إرسال الرسالة" }, { status: 500 });
   }
 
-  await admin.from("message_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
+  const { error: threadUpdateError } = await admin.from("message_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
+  if (threadUpdateError) {
+    console.error("[messages] thread timestamp update failed:", threadUpdateError.message);
+  }
 
   const quiet = await isQuietHoursNow();
   return NextResponse.json({ ok: true, quietHours: quiet, quietHoursMessage: quiet ? QUIET_HOURS_MESSAGE : null });
