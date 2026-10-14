@@ -80,8 +80,13 @@ export default async function P() {
     <Shell>
       <main className="section">
         <div className="narrow">
-          <span className="eyebrow">لوحة ولي الأمر</span>
-          <h1 className="title" style={{ fontSize: 34 }}>الاشتراك</h1>
+          <div className="admin-page-head">
+            <div>
+              <span className="eyebrow">لوحة ولي الأمر</span>
+              <h1 className="title" style={{ fontSize: 34 }}>الاشتراك</h1>
+            </div>
+            <Link className="btn outline small" href="/parent/payments">المدفوعات ←</Link>
+          </div>
 
           {(!subscriptions || subscriptions.length === 0) && (
             <p className="lead" style={{ marginTop: 20 }}>لا يوجد اشتراك بعد.</p>
