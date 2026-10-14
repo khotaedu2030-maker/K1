@@ -96,7 +96,7 @@ function fakeClient(rows, log, failWrites = {}) {
   const from = (table) => {
     let op = "select";
     const q = {
-      select: () => q, eq: () => q, in: () => q, ilike: () => q, is: () => q, order: () => q, limit: () => q,
+      select: () => q, eq: () => q, neq: () => q, in: () => q, ilike: () => q, is: () => q, order: () => q, limit: () => q,
       insert: () => { op = "insert"; log.push(`${table}.insert`); return q; },
       update: (v) => { op = "update"; log.push(`${table}.update`); if (v?.status) log.push(`${table}.update:${v.status}`); return q; },
       upsert: () => { op = "upsert"; log.push(`${table}.upsert`); return q; },
@@ -233,6 +233,7 @@ function memDb(seed, log) {
     const q = {
       select: () => q,
       eq: (k, v) => { filters.push((r) => r[k] === v); return q; },
+      neq: (k, v) => { filters.push((r) => r[k] !== v); return q; },
       in: (k, a) => { filters.push((r) => a.includes(r[k])); return q; },
       is: (k, v) => { filters.push((r) => (r[k] ?? null) === v); return q; },
       ilike: () => q,
