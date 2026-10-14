@@ -14,9 +14,11 @@ export async function POST(req: Request) {
   const parsed = await readJsonBodyLimited(req, 4 * 1024);
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
-  const pauseId = body?.pauseId as string | undefined;
-  const decision = body?.decision as "approved" | "rejected" | undefined;
-  if (!pauseId || !decision) return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  const pauseId = typeof body?.pauseId === "string" ? body.pauseId.trim() : "";
+  const decision = typeof body?.decision === "string" ? body.decision.trim() : "";
+  if (!pauseId || (decision !== "approved" && decision !== "rejected")) {
+    return NextResponse.json({ error: "بيانات المراجعة غير صالحة" }, { status: 400 });
+  }
 
   const admin = createSupabaseAdminClient();
 
