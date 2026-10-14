@@ -22,7 +22,14 @@ export async function POST(req: Request) {
   if (action === "status" && newStatus !== "in_review") return NextResponse.json({ error: "حالة مستهدَفة غير صالحة" }, { status: 400 });
   if (action === "resolve" && (resolutionNote.length < 2 || resolutionNote.length > 1000)) return NextResponse.json({ error: "ملاحظة الحل مطلوبة" }, { status: 400 });
   const admin = createSupabaseAdminClient();
-  if (action === "assign") { const { data } = await admin.from("admins").select("id").eq("id", assignedTo).eq("active", true).maybeSingle(); if (!data) return NextResponse.json({ error: "حساب إداري غير موجود أو غير نشط" }, { status: 400 }); }
+  if (action === "assign") {
+    const { data, error: adminLookupError } = await admin.from("admins").select("id").eq("id", assignedTo).eq("active", true).maybeSingle();
+    if (adminLookupError) {
+      console.error("[admin-exceptions-transition] assignee lookup failed:", adminLookupError.message);
+      return NextResponse.json({ error: "تعذّر التحقق من المسؤول الإداري" }, { status: 500 });
+    }
+    if (!data) return NextResponse.json({ error: "حساب إداري غير موجود أو غير نشط" }, { status: 400 });
+  }
   const { data: rpcResult, error: rpcError } = await admin.rpc("transition_operational_exception_atomic", { p_exception_id: exceptionId, p_action: action, p_actor: check.adminId, p_assigned_to: action === "assign" ? assignedTo : null, p_new_status: action === "status" ? newStatus : null, p_resolution_note: action === "resolve" ? resolutionNote : null });
   if (rpcError) { console.error("[admin-exceptions-transition] RPC failed:", rpcError.message); return NextResponse.json({ error: "تعذّر تنفيذ الإجراء" }, { status: 500 }); }
   const result = rpcResult as { ok: boolean; error?: string; changed?: boolean; old_status?: string; new_status?: string; old_assigned_to?: string | null; new_assigned_to?: string | null };
