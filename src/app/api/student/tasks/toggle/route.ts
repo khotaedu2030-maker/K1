@@ -31,10 +31,20 @@ export async function POST(req: Request) {
   }
 
   const nextStatus = task.status === "done" ? "pending" : "done";
-  const { error } = await admin.from("daily_tasks").update({ status: nextStatus }).eq("id", taskId);
+  const { data: updated, error } = await admin
+    .from("daily_tasks")
+    .update({ status: nextStatus })
+    .eq("id", taskId)
+    .eq("child_id", session.childId)
+    .eq("status", task.status)
+    .select("id")
+    .maybeSingle();
   if (error) {
     console.error("[student-tasks] update failed:", error.message);
     return NextResponse.json({ error: "تعذّر تحديث المهمة" }, { status: 500 });
+  }
+  if (!updated) {
+    return NextResponse.json({ error: "تغيّرت حالة المهمة، حدّث الصفحة وحاول مرة أخرى" }, { status: 409 });
   }
 
   return NextResponse.json({ ok: true, status: nextStatus });
