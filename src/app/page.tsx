@@ -3,7 +3,7 @@ import Link from "next/link";
 import Shell from "@/components/Shell";
 import Reveal from "@/components/Reveal";
 import GradeGrid, { type GradeBand } from "@/components/GradeGrid";
-import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 import EditorialSplit from "@/components/EditorialSplit";
 import HeroStoryRail, { type HeroStory } from "@/components/HeroStoryRail";
 import { formatDayCount, formatSessionCount } from "@/lib/plan-display";
@@ -77,8 +77,8 @@ const sessionSteps = [
 export default async function Home() {
   // مصدر واحد للحقيقة: نفس أسعار قاعدة البيانات المستخدَمة فعليًا بالتسجيل والدفع — لا نكرّر
   // أرقامًا ثابتة هنا قد تنحرف عن السعر الحقيقي إذا تغيّر لاحقًا في مكان واحد فقط.
-  const admin = createSupabaseAdminClient();
-  const { data: previewPlans } = await admin
+  const supabase = await createSupabaseServerClient();
+  const { data: previewPlans } = await supabase
     .from("plans")
     .select("name, days_per_week, sessions_per_month, price_sar")
     .eq("product", "motabaa")
