@@ -28,11 +28,15 @@ export async function POST(req: Request) {
   const admin = createSupabaseAdminClient();
 
   // 1) اشتراكات الطفل الفعّالة → مجموعاته (cohorts) الفعلية
-  const { data: subs } = await admin
+  const { data: subs, error: subsError } = await admin
     .from("subscriptions")
     .select("cohort_id")
     .eq("child_id", session.childId)
     .eq("status", "active");
+  if (subsError) {
+    console.error("[student-attendance] subscription lookup failed:", subsError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من اشتراك الطالب" }, { status: 503 });
+  }
   const enrolledCohortIds = new Set((subs ?? []).map((s) => s.cohort_id).filter(Boolean));
 
   if (enrolledCohortIds.size === 0) {
@@ -40,12 +44,16 @@ export async function POST(req: Request) {
   }
 
   // 2) الجلسة المطلوبة يجب أن تتبع فعليًا إحدى هذه المجموعات — وإلا فهي جلسة لا تخص هذا الطالب
-  const { data: sessionRow } = await admin
+  const { data: sessionRow, error: sessionRowError } = await admin
     .from("sessions")
     .select("id, cohort_id, starts_at, ends_at, meeting_url")
     .eq("id", sessionRowId)
     .maybeSingle();
 
+  if (sessionRowError) {
+    console.error("[student-attendance] session lookup failed:", sessionRowError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من الجلسة" }, { status: 503 });
+  }
   if (!sessionRow || !enrolledCohortIds.has(sessionRow.cohort_id)) {
     return NextResponse.json({ error: "هذه الجلسة لا تخص مجموعتك" }, { status: 403 });
   }

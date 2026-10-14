@@ -34,8 +34,11 @@ export async function POST(req: Request) {
   } = body ?? {};
 
   // ---------- Input validation صارم (لا نعتمد على DB CHECK وحدها) ----------
-  if (typeof childId !== "string" || !childId) {
-    return NextResponse.json({ error: "childId مطلوب" }, { status: 400 });
+  if (typeof childId !== "string" || !childId.trim() || childId.length > 100) {
+    return NextResponse.json({ error: "childId غير صالح" }, { status: 400 });
+  }
+  if (teacherNotes !== undefined && teacherNotes !== null && (typeof teacherNotes !== "string" || teacherNotes.length > 2000)) {
+    return NextResponse.json({ error: "ملاحظات المعلم غير صالحة" }, { status: 400 });
   }
   if (!isValidAssessmentType(assessmentType)) {
     return NextResponse.json({ error: "assessmentType غير صالح" }, { status: 400 });
@@ -72,11 +75,15 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: link } = await admin
+  const { data: link, error: linkError } = await admin
     .from("subscriptions")
     .select("child_id, cohorts(teacher_id)")
     .eq("child_id", childId)
     .eq("status", "active");
+  if (linkError) {
+    console.error("[assessment] teacher-child link lookup failed:", linkError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من ارتباط الطالب بالمعلم" }, { status: 503 });
+  }
   const belongsToTeacher = ((link ?? []) as { cohorts: SupabaseRelation<{ teacher_id: string | null }> }[])
     .some((item) => supabaseRelationOne(item.cohorts)?.teacher_id === teacherCheck.teacherId);
   if (!belongsToTeacher) {

@@ -13,11 +13,15 @@ export async function POST(req: Request) {
   const parsed = await readJsonBodyLimited(req, 4 * 1024);
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
-  const taskId = body?.taskId as string | undefined;
-  if (!taskId) return NextResponse.json({ error: "taskId مطلوب" }, { status: 400 });
+  const taskId = typeof body?.taskId === "string" ? body.taskId.trim() : "";
+  if (!taskId || taskId.length > 100) return NextResponse.json({ error: "taskId غير صالح" }, { status: 400 });
 
   const admin = createSupabaseAdminClient();
-  const { data: task } = await admin.from("daily_tasks").select("id, child_id, status").eq("id", taskId).maybeSingle();
+  const { data: task, error: taskError } = await admin.from("daily_tasks").select("id, child_id, status").eq("id", taskId).maybeSingle();
+  if (taskError) {
+    console.error("[student-tasks] task lookup failed:", taskError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من المهمة" }, { status: 503 });
+  }
 
   if (!task || task.child_id !== session.childId) {
     return NextResponse.json({ error: "هذه المهمة غير متاحة" }, { status: 403 });
@@ -27,10 +31,20 @@ export async function POST(req: Request) {
   }
 
   const nextStatus = task.status === "done" ? "pending" : "done";
-  const { error } = await admin.from("daily_tasks").update({ status: nextStatus }).eq("id", taskId);
+  const { data: updated, error } = await admin
+    .from("daily_tasks")
+    .update({ status: nextStatus })
+    .eq("id", taskId)
+    .eq("child_id", session.childId)
+    .eq("status", task.status)
+    .select("id")
+    .maybeSingle();
   if (error) {
     console.error("[student-tasks] update failed:", error.message);
     return NextResponse.json({ error: "تعذّر تحديث المهمة" }, { status: 500 });
+  }
+  if (!updated) {
+    return NextResponse.json({ error: "تغيّرت حالة المهمة، حدّث الصفحة وحاول مرة أخرى" }, { status: 409 });
   }
 
   return NextResponse.json({ ok: true, status: nextStatus });
