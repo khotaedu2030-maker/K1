@@ -37,9 +37,11 @@ export async function proxy(request: NextRequest) {
     response.headers.set("Pragma", "no-cache");
   }
 
-  // لا حاجة لأي عمل إضافي إن لم تكن هذه صفحة محمية، ولا API، ولا يوجد كوكي Student Mode إطلاقًا —
-  // هذا يغطي الغالبية العظمى من حركة الموقع العام بلا أي تكلفة إضافية (لا استدعاء Supabase).
-  if (!isProtectedPage && !isApiPath && !studentCookieId) return response;
+  // بعد تطبيق حارس المصدر أعلاه، الـAPI نفسه مسؤول عن المصادقة/التفويض الدقيق داخل route handler.
+  // لا نُجري getUser() مركزيًا لكل طلب API بلا سبب: هذا يضيف round-trip إلى Supabase Auth
+  // لكل OTP/contact/payment/request حتى عندما لا توجد جلسة أصلًا. نحتاج فحص الجلسة هنا فقط
+  // للصفحات المحمية، أو عندما توجد كوكي Student Mode لأن الـproxy نفسه يطبّق allowlist الطالب.
+  if (!isProtectedPage && !studentCookieId) return response;
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
