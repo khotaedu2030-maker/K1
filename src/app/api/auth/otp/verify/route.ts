@@ -32,8 +32,11 @@ export async function POST(req: Request) {
 
   const email = normalizeEmail(parsed.body?.email);
   const code = typeof parsed.body?.code === "string" ? parsed.body.code.trim() : "";
-  if (!email || !code || code.length > 32) {
-    return NextResponse.json({ error: "بيانات الطلب غير صالحة" }, { status: 400 });
+  if (!email || !/^\d{6,8}$/.test(code)) {
+    return NextResponse.json(
+      { error: "بيانات الطلب غير صالحة" },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    );
   }
 
   const ipLimit = await checkRateLimit({
@@ -71,5 +74,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "تعذّر التحقق من الرمز الآن. حاول مرة أخرى." }, { status: 503 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }
