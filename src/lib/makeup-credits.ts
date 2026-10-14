@@ -16,7 +16,11 @@ export async function issueMakeupCreditIfEligible(
     reason?: AttendanceReason | null;
     issuedBy?: string | null;
   }
-): Promise<{ issued: boolean; skippedReason?: "not_eligible" | "monthly_cap_reached" }> {
+): Promise<
+  | { issued: true }
+  | { issued: false; skippedReason: "not_eligible" | "monthly_cap_reached" }
+  | { issued: false; error: "persistence_failed" }
+> {
   const { childId, subscriptionId, sourceSessionId, sourceType, reason, issuedBy } = params;
 
   if (sourceType === "student_absence") {
@@ -50,7 +54,7 @@ export async function issueMakeupCreditIfEligible(
 
   // ignoreDuplicates + قيد unique(source_session_id, child_id) في قاعدة البيانات = حماية مزدوجة
   // ضد إصدار رصيدين لنفس الغياب، حتى لو استُدعيت هذه الدالة أكثر من مرة لنفس الحدث.
-  await admin.from("makeup_credits").upsert(
+  const { error } = await admin.from("makeup_credits").upsert(
     {
       child_id: childId,
       subscription_id: subscriptionId ?? null,
@@ -63,6 +67,11 @@ export async function issueMakeupCreditIfEligible(
     },
     { onConflict: "source_session_id,child_id", ignoreDuplicates: true }
   );
+
+  if (error) {
+    console.error("[makeup-credit] persistence failed:", error.message);
+    return { issued: false, error: "persistence_failed" };
+  }
 
   return { issued: true };
 }
