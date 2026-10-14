@@ -35,4 +35,11 @@ assert.match(parentSignup, /getActiveStaffRole\(user\.id\)/, "parent signup must
 assert.match(parentLink, /getActiveStaffRole\(user\.id\)/, "parent linking must reject active staff identities");
 assert.match(enroll, /getActiveStaffRole\(user\.id\)/, "enrollment must reject active staff identities");
 
+
+const goals = read("src/app/api/goals/submit/route.ts");
+assert.match(goals, /validStatuses/, "goal updates must validate status values");
+assert.match(goals, /progress < 0 \|\| progress > 100/, "goal progress must be constrained to 0..100");
+assert.match(goals, /validDateOnly\(weekStart\)/, "goal creation must validate weekStart");
+assert.match(goals, /Object\.keys\(patch\)\.length === 0/, "empty goal updates must be rejected");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
