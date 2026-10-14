@@ -37,28 +37,44 @@ export async function POST(req: Request) {
   if (!parentIdentity.ok) return NextResponse.json({ error: parentIdentity.error }, { status: parentIdentity.status });
   const parent = { id: parentIdentity.parentId };
 
-  const { data: child } = await admin.from("children").select("id, parent_id").eq("id", childId).maybeSingle();
+  const { data: child, error: childError } = await admin.from("children").select("id, parent_id").eq("id", childId).maybeSingle();
+  if (childError) {
+    console.error("[messages] child lookup failed:", childError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من الطفل" }, { status: 503 });
+  }
   if (!child || child.parent_id !== parent.id) {
     return NextResponse.json({ error: "هذا الطفل غير تابع لحسابك" }, { status: 403 });
   }
 
-  const { data: activeSub } = await admin
+  const { data: activeSub, error: subscriptionError } = await admin
     .from("subscriptions")
     .select("id, cohort_id")
     .eq("child_id", childId)
     .eq("cohort_id", cohortId)
     .eq("status", "active")
     .maybeSingle();
+  if (subscriptionError) {
+    console.error("[messages] subscription lookup failed:", subscriptionError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من اشتراك الطالب" }, { status: 503 });
+  }
   if (!activeSub) {
     return NextResponse.json({ error: "لا يوجد اشتراك فعّال لطفلك في هذه المجموعة" }, { status: 403 });
   }
 
-  const { data: cohort } = await admin.from("cohorts").select("teacher_id").eq("id", cohortId).maybeSingle();
+  const { data: cohort, error: cohortError } = await admin.from("cohorts").select("teacher_id").eq("id", cohortId).maybeSingle();
+  if (cohortError) {
+    console.error("[messages] cohort lookup failed:", cohortError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من المجموعة" }, { status: 503 });
+  }
   if (!cohort?.teacher_id) {
     return NextResponse.json({ error: "لا يوجد معلم مسؤول محدَّد لهذه المجموعة حاليًا" }, { status: 409 });
   }
 
-  const { data: teacher } = await admin.from("teachers").select("user_id").eq("id", cohort.teacher_id).maybeSingle();
+  const { data: teacher, error: teacherError } = await admin.from("teachers").select("user_id").eq("id", cohort.teacher_id).maybeSingle();
+  if (teacherError) {
+    console.error("[messages] teacher lookup failed:", teacherError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من حساب المعلم" }, { status: 503 });
+  }
   if (!teacher?.user_id) {
     return NextResponse.json({ error: "حساب المعلم غير مفعَّل بعد" }, { status: 409 });
   }
