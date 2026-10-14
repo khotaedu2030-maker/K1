@@ -72,11 +72,15 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: link } = await admin
+  const { data: link, error: linkError } = await admin
     .from("subscriptions")
     .select("child_id, cohorts(teacher_id)")
     .eq("child_id", childId)
     .eq("status", "active");
+  if (linkError) {
+    console.error("[assessment] teacher-child link lookup failed:", linkError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من ارتباط الطالب بالمعلم" }, { status: 503 });
+  }
   const belongsToTeacher = ((link ?? []) as { cohorts: SupabaseRelation<{ teacher_id: string | null }> }[])
     .some((item) => supabaseRelationOne(item.cohorts)?.teacher_id === teacherCheck.teacherId);
   if (!belongsToTeacher) {
