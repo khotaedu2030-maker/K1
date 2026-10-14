@@ -170,7 +170,7 @@ await check("create (enabled) rejects another parent's subscription without crea
   const writes = [];
   const table = (name) => {
     const q = { select: () => q, eq: () => q, in: () => q, maybeSingle: async () => ({ data: { id: "s1", parent_id: "OTHER", plan_id: "x", status: "pending_payment" } }),
-      insert: (v) => { writes.push([name, "insert"]); return q; }, update: () => { writes.push([name, "update"]); return q; } };
+      insert: () => { writes.push([name, "insert"]); return q; }, update: () => { writes.push([name, "update"]); return q; } };
     return q;
   };
   const mocks = {
