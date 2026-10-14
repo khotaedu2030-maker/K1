@@ -25,7 +25,11 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
   if (action === "assign") {
-    const { data: adminRow } = await admin.from("admins").select("id").eq("id", assignedTo).eq("active", true).maybeSingle();
+    const { data: adminRow, error: adminLookupError } = await admin.from("admins").select("id").eq("id", assignedTo).eq("active", true).maybeSingle();
+    if (adminLookupError) {
+      console.error("[support-cases-transition] assignee lookup failed:", adminLookupError.message);
+      return NextResponse.json({ error: "تعذّر التحقق من المسؤول الإداري" }, { status: 500 });
+    }
     if (!adminRow) return NextResponse.json({ error: "حساب إداري غير موجود أو غير نشط" }, { status: 400 });
   }
   const { data: rpcResult, error: rpcError } = await admin.rpc("transition_support_case_atomic", {
