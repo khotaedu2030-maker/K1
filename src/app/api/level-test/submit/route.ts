@@ -51,12 +51,16 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: session } = await admin
+  const { data: session, error: sessionError } = await admin
     .from("level_test_sessions")
     .select("id, track_id, current_question_id, target_difficulty, max_questions, status")
     .eq("id", sessionId)
     .maybeSingle();
 
+  if (sessionError) {
+    console.error("[level-test] session lookup failed:", sessionError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من جلسة الاختبار" }, { status: 503 });
+  }
   if (!session) return NextResponse.json({ error: "جلسة غير موجودة" }, { status: 404 });
   if (session.status !== "active") return NextResponse.json({ error: "الجلسة منتهية بالفعل" }, { status: 409 });
 
@@ -94,11 +98,16 @@ export async function POST(req: Request) {
   }
 
   // إعادة بناء answeredIds/history الكاملين من قاعدة البيانات — مصدر الحقيقة الوحيد
-  const { data: allAnswers } = await admin
+  const { data: allAnswers, error: answersError } = await admin
     .from("level_test_answers")
     .select("question_id, correct, difficulty, skill")
     .eq("session_id", sessionId)
     .order("answered_at", { ascending: true });
+
+  if (answersError) {
+    console.error("[level-test] answer history lookup failed:", answersError.message);
+    return NextResponse.json({ error: "تعذّر تحميل سجل الإجابات" }, { status: 500 });
+  }
 
   const answeredIds: QuestionId[] = [];
   const history: AnswerRecord[] = [];
@@ -124,10 +133,20 @@ export async function POST(req: Request) {
 
   if (reachedMaximum) {
     const estimated = estimateLevel(history);
-    await admin
+    const { data: finishedSession, error: finishError } = await admin
       .from("level_test_sessions")
       .update({ status: "finished", finished_at: new Date().toISOString() })
-      .eq("id", sessionId);
+      .eq("id", sessionId)
+      .eq("status", "active")
+      .select("id")
+      .maybeSingle();
+    if (finishError) {
+      console.error("[level-test] session finish failed:", finishError.message);
+      return NextResponse.json({ error: "تعذّر إنهاء جلسة الاختبار" }, { status: 500 });
+    }
+    if (!finishedSession) {
+      return NextResponse.json({ error: "تغيّرت حالة جلسة الاختبار، حدّث الصفحة وحاول مرة أخرى" }, { status: 409 });
+    }
 
     return NextResponse.json({
       ...base,
@@ -140,10 +159,20 @@ export async function POST(req: Request) {
   const next = chooseNextQuestion(track.questions, answeredIds, nextDifficulty, history);
   if (!next) {
     const estimated = estimateLevel(history);
-    await admin
+    const { data: finishedSession, error: finishError } = await admin
       .from("level_test_sessions")
       .update({ status: "finished", finished_at: new Date().toISOString() })
-      .eq("id", sessionId);
+      .eq("id", sessionId)
+      .eq("status", "active")
+      .select("id")
+      .maybeSingle();
+    if (finishError) {
+      console.error("[level-test] session finish failed:", finishError.message);
+      return NextResponse.json({ error: "تعذّر إنهاء جلسة الاختبار" }, { status: 500 });
+    }
+    if (!finishedSession) {
+      return NextResponse.json({ error: "تغيّرت حالة جلسة الاختبار، حدّث الصفحة وحاول مرة أخرى" }, { status: 409 });
+    }
 
     return NextResponse.json({
       ...base,
@@ -153,10 +182,21 @@ export async function POST(req: Request) {
     });
   }
 
-  await admin
+  const { data: advancedSession, error: advanceError } = await admin
     .from("level_test_sessions")
     .update({ current_question_id: String(next.id), target_difficulty: nextDifficulty })
-    .eq("id", sessionId);
+    .eq("id", sessionId)
+    .eq("status", "active")
+    .eq("current_question_id", session.current_question_id)
+    .select("id")
+    .maybeSingle();
+  if (advanceError) {
+    console.error("[level-test] session advance failed:", advanceError.message);
+    return NextResponse.json({ error: "تعذّر تحديث جلسة الاختبار" }, { status: 500 });
+  }
+  if (!advancedSession) {
+    return NextResponse.json({ error: "تغيّرت حالة جلسة الاختبار، حدّث الصفحة وحاول مرة أخرى" }, { status: 409 });
+  }
 
   return NextResponse.json({
     ...base,
