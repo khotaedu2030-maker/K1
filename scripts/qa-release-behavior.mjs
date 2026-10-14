@@ -369,6 +369,24 @@ await check("enroll: failed atomic RPC for a reused child never deletes the exis
   assert.equal(res.status, 409);
   assert.equal(db.t.children.length, 1);
 });
+const inHours = (h) => new Date(Date.now() + h * 3600_000).toISOString();
+for (const [label, sub, reused] of [
+  ["future hold_expires_at is reused even if created_at is older than 24h", { created_at: hoursAgo(48), hold_expires_at: inHours(1) }, true],
+  ["expired hold_expires_at is not reused even if created_at is recent", { created_at: hoursAgo(1), hold_expires_at: hoursAgo(0.1) }, false],
+  ["legacy null hold_expires_at, recent created_at -> reused (24h fallback)", { created_at: hoursAgo(1), hold_expires_at: null }, true],
+  ["legacy null hold_expires_at, old created_at -> not reused (24h fallback)", { created_at: hoursAgo(30), hold_expires_at: null }, false],
+]) {
+  await check(`enroll pending: ${label}`, async () => {
+    const db = memDb(enrollSeed(5), []);
+    db.t.children.push({ id: "k1", parent_id: "p1", first_name: "Sara", grade: 1 });
+    db.t.subscriptions.push({ id: "s-p", child_id: "k1", parent_id: "p1", cohort_id: "c1", status: "pending_payment", ...sub });
+    const res = await loadEnrollMem(db, "u1", "p1@example.test")(enrollBody());
+    assert.equal(res.status, 200);
+    assert.equal(res.body.subscriptionId === "s-p", reused);
+    assert.equal(db.t.children.length, 1);
+    assert.equal(db.t.subscriptions.length, reused ? 1 : 2);
+  });
+}
 await check("enroll: a full cohort is still rejected for a new enrollment", async () => {
   const db = memDb(enrollSeed(1), []);
   db.t.subscriptions.push({ id: "s-x", child_id: "kx", parent_id: "p2", cohort_id: "c1", status: "active", created_at: hoursAgo(5) });

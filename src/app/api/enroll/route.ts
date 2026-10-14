@@ -271,7 +271,7 @@ export async function POST(req: Request) {
   if (existingChildId) {
     const { data: liveSubs, error: liveSubsError } = await supabase
       .from("subscriptions")
-      .select("id, status, created_at")
+      .select("id, status, created_at, hold_expires_at")
       .eq("child_id", existingChildId)
       .eq("cohort_id", cohortId)
       .in("status", ["pending_payment", "active"])
@@ -283,10 +283,13 @@ export async function POST(req: Request) {
     if ((liveSubs ?? []).some((s) => s.status === "active")) {
       return NextResponse.json({ error: "هذا الطالب مسجَّل بالفعل في هذه المجموعة" }, { status: 409 });
     }
-    // اشتراك معلّق أحدث من 24 ساعة يُعاد كما هو؛ المعلّق الأقدم يُعدّ منتهيًا ويُنشأ اشتراك جديد لنفس الطفل.
-    const fresh = (liveSubs ?? []).find(
-      (s) => s.status === "pending_payment" && Date.now() - new Date(s.created_at).getTime() <= 24 * 60 * 60 * 1000
-    );
+    // hold_expires_at هو مصدر الحقيقة لانتهاء الحجز؛ للصفوف القديمة (null) نعتمد قاعدة 24 ساعة من created_at.
+    // الاشتراك المعلّق المنتهي يُعدّ منتهيًا ويُنشأ اشتراك جديد لنفس الطفل.
+    const fresh = (liveSubs ?? []).find((s) => {
+      if (s.status !== "pending_payment") return false;
+      if (s.hold_expires_at) return new Date(s.hold_expires_at).getTime() > Date.now();
+      return Date.now() - new Date(s.created_at).getTime() <= 24 * 60 * 60 * 1000;
+    });
     if (fresh) return NextResponse.json({ subscriptionId: fresh.id });
   }
 
