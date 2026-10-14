@@ -15,8 +15,8 @@ export async function POST(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
   const subscriptionId = typeof body?.subscriptionId === "string" ? body.subscriptionId.trim() : "";
-  const startDate = body?.startDate as string | undefined;
-  const endDate = body?.endDate as string | undefined;
+  const startDate = typeof body?.startDate === "string" ? body.startDate.trim() : "";
+  const endDate = typeof body?.endDate === "string" ? body.endDate.trim() : "";
   const rawReason = body?.reason as string | undefined;
   const reason = typeof rawReason === "string" ? rawReason.trim() : undefined;
 
@@ -59,21 +59,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "لا يمكن تجميد اشتراك غير فعّال" }, { status: 409 });
   }
 
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const parseDateOnly = (value: string) => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return date;
+  };
 
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
+  if (!start || !end) {
+    return NextResponse.json({ error: "صيغة التاريخ غير صحيحة" }, { status: 400 });
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const today = parseDateOnly(todayIso)!;
   if (start < today) {
     return NextResponse.json({ error: "لا يمكن طلب تجميد بأثر رجعي" }, { status: 400 });
   }
   if (end < start) {
     return NextResponse.json({ error: "تاريخ النهاية قبل تاريخ البداية" }, { status: 400 });
   }
-  const durationDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
-  // الحد الأقصى الفعلي: platform_settings.pause_max_days إن كانت الهجرة مُطبَّقة، وإلا
-  // الافتراضي المطابق لـPAUSE_POLICY.MAX_PAUSE_DAYS الحالي.
+
+  const durationDays = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
   const settings = await getRuntimeSettings();
+  if (durationDays < settings.pauseMinDays) {
+    return NextResponse.json({ error: `أقل مدة تجميد ${settings.pauseMinDays} أيام` }, { status: 400 });
+  }
   if (durationDays > settings.pauseMaxDays) {
     return NextResponse.json({ error: `أقصى مدة تجميد ${settings.pauseMaxDays} أيام` }, { status: 400 });
   }
