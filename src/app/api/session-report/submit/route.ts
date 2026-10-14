@@ -203,15 +203,6 @@ export async function POST(req: Request) {
     }
   }
 
-  const { error: sessionUpdateError } = await admin
-    .from("sessions")
-    .update({ status: "completed" })
-    .eq("id", sessionId);
-  if (sessionUpdateError) {
-    console.error("[session-report] session update failed:", sessionUpdateError.message);
-    return NextResponse.json({ error: "تعذّر إكمال الجلسة" }, { status: 500 });
-  }
-
   // ---------- الحضور الفعلي (Absence Policy) ----------
   // تقرير المعلم هو المرجع النهائي للحضور — يؤكد أو يصحح ما سجّله الطالب بنفسه عبر "دخول الجلسة".
   // الغياب المبرَّر فقط (وليس كل غياب تلقائيًا) قد يولّد رصيدًا تعويضيًا، وفق السياسة المركزية
@@ -227,6 +218,16 @@ export async function POST(req: Request) {
   if (attendanceError) {
     console.error("[session-report] attendance save failed:", attendanceError.message);
     return NextResponse.json({ error: "تعذّر حفظ الحضور" }, { status: 500 });
+  }
+
+  // الجلسة لا تُعلَّم مكتملة إلا بعد نجاح حفظ الحضور، فيبقى إعادة الإرسال ممكنًا عند الفشل.
+  const { error: sessionUpdateError } = await admin
+    .from("sessions")
+    .update({ status: "completed" })
+    .eq("id", sessionId);
+  if (sessionUpdateError) {
+    console.error("[session-report] session update failed:", sessionUpdateError.message);
+    return NextResponse.json({ error: "تعذّر إكمال الجلسة" }, { status: 500 });
   }
 
   for (const e of entries) {

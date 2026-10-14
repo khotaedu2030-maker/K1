@@ -98,7 +98,7 @@ function fakeClient(rows, log, failWrites = {}) {
     const q = {
       select: () => q, eq: () => q, in: () => q, ilike: () => q, is: () => q, order: () => q, limit: () => q,
       insert: () => { op = "insert"; log.push(`${table}.insert`); return q; },
-      update: () => { op = "update"; log.push(`${table}.update`); return q; },
+      update: (v) => { op = "update"; log.push(`${table}.update`); if (v?.status) log.push(`${table}.update:${v.status}`); return q; },
       upsert: () => { op = "upsert"; log.push(`${table}.upsert`); return q; },
       delete: () => { op = "delete"; log.push(`${table}.delete`); return q; },
       maybeSingle: async () => ({ data: Array.isArray(rows[table]) ? rows[table][0] ?? null : rows[table] ?? null, error: null }),
@@ -189,12 +189,15 @@ await check("session report: attendance write failure -> 500, no success, no mak
   assert.equal(res.status, 500);
   assert.ok(res.body.error && !res.body.ok);
   assert.ok(!log.includes("makeup"), "makeup credit must not be issued after a failed attendance write");
+  assert.ok(!log.includes("sessions.update:completed"), "session must not be marked completed when attendance fails");
 });
 await check("session report: attendance write success -> 200 (control)", async () => {
   const log = [];
   const res = await loadSessionReport(false, log)({ __body: reportBody });
   assert.equal(res.status, 200, JSON.stringify(res.body));
   assert.ok(log.includes("attendance.upsert"));
+  assert.ok(log.includes("sessions.update:completed"), "session is completed when attendance succeeds");
+  assert.ok(log.indexOf("attendance.upsert") < log.indexOf("sessions.update:completed"), "completed only after attendance");
 });
 
 console.log(failures === 0 ? "\nALL RELEASE-BEHAVIOR CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
