@@ -2,6 +2,7 @@ import Link from "next/link";
 import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 
 const PAGE_SIZE = 30;
 
@@ -9,12 +10,12 @@ type ChildRow = {
   id: string;
   first_name: string;
   grade: string | null;
-  parents: { full_name: string | null; phone: string | null }[];
+  parents: SupabaseRelation<{ full_name: string | null; phone: string | null }>;
 };
 type ChildSubscriptionRow = {
   child_id: string;
   status: string;
-  cohorts: { title: string | null }[];
+  cohorts: SupabaseRelation<{ title: string | null }>;
 };
 
 export default async function AdminStudentsPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
@@ -70,9 +71,9 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
                   <tr key={c.id}>
                     <td>{c.first_name}</td>
                     <td>{c.grade}</td>
-                    <td>{c.parents[0]?.full_name ?? "—"}</td>
-                    <td dir="ltr">{c.parents[0]?.phone ?? "—"}</td>
-                    <td>{sub?.cohorts[0]?.title ?? "—"}</td>
+                    <td>{supabaseRelationOne(c.parents)?.full_name ?? "—"}</td>
+                    <td dir="ltr">{supabaseRelationOne(c.parents)?.phone ?? "—"}</td>
+                    <td>{supabaseRelationOne(sub?.cohorts)?.title ?? "—"}</td>
                     <td>{sub?.status ?? "بلا اشتراك"}</td>
                   </tr>
                 );

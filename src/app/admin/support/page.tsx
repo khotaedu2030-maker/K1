@@ -1,6 +1,7 @@
 import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 import SupportCaseActions from "./SupportCaseActions";
 import ConvertButton from "./ConvertButton";
 
@@ -17,10 +18,10 @@ type SupportCaseRow = {
   description: string;
   resolution_note: string | null;
   created_at: string;
-  parents: { full_name: string | null; phone: string | null }[];
-  children: { first_name: string | null }[];
-  contact_requests: { phone: string | null }[];
-  admins: { full_name: string | null }[];
+  parents: SupabaseRelation<{ full_name: string | null; phone: string | null }>;
+  children: SupabaseRelation<{ first_name: string | null }>;
+  contact_requests: SupabaseRelation<{ phone: string | null }>;
+  admins: SupabaseRelation<{ full_name: string | null }>;
 };
 type ContactRequestRow = { id: string; full_name: string; message: string };
 
@@ -75,12 +76,12 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
             <thead><tr><th>الطالب/الأسرة</th><th>الموضوع والتفاصيل</th><th>الفئة</th><th>الأولوية</th><th>الحالة</th><th>المسؤول</th><th>التاريخ</th><th>إجراء</th></tr></thead>
             <tbody>{cases.map((supportCase) => (
               <tr key={supportCase.id}>
-                <td>{supportCase.children[0]?.first_name ?? supportCase.parents[0]?.full_name ?? "—"}<span style={{ display: "block", color: "var(--gray)", fontSize: 11 }}>{supportCase.parents[0]?.phone ?? supportCase.contact_requests[0]?.phone ?? ""}</span></td>
+                <td>{supabaseRelationOne(supportCase.children)?.first_name ?? supabaseRelationOne(supportCase.parents)?.full_name ?? "—"}<span style={{ display: "block", color: "var(--gray)", fontSize: 11 }}>{supabaseRelationOne(supportCase.parents)?.phone ?? supabaseRelationOne(supportCase.contact_requests)?.phone ?? ""}</span></td>
                 <td style={{ maxWidth: 280, fontSize: 12 }}><b>{supportCase.subject}</b><span style={{ display: "block", color: "var(--gray)", marginTop: 4 }}>{supportCase.description}</span>{supportCase.resolution_note && <span style={{ display: "block", marginTop: 4 }}>ملاحظة الحل: {supportCase.resolution_note}</span>}</td>
                 <td>{supportCase.category}</td>
                 <td>{PRIORITY_LABELS[supportCase.priority] ?? supportCase.priority}</td>
                 <td>{STATUS_LABELS[supportCase.status] ?? supportCase.status}</td>
-                <td>{supportCase.admins[0]?.full_name ?? "—"}</td>
+                <td>{supabaseRelationOne(supportCase.admins)?.full_name ?? "—"}</td>
                 <td style={{ fontSize: 12 }}>{new Date(supportCase.created_at).toLocaleDateString("ar-SA")}</td>
                 <td><SupportCaseActions caseId={supportCase.id} currentStatus={supportCase.status} admins={admins ?? []} /></td>
               </tr>

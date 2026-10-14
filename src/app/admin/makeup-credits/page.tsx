@@ -2,6 +2,7 @@ import AdminShell from "@/components/AdminShell";
 import { GrantCreditForm, CancelCreditButton } from "./MakeupCreditActions";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 
 const STATUS_LABELS: Record<string, string> = { available: "متاح", reserved: "محجوز", used: "مُستخدَم", expired: "منتهٍ", cancelled: "ملغى" };
 const SOURCE_LABELS: Record<string, string> = { student_absence: "غياب طالب", teacher_cancellation: "إلغاء معلم", platform_cancellation: "إلغاء من خُطى", manual_admin: "منح يدوي من الإدارة" };
@@ -13,7 +14,7 @@ type MakeupCreditRow = {
   status: string;
   issued_at: string;
   expires_at: string | null;
-  children: { first_name: string | null; parents: { full_name: string | null }[] }[];
+  children: SupabaseRelation<{ first_name: string | null; parents: SupabaseRelation<{ full_name: string | null }> }>;
 };
 
 export default async function AdminMakeupCreditsPage() {
@@ -49,8 +50,8 @@ export default async function AdminMakeupCreditsPage() {
           <tbody>
             {((credits ?? []) as MakeupCreditRow[]).map((c) => (
               <tr key={c.id}>
-                <td>{c.children[0]?.first_name ?? "—"}</td>
-                <td>{c.children[0]?.parents[0]?.full_name ?? "—"}</td>
+                <td>{supabaseRelationOne(c.children)?.first_name ?? "—"}</td>
+                <td>{supabaseRelationOne(supabaseRelationOne(c.children)?.parents)?.full_name ?? "—"}</td>
                 <td>{SOURCE_LABELS[c.source_type] ?? c.source_type}</td>
                 <td>{c.reason ?? "—"}</td>
                 <td>{STATUS_LABELS[c.status] ?? c.status}</td>

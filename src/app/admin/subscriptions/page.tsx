@@ -2,13 +2,14 @@ import AdminShell from "@/components/AdminShell";
 import ReviewButtons from "./ReviewButtons";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 
 type PauseRequestRow = {
   id: string;
   start_date: string;
   end_date: string;
   reason: string | null;
-  subscriptions: { children: { first_name: string | null }[] }[];
+  subscriptions: SupabaseRelation<{ children: SupabaseRelation<{ first_name: string | null }> }>;
 };
 
 export default async function P() {
@@ -44,7 +45,7 @@ export default async function P() {
       {((requestedPauses ?? []) as PauseRequestRow[]).map((p) => (
         <div className="session-row" key={p.id}>
           <div>
-            <b>{p.subscriptions[0]?.children[0]?.first_name ?? "طالب"}</b>
+            <b>{supabaseRelationOne(supabaseRelationOne(p.subscriptions)?.children)?.first_name ?? "طالب"}</b>
             <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
               {p.start_date} → {p.end_date} {p.reason ? `• ${p.reason}` : ""}
             </p>

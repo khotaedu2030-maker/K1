@@ -1,13 +1,14 @@
 import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 
 type MessageThreadRow = {
   id: string;
   status: string;
   created_at: string;
   updated_at: string;
-  children: { first_name: string | null }[];
+  children: SupabaseRelation<{ first_name: string | null }>;
 };
 
 // عرض Metadata فقط عمدًا (لا محتوى الرسائل نفسه) — الخصوصية أولوية، لا نكشف كل محادثة خاصة
@@ -40,7 +41,7 @@ export default async function AdminMessagesPage() {
           <tbody>
             {((threads ?? []) as MessageThreadRow[]).map((t) => (
               <tr key={t.id}>
-                <td>{t.children[0]?.first_name ?? "—"}</td>
+                <td>{supabaseRelationOne(t.children)?.first_name ?? "—"}</td>
                 <td>{t.status === "open" ? "مفتوحة" : "مغلقة"}</td>
                 <td>{new Date(t.created_at).toLocaleDateString("ar-SA")}</td>
                 <td>{new Date(t.updated_at).toLocaleDateString("ar-SA")}</td>

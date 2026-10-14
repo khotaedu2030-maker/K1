@@ -1,6 +1,7 @@
 import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 
 const PAGE_SIZE = 40;
 
@@ -12,7 +13,7 @@ type PaymentRow = {
   provider_ref: string | null;
   paid_at: string | null;
   created_at: string;
-  parents: { full_name: string | null }[];
+  parents: SupabaseRelation<{ full_name: string | null }>;
 };
 
 export default async function AdminPaymentsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
@@ -61,7 +62,7 @@ export default async function AdminPaymentsPage({ searchParams }: { searchParams
             <tbody>
               {((payments ?? []) as PaymentRow[]).map((p) => (
                 <tr key={p.id}>
-                  <td>{p.parents[0]?.full_name ?? "—"}</td>
+                  <td>{supabaseRelationOne(p.parents)?.full_name ?? "—"}</td>
                   <td>{p.amount_sar} ر.س</td>
                   <td>{STATUS_LABELS[p.status] ?? p.status}</td>
                   <td>{p.provider ?? "—"}</td>

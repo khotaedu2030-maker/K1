@@ -1,6 +1,7 @@
 import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 import ExceptionActions from "./ExceptionActions";
 import SyncButton from "./SyncButton";
 
@@ -31,10 +32,10 @@ type ExceptionRow = {
   description: string;
   last_detected_at: string;
   resolution_note: string | null;
-  parents: { full_name: string | null }[];
-  children: { first_name: string | null }[];
-  cohorts: { title: string | null }[];
-  sessions: { session_date: string | null }[];
+  parents: SupabaseRelation<{ full_name: string | null }>;
+  children: SupabaseRelation<{ first_name: string | null }>;
+  cohorts: SupabaseRelation<{ title: string | null }>;
+  sessions: SupabaseRelation<{ session_date: string | null }>;
 };
 
 export default async function AdminExceptionsPage({ searchParams }: { searchParams: Promise<{ status?: string; severity?: string; type?: string }> }) {
@@ -63,7 +64,7 @@ export default async function AdminExceptionsPage({ searchParams }: { searchPara
         <tbody>{exceptions.map((item) => <tr key={item.id} style={item.severity === "critical" && item.status !== "resolved" ? { background: "rgba(255,177,153,0.12)" } : undefined}>
           <td>{TYPE_LABELS[item.exception_type] ?? item.exception_type}</td>
           <td>{SEVERITY_LABELS[item.severity] ?? item.severity}</td>
-          <td>{item.parents[0]?.full_name ?? "—"}{item.children[0]?.first_name ? ` / ${item.children[0].first_name}` : ""}{item.cohorts[0]?.title ? ` — ${item.cohorts[0].title}` : ""}{item.sessions[0]?.session_date ? ` — ${item.sessions[0].session_date}` : ""}</td>
+          <td>{supabaseRelationOne(item.parents)?.full_name ?? "—"}{supabaseRelationOne(item.children)?.first_name ? ` / ${supabaseRelationOne(item.children)?.first_name}` : ""}{supabaseRelationOne(item.cohorts)?.title ? ` — ${supabaseRelationOne(item.cohorts)?.title}` : ""}{supabaseRelationOne(item.sessions)?.session_date ? ` — ${supabaseRelationOne(item.sessions)?.session_date}` : ""}</td>
           <td style={{ maxWidth: 300, fontSize: 12 }}><b>{item.title}</b><span style={{ display: "block", color: "var(--gray)", marginTop: 4 }}>{item.description}</span>{item.resolution_note && <span style={{ display: "block", marginTop: 4 }}>ملاحظة الحل: {item.resolution_note}</span>}</td>
           <td>{STATUS_LABELS[item.status] ?? item.status}</td><td style={{ fontSize: 12 }}>{new Date(item.last_detected_at).toLocaleString("ar-SA")}</td>
           <td><ExceptionActions exceptionId={item.id} currentStatus={item.status} admins={admins ?? []} /></td>
