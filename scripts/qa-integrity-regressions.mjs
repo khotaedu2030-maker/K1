@@ -102,4 +102,11 @@ const adminCycles = read("src/app/api/admin/cycles/route.ts");
 assert.match(adminCycles, /currentError/, "cycle update must fail closed on cycle lookup errors");
 assert.match(adminCycles, /if \(!updated\)/, "cycle update must detect concurrent terminal-state transitions");
 
+
+const levelTestSubmit = read("src/app/api/level-test/submit/route.ts");
+assert.match(levelTestSubmit, /sessionError/, "level test must fail closed when session lookup fails");
+assert.match(levelTestSubmit, /answersError/, "level test must fail closed when answer history lookup fails");
+assert.match(levelTestSubmit, /if \(!advancedSession\)/, "level test must detect concurrent session advancement");
+assert.match(levelTestSubmit, /if \(!finishedSession\)/, "level test must detect concurrent session completion");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
