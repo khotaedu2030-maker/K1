@@ -3,6 +3,8 @@ import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const ACTIVATION_ERRORS: Record<string, string> = {
   application_not_found: "الطلب غير موجود",
   application_not_accepted: "يجب قبول الطلب قبل التفعيل",
@@ -17,7 +19,7 @@ export async function POST(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
   const applicationId = typeof body?.applicationId === "string" ? body.applicationId.trim() : "";
-  if (!applicationId) return NextResponse.json({ error: "معرّف الطلب مطلوب" }, { status: 400 });
+  if (!UUID_RE.test(applicationId)) return NextResponse.json({ error: "معرّف الطلب غير صالح" }, { status: 400 });
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin.rpc("activate_teacher_from_application_atomic", {

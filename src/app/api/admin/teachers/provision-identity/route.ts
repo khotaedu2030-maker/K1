@@ -4,6 +4,8 @@ import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { normalizeParentEmail } from "@/lib/parent-identity";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const PROVISION_MARKER = "khota_teacher_identity_provision";
 
 function hasProvisionProof(user: { id: string; email?: string | null; app_metadata?: Record<string, unknown> }, teacherId: string, email: string) {
@@ -32,7 +34,7 @@ export async function POST(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
   const teacherId = typeof body?.teacherId === "string" ? body.teacherId.trim() : "";
-  if (!teacherId) return NextResponse.json({ error: "معرّف المعلم مطلوب" }, { status: 400 });
+  if (!UUID_RE.test(teacherId)) return NextResponse.json({ error: "معرّف المعلم غير صالح" }, { status: 400 });
 
   const admin = createSupabaseAdminClient();
   const { data: teacher } = await admin

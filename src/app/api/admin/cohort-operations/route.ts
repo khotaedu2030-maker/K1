@@ -3,6 +3,8 @@ import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 // تحديث بيانات مجموعة (تشغيلية + سعة/تسجيل) — يمر بالكامل عبر Server API محمي، لا كتابة
 // مباشرة من المتصفح إطلاقًا. requireAdmin() هو الفحص المركزي لصلاحية الإدارة. التحديث الفعلي
 // (السعة/الحالة/المعلم/الرابط) يتم عبر RPC ذرّي واحد (admin_update_cohort_operations_atomic) —
@@ -22,13 +24,16 @@ export async function POST(req: Request) {
   const capacityRaw = body?.capacity;
   const statusRaw = body?.status as string | undefined;
 
-  if (!cohortId) return NextResponse.json({ error: "cohortId مطلوب" }, { status: 400 });
+  if (typeof cohortId !== "string" || !UUID_RE.test(cohortId)) {
+    return NextResponse.json({ error: "معرّف المجموعة غير صالح" }, { status: 400 });
+  }
 
   // --- تحقق مبكر بأخطاء واضحة (قبل استدعاء RPC) ---
   let meetingUrl: string | null | undefined;
   if (meetingUrlRaw !== undefined) {
     meetingUrl = meetingUrlRaw?.trim() || null;
     if (meetingUrl) {
+      if (meetingUrl.length > 2048) return NextResponse.json({ error: "رابط الجلسة طويل جدًا" }, { status: 400 });
       let parsed: URL;
       try {
         parsed = new URL(meetingUrl);
@@ -47,6 +52,7 @@ export async function POST(req: Request) {
   if (teacherIdRaw !== undefined) {
     teacherId = teacherIdRaw?.trim() || null;
     if (teacherId) {
+      if (!UUID_RE.test(teacherId)) return NextResponse.json({ error: "معرّف المعلم غير صالح" }, { status: 400 });
       // active=true إلزامي هنا — يمنع تعيين معلم غير نشط حتى لو أُرسل id صالح يدويًا
       // (مباشرة عبر الـAPI بمعزل عن الواجهة، التي أصلًا لا تعرض إلا المعلمين النشطين).
       const { data: teacher } = await admin.from("teachers").select("id").eq("id", teacherId).eq("active", true).maybeSingle();

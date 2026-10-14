@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
   const targetAdminId = typeof body?.targetAdminId === "string" ? body.targetAdminId.trim() : "";
-  const newRole = typeof body?.newRole === "string" ? body.newRole : "";
+  const newRole = typeof body?.newRole === "string" ? body.newRole.trim() : "";
   const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
   if (!UUID_RE.test(targetAdminId) || !VALID_ROLES.has(newRole) || reason.length < 2 || reason.length > 500) return NextResponse.json({ error: "المعرّف والدور الجديد والسبب مطلوبة" }, { status: 400 });
 

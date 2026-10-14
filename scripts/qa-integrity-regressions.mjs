@@ -57,4 +57,16 @@ for (const path of [
 }
 assert.match(read("src/lib/messaging-authorization.ts"), /getActiveStaffRole\(userId\)/, "message parent authorization must reject active staff users");
 
+
+const adminActive = read("src/app/api/admin/admin-users/active/route.ts");
+assert.match(adminActive, /typeof active !== "boolean"/, "admin activation must require an explicit boolean");
+const adminSettings = read("src/app/api/admin/settings/route.ts");
+assert.match(adminSettings, /isValidTimeHHMM/, "admin quiet hours must validate real clock times");
+const cohortOps = read("src/app/api/admin/cohort-operations/route.ts");
+assert.match(cohortOps, /UUID_RE\.test\(cohortId\)/, "cohort operations must validate cohort identifiers");
+assert.match(cohortOps, /meetingUrl\.length > 2048/, "cohort operations must bound meeting URL length");
+const requireAdmin = read("src/lib/require-admin.ts");
+assert.match(requireAdmin, /isKnownAdminRole\(adminRow\.role\)/, "unknown admin roles must fail closed");
+assert.match(requireAdmin, /status: 503/, "admin lookup failures must not masquerade as authorization denials");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
