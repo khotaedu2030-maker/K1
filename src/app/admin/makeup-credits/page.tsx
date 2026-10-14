@@ -6,6 +6,16 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 const STATUS_LABELS: Record<string, string> = { available: "متاح", reserved: "محجوز", used: "مُستخدَم", expired: "منتهٍ", cancelled: "ملغى" };
 const SOURCE_LABELS: Record<string, string> = { student_absence: "غياب طالب", teacher_cancellation: "إلغاء معلم", platform_cancellation: "إلغاء من خُطى", manual_admin: "منح يدوي من الإدارة" };
 
+type MakeupCreditRow = {
+  id: string;
+  source_type: string;
+  reason: string | null;
+  status: string;
+  issued_at: string;
+  expires_at: string | null;
+  children: { first_name: string | null; parents: { full_name: string | null }[] }[];
+};
+
 export default async function AdminMakeupCreditsPage() {
   const admin = await getAdminIdentity("makeup.manage");
   if (!admin) return <div className="placeholder-page"><div className="narrow"><span className="badge">غير مصرَّح</span></div></div>;
@@ -26,7 +36,7 @@ export default async function AdminMakeupCreditsPage() {
       <GrantCreditForm />
 
       <p style={{ color: "var(--gray)", fontSize: 13, margin: "16px 0" }}>
-        الإلغاء متاح فقط للأرصدة اليدوية (manual_admin) التي لا تزال "متاحة" — لا يمكن إلغاء
+        الإلغاء متاح فقط للأرصدة اليدوية (manual_admin) التي لا تزال &quot;متاحة&quot; — لا يمكن إلغاء
         رصيد نشأ فعليًا من غياب حقيقي أو إلغاء معلم من هذه الواجهة. لا يوجد تاريخ انتهاء تلقائي
         مُطبَّق افتراضيًا (لا سياسة انتهاء معتمَدة لخُطى بعد) — الحقل اختياري فقط عند المنح.
       </p>
@@ -37,10 +47,10 @@ export default async function AdminMakeupCreditsPage() {
         <table className="admin-table">
           <thead><tr><th>الطالب</th><th>ولي الأمر</th><th>المصدر</th><th>السبب</th><th>الحالة</th><th>تاريخ الإصدار</th><th>انتهاء الصلاحية</th><th></th></tr></thead>
           <tbody>
-            {(credits ?? []).map((c: any) => (
+            {((credits ?? []) as MakeupCreditRow[]).map((c) => (
               <tr key={c.id}>
-                <td>{c.children?.first_name ?? "—"}</td>
-                <td>{c.children?.parents?.full_name ?? "—"}</td>
+                <td>{c.children[0]?.first_name ?? "—"}</td>
+                <td>{c.children[0]?.parents[0]?.full_name ?? "—"}</td>
                 <td>{SOURCE_LABELS[c.source_type] ?? c.source_type}</td>
                 <td>{c.reason ?? "—"}</td>
                 <td>{STATUS_LABELS[c.status] ?? c.status}</td>

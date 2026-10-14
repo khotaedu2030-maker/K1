@@ -2,6 +2,14 @@ import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
+type MessageThreadRow = {
+  id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  children: { first_name: string | null }[];
+};
+
 // عرض Metadata فقط عمدًا (لا محتوى الرسائل نفسه) — الخصوصية أولوية، لا نكشف كل محادثة خاصة
 // بمجرد فتح لوحة الإدارة. تفاصيل محادثة بعينها تحتاج مسارًا منفصلًا مُبرَّرًا تشغيليًا، لم يُبنَ بعد.
 export default async function AdminMessagesPage() {
@@ -30,9 +38,9 @@ export default async function AdminMessagesPage() {
         <table className="admin-table">
           <thead><tr><th>الطالب</th><th>الحالة</th><th>بدأت</th><th>آخر نشاط</th></tr></thead>
           <tbody>
-            {(threads ?? []).map((t: any) => (
+            {((threads ?? []) as MessageThreadRow[]).map((t) => (
               <tr key={t.id}>
-                <td>{t.children?.first_name ?? "—"}</td>
+                <td>{t.children[0]?.first_name ?? "—"}</td>
                 <td>{t.status === "open" ? "مفتوحة" : "مغلقة"}</td>
                 <td>{new Date(t.created_at).toLocaleDateString("ar-SA")}</td>
                 <td>{new Date(t.updated_at).toLocaleDateString("ar-SA")}</td>
