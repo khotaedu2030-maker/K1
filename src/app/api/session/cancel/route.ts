@@ -40,7 +40,11 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: session } = await admin.from("sessions").select("id, teacher_id, cohort_id, status, cancelled_by").eq("id", sessionId).maybeSingle();
+  const { data: session, error: sessionError } = await admin.from("sessions").select("id, teacher_id, cohort_id, status, cancelled_by").eq("id", sessionId).maybeSingle();
+  if (sessionError) {
+    console.error("[session-cancel] session lookup failed:", sessionError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من الجلسة" }, { status: 503 });
+  }
   if (!session) return NextResponse.json({ error: "جلسة غير موجودة" }, { status: 404 });
 
   if (cancelledBy === "teacher" && session.teacher_id !== teacherId) {
@@ -71,6 +75,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "تعذّر التحقق من الطلاب المستحقين للتعويض" }, { status: 500 });
   }
 
+  // Commit the scheduled -> cancelled transition before granting compensation.
+  // A concurrent report may complete this session; then no cancellation credits are due.
+  // If credit issuance later fails, retrying an already-cancelled session safely resumes it.
+  if (!alreadyCancelled) {
+    const { data: cancelledSession, error: updateError } = await admin
+      .from("sessions")
+      .update({ status: "cancelled", cancelled_by: cancelledBy })
+      .eq("id", sessionId)
+      .eq("status", "scheduled")
+      .select("id")
+      .maybeSingle();
+    if (updateError) {
+      console.error("[session-cancel] update failed:", updateError.message);
+      return NextResponse.json({ error: "تعذّر إلغاء الجلسة" }, { status: 500 });
+    }
+    if (!cancelledSession) {
+      return NextResponse.json({ error: "تغيّرت حالة الجلسة قبل الإلغاء" }, { status: 409 });
+    }
+  }
+
   let issuedCount = 0;
   for (const sub of activeSubs ?? []) {
     const result = await issueMakeupCreditIfEligible(admin, {
@@ -84,17 +108,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "تعذّر إصدار رصيد التعويض، حاول مرة أخرى" }, { status: 500 });
     }
     if (result.issued) issuedCount++;
-  }
-
-  if (!alreadyCancelled) {
-    const { error: updateError } = await admin
-      .from("sessions")
-      .update({ status: "cancelled", cancelled_by: cancelledBy })
-      .eq("id", sessionId);
-    if (updateError) {
-      console.error("[session-cancel] update failed:", updateError.message);
-      return NextResponse.json({ error: "تعذّر إلغاء الجلسة" }, { status: 500 });
-    }
   }
 
   return NextResponse.json({ ok: true, creditsIssued: issuedCount, ...(alreadyCancelled ? { alreadyCancelled: true } : {}) });
