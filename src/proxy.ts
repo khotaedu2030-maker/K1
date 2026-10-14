@@ -9,7 +9,7 @@ import { isPilotAuthEnabled, verifyPilotSessionToken, PILOT_SESSION_COOKIE } fro
 const AUTH_REQUIRED_PREFIXES = ["/parent", "/teacher", "/admin", "/student"];
 const PARENT_AREA_PREFIXES = ["/parent", "/teacher", "/admin"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request });
   const path = request.nextUrl.pathname;
 
