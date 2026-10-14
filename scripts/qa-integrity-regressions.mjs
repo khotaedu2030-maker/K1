@@ -83,4 +83,12 @@ assert.match(adminSessions, /if \(!updatedSession\)/, "session teacher override 
 const pauseReview = read("src/app/api/subscription-pause/review/route.ts");
 assert.match(pauseReview, /decision !== "approved" && decision !== "rejected"/, "pause review must validate decision before RPC");
 
+
+const adminCohorts = read("src/app/api/admin/cohorts/route.ts");
+assert.match(adminCohorts, /new Set\(daysOfWeek\)\.size !== daysOfWeek\.length/, "cohort creation must reject duplicate weekdays");
+assert.match(adminCohorts, /startTime >= endTime/, "cohort creation must reject invalid time ranges");
+assert.match(adminCohorts, /parsedUrl\.protocol !== "http:" && parsedUrl\.protocol !== "https:"/, "cohort meeting URLs must be limited to http/https");
+assert.match(adminCohorts, /teacherSessionsError/, "cohort creation must fail closed when teacher conflict lookup fails");
+assert.match(adminCohorts, /planError/, "cohort creation must fail closed when plan lookup fails");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
