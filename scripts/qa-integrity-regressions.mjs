@@ -42,4 +42,19 @@ assert.match(goals, /progress < 0 \|\| progress > 100/, "goal progress must be c
 assert.match(goals, /validDateOnly\(weekStart\)/, "goal creation must validate weekStart");
 assert.match(goals, /Object\.keys\(patch\)\.length === 0/, "empty goal updates must be rejected");
 
+
+const requireParent = read("src/lib/require-parent.ts");
+assert.match(requireParent, /getActiveStaffRole\(userId\)/, "parent API identity must reject active staff users");
+for (const path of [
+  "src/app/api/attendance/mark/route.ts",
+  "src/app/api/student-mode/enter/route.ts",
+  "src/app/api/makeup/redeem/route.ts",
+  "src/app/api/messages/thread/route.ts",
+  "src/app/api/recommendations/request/route.ts",
+  "src/app/api/subscription-pause/request/route.ts",
+]) {
+  assert.match(read(path), /resolveParentIdentityForUser\(user\.id\)/, `${path} must enforce the parent/staff boundary`);
+}
+assert.match(read("src/lib/messaging-authorization.ts"), /getActiveStaffRole\(userId\)/, "message parent authorization must reject active staff users");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");

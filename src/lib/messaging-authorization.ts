@@ -1,6 +1,7 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+import { getActiveStaffRole } from "@/lib/parent-role-boundary";
 
 // Guard مركزي وقابل لإعادة الاستخدام: يُعاد استدعاؤه في كل عملية حساسة (فتح محادثة، جلب رسائل،
 // إرسال، تحديد كمقروء) — لا يكفي أن تكون طرفًا أصليًا في المحادثة وقت إنشائها؛ العلاقة يجب أن
@@ -21,6 +22,16 @@ export async function authorizeMessageThreadAccess(userId: string, threadId: str
   if (!thread) return { ok: false, status: 404, error: "محادثة غير موجودة" };
 
   if (thread.parent_user_id === userId) {
+    // حسابات الفريق لا تُعامَل كولي أمر حتى لو وُجد صف parent قديم مرتبط بها بالخطأ.
+    try {
+      if (await getActiveStaffRole(userId)) {
+        return { ok: false, status: 403, error: "هذا الحساب مخصص لفريق خُطى وليس لحساب ولي أمر." };
+      }
+    } catch (error) {
+      console.error("[messages] staff-role lookup failed:", error);
+      return { ok: false, status: 503, error: "تعذّر التحقق من نوع الحساب" };
+    }
+
     // "ولي الأمر" هنا يجب أن يكون لا يزال ولي أمر هذا الطفل فعليًا (وليس مجرد كونه طرفًا تاريخيًا)
     const { data: parent } = await admin.from("parents").select("id").eq("user_id", userId).maybeSingle();
     const { data: child } = await admin.from("children").select("parent_id").eq("id", thread.child_id).maybeSingle();
