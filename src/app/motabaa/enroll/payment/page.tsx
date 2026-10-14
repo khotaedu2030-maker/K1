@@ -7,6 +7,7 @@ import { resolveParentContext } from "@/lib/pilot-parent";
 import { getGradeLabelArabic } from "@/lib/grade-config";
 import { formatDaysList, formatCohortDisplayName } from "@/lib/plan-display";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+import { areOnlinePaymentsEnabled } from "@/lib/payment-settings";
 
 type PaymentSubscription = {
   parent_id: string;
@@ -31,6 +32,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
     days: string | null; sessionsPerMonth: number | null; cohortTitle: string | null; time: string | null;
   } | null = null;
   let ownershipMismatch = false;
+  const paymentsEnabled = areOnlinePaymentsEnabled();
 
   if (subscriptionId) {
     // جلسة Supabase حقيقية مطلوبة قبل عرض شاشة الدفع فعليًا — لا نكتفي بالاعتماد على أن زر
@@ -83,7 +85,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
             <p>هذا الاشتراك غير متاح لحسابك.</p>
           ) : subscriptionId ? (
             <Suspense fallback={null}>
-              <PaymentClient subscriptionId={subscriptionId} amountSar={amountSar} summary={summary} />
+              <PaymentClient subscriptionId={subscriptionId} amountSar={amountSar} summary={summary} paymentsEnabled={paymentsEnabled} />
             </Suspense>
           ) : (
             <p>رابط غير صالح — ابدأ التسجيل من جديد من صفحة الخطط.</p>
