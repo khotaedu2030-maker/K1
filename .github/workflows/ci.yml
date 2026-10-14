@@ -31,3 +31,6 @@ jobs:
 
       - name: Regression QA
         run: npm run qa
+
+      - name: Release readiness QA
+        run: npm run qa:release
