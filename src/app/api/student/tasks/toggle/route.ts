@@ -13,11 +13,15 @@ export async function POST(req: Request) {
   const parsed = await readJsonBodyLimited(req, 4 * 1024);
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
-  const taskId = body?.taskId as string | undefined;
-  if (!taskId) return NextResponse.json({ error: "taskId مطلوب" }, { status: 400 });
+  const taskId = typeof body?.taskId === "string" ? body.taskId.trim() : "";
+  if (!taskId || taskId.length > 100) return NextResponse.json({ error: "taskId غير صالح" }, { status: 400 });
 
   const admin = createSupabaseAdminClient();
-  const { data: task } = await admin.from("daily_tasks").select("id, child_id, status").eq("id", taskId).maybeSingle();
+  const { data: task, error: taskError } = await admin.from("daily_tasks").select("id, child_id, status").eq("id", taskId).maybeSingle();
+  if (taskError) {
+    console.error("[student-tasks] task lookup failed:", taskError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من المهمة" }, { status: 503 });
+  }
 
   if (!task || task.child_id !== session.childId) {
     return NextResponse.json({ error: "هذه المهمة غير متاحة" }, { status: 403 });
