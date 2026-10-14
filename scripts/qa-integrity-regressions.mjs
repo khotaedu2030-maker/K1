@@ -10,7 +10,7 @@ const makeup = read("src/lib/makeup-credits.ts");
 const cancel = read("src/app/api/session/cancel/route.ts");
 const report = read("src/app/api/session-report/submit/route.ts");
 
-assert.ok(pause.includes('const match = /^(\\\\d{4})-(\\\\d{2})-(\\\\d{2})$/'), "pause dates must be strict YYYY-MM-DD");
+assert.ok(pause.includes('const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/'), "pause dates must be strict YYYY-MM-DD");
 assert.match(pause, /durationDays < settings\.pauseMinDays/, "pause minimum must be enforced");
 assert.match(pause, /durationDays > settings\.pauseMaxDays/, "pause maximum must be enforced");
 assert.match(pause, /صيغة التاريخ غير صحيحة/, "invalid dates must be rejected explicitly");
