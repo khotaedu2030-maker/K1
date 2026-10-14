@@ -154,7 +154,10 @@ export default async function P() {
       }
     : null;
 
-  const upcomingRows: SessionRow[] = upcoming.slice(1).map((s) => {
+  // إذا كانت أول جلسة قادمة ناقصها ends_at فلا يمكن عرضها كبطاقة NextSession،
+  // لكن يجب ألا تختفي من القائمة؛ نتجاوز أول جلسة فقط عندما عُرضت فعليًا كبطاقة رئيسية.
+  const remainingUpcoming = nextSession ? upcoming.slice(1) : upcoming;
+  const upcomingRows: SessionRow[] = remainingUpcoming.map((s) => {
     const cid = childByCohort.get(s.cohort_id);
     return {
       id: s.id,
