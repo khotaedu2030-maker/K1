@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { resolveParentIdentityForUser } from "@/lib/require-parent";
 import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
 // حجز جلسة تعويضية برصيد قائم. الحماية من الاستخدام المزدوج (ضغط متكرر أو طلبات متزامنة)
@@ -32,8 +33,9 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: parent } = await admin.from("parents").select("id").eq("user_id", user.id).maybeSingle();
-  if (!parent) return NextResponse.json({ error: "لا يوجد سجل ولي أمر لهذا الحساب" }, { status: 403 });
+  const parentIdentity = await resolveParentIdentityForUser(user.id);
+  if (!parentIdentity.ok) return NextResponse.json({ error: parentIdentity.error }, { status: parentIdentity.status });
+  const parent = { id: parentIdentity.parentId };
 
   const { data: credit } = await admin.from("makeup_credits").select("child_id").eq("id", creditId).maybeSingle();
   if (!credit) return NextResponse.json({ error: "رصيد غير موجود" }, { status: 404 });
