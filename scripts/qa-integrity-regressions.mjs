@@ -120,4 +120,43 @@ const messageSend = read("src/app/api/messages/send/route.ts");
 assert.match(messageSend, /threadId.length > 100/, "message send must bound thread identifiers");
 assert.match(messageSend, /threadUpdateError/, "message send must surface thread timestamp write failures to logs");
 
+
+const sessionReport = read("src/app/api/session-report/submit/route.ts");
+assert.match(sessionReport, /sessionError/, "session report must fail closed on session lookup errors");
+assert.match(sessionReport, /activeSubscriptionByChild/, "session report must reuse verified active subscription identities");
+assert.match(sessionReport, /if \(!completedSession\)/, "session report must detect completion state races");
+assert.match(sessionReport, /formatRiyadhCalendarDate/, "session report follow-up dates must use Riyadh calendar time");
+
+const teacherApplicationStatus = read("src/app/api/teacher-applications/update-status/route.ts");
+assert.match(teacherApplicationStatus, /uuidPattern\.test\(applicationId\)/, "teacher application status updates must validate identifiers");
+assert.match(teacherApplicationStatus, /if \(!updated\)/, "teacher application status updates must detect missing rows");
+
+const studentTasks = read("src/app/api/student/tasks/toggle/route.ts");
+assert.match(studentTasks, /taskError/, "student tasks must fail closed on lookup errors");
+assert.match(studentTasks, /eq\("status", task\.status\)/, "student task toggles must guard against state races");
+assert.match(studentTasks, /if \(!updated\)/, "student task toggles must detect zero-row race outcomes");
+
+const roleResolution = read("src/app/api/auth/resolve-role/route.ts");
+assert.match(roleResolution, /adminError/, "role resolution must fail closed on admin lookup errors");
+assert.match(roleResolution, /teacherError/, "role resolution must fail closed on teacher lookup errors");
+assert.match(roleResolution, /parentError/, "role resolution must fail closed on parent lookup errors");
+
+const studentAttendance = read("src/app/api/student/attendance/mark/route.ts");
+assert.match(studentAttendance, /subsError/, "student attendance must fail closed on subscription lookup errors");
+assert.match(studentAttendance, /sessionRowError/, "student attendance must fail closed on session lookup errors");
+
+const messageThread = read("src/app/api/messages/thread/route.ts");
+assert.match(messageThread, /childError/, "message thread creation must fail closed on child lookup errors");
+assert.match(messageThread, /subscriptionError/, "message thread creation must fail closed on subscription lookup errors");
+assert.match(messageThread, /cohortError/, "message thread creation must fail closed on cohort lookup errors");
+assert.match(messageThread, /teacherError/, "message thread creation must fail closed on teacher lookup errors");
+
+const assessmentSubmit = read("src/app/api/assessment/submit/route.ts");
+assert.match(assessmentSubmit, /linkError/, "assessment submission must fail closed on ownership lookup errors");
+assert.match(assessmentSubmit, /teacherNotes.length > 2000/, "assessment teacher notes must be bounded");
+
+const recommendationRequest = read("src/app/api/recommendations/request/route.ts");
+assert.match(recommendationRequest, /parentError/, "recommendation requests must fail closed on parent lookup errors");
+assert.match(recommendationRequest, /recommendationError/, "recommendation requests must fail closed on recommendation lookup errors");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
