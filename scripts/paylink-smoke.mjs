@@ -32,7 +32,7 @@ try {
     console.log("FAILURE");
     process.exit(1);
   }
-} catch (err) {
+} catch {
   console.log("FAILURE — خطأ اتصال");
   process.exit(1);
 }
