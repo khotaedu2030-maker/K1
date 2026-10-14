@@ -39,12 +39,22 @@ export async function getActiveStudentSession(): Promise<ActiveStudentSession | 
   if (session.parent_user_id !== user.id) return null; // لا نثق بجلسة تخص مستخدمًا آخر
   if (new Date(session.expires_at).getTime() < Date.now()) return null;
 
-  const { data: child } = await admin
+  const { data: child, error: childError } = await admin
     .from("children")
-    .select("first_name, grade")
+    .select("first_name, grade, parent_id")
     .eq("id", session.child_id)
     .maybeSingle();
-  if (!child) return null;
+  if (childError || !child) return null;
+
+  // A student-mode session must lose access if the child is transferred to another parent.
+  // An auth user's old browser cookie cannot preserve access to a former dependent.
+  const { data: currentParent, error: parentError } = await admin
+    .from("parents")
+    .select("id")
+    .eq("id", child.parent_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (parentError || !currentParent) return null;
 
   return { sessionId: session.id, childId: session.child_id, firstName: child.first_name, grade: child.grade };
 }
