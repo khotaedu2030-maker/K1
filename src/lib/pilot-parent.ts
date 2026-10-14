@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isPilotAuthEnabled, verifyPilotSessionToken, PILOT_SESSION_COOKIE } from "@/lib/pilot-auth";
+import { getActiveStaffRole } from "@/lib/parent-role-boundary";
 
 export type ParentContext = { parentId: string; fullName: string; isPilot: boolean };
 
@@ -17,6 +18,13 @@ export async function resolveParentContext(): Promise<ParentContext | null> {
   } = await supabase.auth.getUser();
 
   if (user) {
+    try {
+      if (await getActiveStaffRole(user.id)) return null;
+    } catch (error) {
+      console.error("[parent-context] staff-role lookup failed:", error);
+      return null;
+    }
+
     const { data: parent } = await supabase
       .from("parents")
       .select("id, full_name")
