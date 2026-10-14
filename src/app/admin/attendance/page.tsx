@@ -3,6 +3,7 @@ import { getAdminIdentity } from "@/lib/admin-identity";
 import { adminRoleHasPermission } from "@/lib/admin-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import AttendanceOverrideButton from "./AttendanceOverrideButton";
+import { addRiyadhCalendarDays, formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
 
 const STATUS_LABELS: Record<string, string> = { present: "حاضر", absent: "غائب", late: "متأخر", excused: "معذور" };
 
@@ -12,21 +13,30 @@ export default async function AdminAttendancePage() {
   const canOverride = adminRoleHasPermission(admin.role, "session.manage");
 
   const supabase = createSupabaseAdminClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const todayCalendar = getRiyadhCalendarDate(new Date());
+  const today = formatRiyadhCalendarDate(todayCalendar);
+  const weekAgo = formatRiyadhCalendarDate(addRiyadhCalendarDays(todayCalendar, -7));
 
-  const [{ data: recentAttendance }, { data: recentSessions }] = await Promise.all([
-    supabase
-      .from("attendance")
-      .select("id, session_id, child_id, status, created_at, children(first_name), sessions(session_date, cohorts(title))")
-      .gte("created_at", weekAgo)
-      .order("created_at", { ascending: false })
-      .limit(80),
-    supabase.from("sessions").select("id, session_date, cohorts(title)").lt("session_date", today).gte("session_date", weekAgo).eq("status", "completed"),
-  ]);
+  const { data: recentSessions } = await supabase
+    .from("sessions")
+    .select("id, session_date, cohorts(title)")
+    .lt("session_date", today)
+    .gte("session_date", weekAgo)
+    .eq("status", "completed")
+    .order("session_date", { ascending: false });
 
-  const recordedSessionIds = new Set((recentAttendance ?? []).map((a: any) => a.sessions?.session_date));
-  const unrecorded = (recentSessions ?? []).filter((s: any) => !recordedSessionIds.has(s.session_date));
+  const recentSessionIds = (recentSessions ?? []).map((s: { id: string }) => s.id);
+  const { data: recentAttendance } = recentSessionIds.length
+    ? await supabase
+        .from("attendance")
+        .select("id, session_id, child_id, status, created_at, children(first_name), sessions(session_date, cohorts(title))")
+        .in("session_id", recentSessionIds)
+        .order("created_at", { ascending: false })
+        .limit(200)
+    : { data: [] };
+
+  const recordedSessionIds = new Set((recentAttendance ?? []).map((a: { session_id: string }) => a.session_id));
+  const unrecorded = (recentSessions ?? []).filter((s: { id: string }) => !recordedSessionIds.has(s.id));
 
   return (
     <AdminShell adminName={admin.full_name} role={admin.role}>
