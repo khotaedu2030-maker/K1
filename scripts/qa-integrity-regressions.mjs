@@ -69,4 +69,18 @@ const requireAdmin = read("src/lib/require-admin.ts");
 assert.match(requireAdmin, /isKnownAdminRole\(adminRow\.role\)/, "unknown admin roles must fail closed");
 assert.match(requireAdmin, /status: 503/, "admin lookup failures must not masquerade as authorization denials");
 
+
+const adminMakeup = read("src/app/api/admin/makeup-credits/route.ts");
+assert.match(adminMakeup, /subscription\.child_id !== childId/, "manual makeup credit must not link a child to another child's subscription");
+assert.match(adminMakeup, /Number\.isNaN\(Date\.parse\(expiresAt\)\)/, "manual makeup expiry must be validated");
+assert.match(adminMakeup, /source_type", "manual_admin"/, "manual makeup cancellation must constrain source type in the write");
+assert.match(adminMakeup, /if \(!cancelled\)/, "manual makeup cancellation must detect zero-row race outcomes");
+
+const adminSessions = read("src/app/api/admin/sessions/route.ts");
+assert.match(adminSessions, /overlappingError/, "session teacher override must fail closed if overlap lookup fails");
+assert.match(adminSessions, /if \(!updatedSession\)/, "session teacher override must detect status races");
+
+const pauseReview = read("src/app/api/subscription-pause/review/route.ts");
+assert.match(pauseReview, /decision !== "approved" && decision !== "rejected"/, "pause review must validate decision before RPC");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");

@@ -24,13 +24,37 @@ export async function POST(req: Request) {
   const admin = createSupabaseAdminClient();
 
   if (op === "grant") {
-    const childId = body?.childId as string | undefined;
-    const subscriptionId = body?.subscriptionId as string | undefined;
-    const expiresAt = typeof body?.expiresAt === "string" && body.expiresAt ? body.expiresAt : null;
+    const childId = typeof body?.childId === "string" ? body.childId.trim() : "";
+    const subscriptionId = typeof body?.subscriptionId === "string" ? body.subscriptionId.trim() : "";
+    const rawExpiresAt = typeof body?.expiresAt === "string" ? body.expiresAt.trim() : "";
+    const expiresAt = rawExpiresAt || null;
     if (!childId) return NextResponse.json({ error: "الطفل مطلوب" }, { status: 400 });
+    if (reason.length > 1000) return NextResponse.json({ error: "السبب طويل جدًا" }, { status: 400 });
+    if (expiresAt && Number.isNaN(Date.parse(expiresAt))) {
+      return NextResponse.json({ error: "تاريخ انتهاء الرصيد غير صالح" }, { status: 400 });
+    }
 
-    const { data: child } = await admin.from("children").select("id").eq("id", childId).maybeSingle();
+    const { data: child, error: childError } = await admin.from("children").select("id").eq("id", childId).maybeSingle();
+    if (childError) {
+      console.error("[admin-makeup-credits] child lookup failed:", childError.message);
+      return NextResponse.json({ error: "تعذّر التحقق من الطفل" }, { status: 500 });
+    }
     if (!child) return NextResponse.json({ error: "طفل غير موجود" }, { status: 400 });
+
+    if (subscriptionId) {
+      const { data: subscription, error: subscriptionError } = await admin
+        .from("subscriptions")
+        .select("id, child_id")
+        .eq("id", subscriptionId)
+        .maybeSingle();
+      if (subscriptionError) {
+        console.error("[admin-makeup-credits] subscription lookup failed:", subscriptionError.message);
+        return NextResponse.json({ error: "تعذّر التحقق من الاشتراك" }, { status: 500 });
+      }
+      if (!subscription || subscription.child_id !== childId) {
+        return NextResponse.json({ error: "الاشتراك المحدد لا يخص هذا الطفل" }, { status: 400 });
+      }
+    }
 
     const { data: created, error } = await admin
       .from("makeup_credits")
@@ -66,8 +90,9 @@ export async function POST(req: Request) {
   }
 
   if (op === "cancel") {
-    const creditId = body?.creditId as string | undefined;
+    const creditId = typeof body?.creditId === "string" ? body.creditId.trim() : "";
     if (!creditId) return NextResponse.json({ error: "معرّف الرصيد مطلوب" }, { status: 400 });
+    if (reason.length > 1000) return NextResponse.json({ error: "السبب طويل جدًا" }, { status: 400 });
 
     // إلغاء آمن فقط: available + manual_admin تحديدًا — لا نلغي رصيدًا نشأ فعليًا من غياب حقيقي
     // أو إلغاء معلم بضغطة واحدة من هذه الواجهة (قد يُفقِد الطالب حقًا مكتسَبًا فعليًا).
@@ -81,10 +106,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "لا يمكن إلغاء إلا رصيدًا يدويًا لا يزال متاحًا" }, { status: 409 });
     }
 
-    const { error } = await admin.from("makeup_credits").update({ status: "cancelled" }).eq("id", creditId).eq("status", "available");
+    const { data: cancelled, error } = await admin
+      .from("makeup_credits")
+      .update({ status: "cancelled" })
+      .eq("id", creditId)
+      .eq("status", "available")
+      .eq("source_type", "manual_admin")
+      .select("id")
+      .maybeSingle();
     if (error) {
       console.error("[admin-makeup-credits] فشل إلغاء رصيد:", error.message);
       return NextResponse.json({ error: "تعذّر إلغاء الرصيد" }, { status: 500 });
+    }
+    if (!cancelled) {
+      return NextResponse.json({ error: "تغيّرت حالة الرصيد قبل تنفيذ الإلغاء" }, { status: 409 });
     }
 
     const { error: auditError } = await admin.from("admin_actions").insert({
