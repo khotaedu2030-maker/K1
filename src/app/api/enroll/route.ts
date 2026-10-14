@@ -248,9 +248,8 @@ export async function POST(req: Request) {
     }
   }
 
-  // إعادة المحاولة لنفس التسجيل (نفس ولي الأمر + نفس الطفل + نفس المجموعة) لا تُنشئ طفلًا ولا
-  // اشتراكًا ولا مقعدًا جديدًا: نعيد الاشتراك المعلّق نفسه. المطابقة محصورة بأطفال ولي الأمر
-  // نفسه فقط. لا نعيد استخدام اشتراك معلّق تجاوز مهلة 24 ساعة (يُنهيه مسار الدفع كمنتهي).
+  // إعادة المحاولة لنفس التسجيل لا تُنشئ اشتراكًا ولا مقعدًا جديدًا. المطابقة محصورة بأطفال ولي الأمر
+  // نفسه (الاسم المطبَّع + الصف). عند وجود أكثر من طفل مطابق لا نخمّن ونرفض بـ 409.
   const normalizedChildName = String(childName).trim().toLowerCase();
   const { data: siblings, error: siblingsError } = await supabase
     .from("children")
@@ -261,14 +260,19 @@ export async function POST(req: Request) {
     console.error(`[enroll] خطأ استعلام أثناء البحث عن تسجيل مكرر لولي الأمر ${parent.id}:`, siblingsError.message);
     return NextResponse.json({ error: "خطأ مؤقت، حاول مرة أخرى" }, { status: 503 });
   }
-  const sameChildIds = (siblings ?? [])
-    .filter((c) => String(c.first_name).trim().toLowerCase() === normalizedChildName)
-    .map((c) => c.id);
-  if (sameChildIds.length > 0) {
+  const matches = (siblings ?? []).filter((c) => String(c.first_name).trim().toLowerCase() === normalizedChildName);
+  if (matches.length > 1) {
+    return NextResponse.json(
+      { error: "يوجد أكثر من طالب بنفس الاسم والصف في حسابك، تعذّر تحديد الطالب المقصود. تواصل مع الدعم." },
+      { status: 409 }
+    );
+  }
+  const existingChildId: string | null = matches[0]?.id ?? null;
+  if (existingChildId) {
     const { data: liveSubs, error: liveSubsError } = await supabase
       .from("subscriptions")
       .select("id, status, created_at")
-      .in("child_id", sameChildIds)
+      .eq("child_id", existingChildId)
       .eq("cohort_id", cohortId)
       .in("status", ["pending_payment", "active"])
       .order("created_at", { ascending: true });
@@ -279,30 +283,35 @@ export async function POST(req: Request) {
     if ((liveSubs ?? []).some((s) => s.status === "active")) {
       return NextResponse.json({ error: "هذا الطالب مسجَّل بالفعل في هذه المجموعة" }, { status: 409 });
     }
-    const reusable = (liveSubs ?? []).find(
+    // اشتراك معلّق أحدث من 24 ساعة يُعاد كما هو؛ المعلّق الأقدم يُعدّ منتهيًا ويُنشأ اشتراك جديد لنفس الطفل.
+    const fresh = (liveSubs ?? []).find(
       (s) => s.status === "pending_payment" && Date.now() - new Date(s.created_at).getTime() <= 24 * 60 * 60 * 1000
     );
-    if (reusable) return NextResponse.json({ subscriptionId: reusable.id });
+    if (fresh) return NextResponse.json({ subscriptionId: fresh.id });
   }
 
   if (noSeatsAvailable) {
     return NextResponse.json({ error: "اكتمل عدد المقاعد في هذه المجموعة" }, { status: 409 });
   }
 
-  const { data: child, error: childError } = await supabase
-    .from("children")
-    .insert({ parent_id: parent.id, first_name: childName, grade: gradeNumber })
-    .select("id")
-    .single();
-  if (childError) {
-    console.error(`[enroll] فشل إنشاء child لولي الأمر ${parent.id}:`, childError.message);
-    return NextResponse.json({ error: "تعذّر حفظ بيانات الطفل" }, { status: 500 });
+  let childId = existingChildId;
+  if (!childId) {
+    const { data: child, error: childError } = await supabase
+      .from("children")
+      .insert({ parent_id: parent.id, first_name: childName, grade: gradeNumber })
+      .select("id")
+      .single();
+    if (childError) {
+      console.error(`[enroll] فشل إنشاء child لولي الأمر ${parent.id}:`, childError.message);
+      return NextResponse.json({ error: "تعذّر حفظ بيانات الطفل" }, { status: 500 });
+    }
+    childId = child.id;
   }
 
   // الخطوة الذرّية الفعلية: قفل المجموعة + إعادة فحص المقاعد + إدراج الاشتراك كوحدة واحدة —
   // هذا ما يمنع تجاوز السعة فعليًا عند التسجيل المتزامن، وليس الفحص أعلاه.
   const { data: subscriptionId, error: subError } = await supabase.rpc("enroll_subscription_atomic", {
-    p_child_id: child.id,
+    p_child_id: childId,
     p_parent_id: parent.id,
     p_plan_id: cohort.plan_id,
     p_cohort_id: cohortId,
@@ -313,7 +322,7 @@ export async function POST(req: Request) {
     // (الاشتراك فشل قبل إنشائه) — حذفه آمن هنا فقط، ولا نلمس صف ولي الأمر (قد يكون موجودًا
     // مسبقًا ومُستخدَمًا لأطفال آخرين). إن فشل الحذف نفسه، لا نُفشل الطلب بسببه — نوثّق الحالة
     // في السجلات فقط؛ هذا Best-effort لا معاملة إضافية جديدة (لا إعادة معمارية هنا).
-    await supabase.from("children").delete().eq("id", child.id);
+    if (!existingChildId) await supabase.from("children").delete().eq("id", childId);
 
     const map: Record<string, string> = {
       cohort_not_found: "مجموعة غير موجودة",

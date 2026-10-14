@@ -337,6 +337,38 @@ await check("enroll: a stale pending subscription (>24h) is not reused", async (
   assert.equal(res.status, 200);
   assert.notEqual(res.body.subscriptionId, "s-stale");
 });
+await check("enroll: two same-name/same-grade children under one parent -> 409, no guessing, nothing created", async () => {
+  const log = [];
+  const db = memDb(enrollSeed(5), log);
+  db.t.children.push({ id: "k1", parent_id: "p1", first_name: "Sara", grade: 1 }, { id: "k2", parent_id: "p1", first_name: "sara ", grade: 1 });
+  db.t.subscriptions.push({ id: "s-k1", child_id: "k1", parent_id: "p1", cohort_id: "c1", status: "pending_payment", created_at: hoursAgo(1) });
+  const res = await loadEnrollMem(db, "u1", "p1@example.test")(enrollBody());
+  assert.equal(res.status, 409);
+  assert.equal(db.t.children.length, 2);
+  assert.equal(db.t.subscriptions.length, 1);
+  assert.ok(!log.includes("rpc:enroll_subscription_atomic"));
+});
+await check("enroll: stale pending -> new subscription reuses the existing child (no duplicate child row)", async () => {
+  const db = memDb(enrollSeed(5), []);
+  db.t.children.push({ id: "k1", parent_id: "p1", first_name: "Sara", grade: 1 });
+  db.t.subscriptions.push({ id: "s-stale", child_id: "k1", parent_id: "p1", cohort_id: "c1", status: "pending_payment", created_at: hoursAgo(30) });
+  const res = await loadEnrollMem(db, "u1", "p1@example.test")(enrollBody());
+  assert.equal(res.status, 200);
+  assert.notEqual(res.body.subscriptionId, "s-stale");
+  assert.equal(db.t.children.length, 1);
+  assert.equal(db.t.subscriptions.find((s) => s.id === res.body.subscriptionId).child_id, "k1");
+});
+await check("enroll: failed atomic RPC for a reused child never deletes the existing child", async () => {
+  const db = memDb(enrollSeed(1), []);
+  db.t.children.push({ id: "k1", parent_id: "p1", first_name: "Sara", grade: 1 });
+  db.t.subscriptions.push({ id: "s-stale", child_id: "k1", parent_id: "p1", cohort_id: "c1", status: "pending_payment", created_at: hoursAgo(30) });
+  db.t.cohorts[0].capacity = 2;
+  const realRpc = db.client.rpc;
+  db.client.rpc = async (name, args) => (name === "enroll_subscription_atomic" ? { data: null, error: { message: "cohort_full" } } : realRpc(name, args));
+  const res = await loadEnrollMem(db, "u1", "p1@example.test")(enrollBody());
+  assert.equal(res.status, 409);
+  assert.equal(db.t.children.length, 1);
+});
 await check("enroll: a full cohort is still rejected for a new enrollment", async () => {
   const db = memDb(enrollSeed(1), []);
   db.t.subscriptions.push({ id: "s-x", child_id: "kx", parent_id: "p2", cohort_id: "c1", status: "active", created_at: hoursAgo(5) });
