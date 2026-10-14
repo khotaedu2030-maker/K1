@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { resolveParentIdentityForUser } from "@/lib/require-parent";
 import { STUDENT_SESSION_COOKIE, STUDENT_SESSION_TTL_HOURS } from "@/lib/student-mode-constants";
 import { checkRateLimit, declaredBodyExceeds, rateLimitRejectionResponse, readJsonBodyLimited } from "@/lib/api-rate-limit";
 
@@ -28,8 +29,9 @@ export async function POST(req: Request) {
   if (userRejection) return userRejection;
 
   const admin = createSupabaseAdminClient();
-  const { data: parent } = await admin.from("parents").select("id").eq("user_id", user.id).maybeSingle();
-  if (!parent) return NextResponse.json({ error: "لا يوجد سجل ولي أمر لهذا الحساب" }, { status: 403 });
+  const parentIdentity = await resolveParentIdentityForUser(user.id);
+  if (!parentIdentity.ok) return NextResponse.json({ error: parentIdentity.error }, { status: parentIdentity.status });
+  const parent = { id: parentIdentity.parentId };
 
   const { data: child } = await admin.from("children").select("id, parent_id").eq("id", childId).maybeSingle();
   if (!child || child.parent_id !== parent.id) {
