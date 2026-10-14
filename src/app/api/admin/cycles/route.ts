@@ -133,9 +133,14 @@ export async function PATCH(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
   const cycleId = typeof body?.cycleId === "string" ? body.cycleId.trim() : "";
-  if (!cycleId) return NextResponse.json({ error: "معرّف الدورة مطلوب" }, { status: 400 });
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(cycleId)) return NextResponse.json({ error: "معرّف الدورة غير صالح" }, { status: 400 });
   const admin = createSupabaseAdminClient();
-  const { data: current } = await admin.from("cycles").select("*").eq("id", cycleId).maybeSingle();
+  const { data: current, error: currentError } = await admin.from("cycles").select("*").eq("id", cycleId).maybeSingle();
+  if (currentError) {
+    console.error("[admin-cycles] lookup failed:", currentError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من الدورة" }, { status: 500 });
+  }
   if (!current) return NextResponse.json({ error: "الدورة غير موجودة" }, { status: 404 });
   if (current.status === "completed" || current.status === "archived") return NextResponse.json({ error: "لا يمكن تعديل دورة مكتملة أو مؤرشفة" }, { status: 409 });
 
@@ -160,10 +165,19 @@ export async function PATCH(req: Request) {
   const validation = validateCycleFields({ name: update.name, startDate: update.start_date, endDate: update.end_date, registrationStart: update.registration_start, registrationEnd: update.registration_end });
   if (validation) return NextResponse.json({ error: validation }, { status: 400 });
 
-  const { error } = await admin.from("cycles").update(update).eq("id", cycleId).not("status", "in", "(completed,archived)");
+  const { data: updated, error } = await admin
+    .from("cycles")
+    .update(update)
+    .eq("id", cycleId)
+    .not("status", "in", "(completed,archived)")
+    .select("id")
+    .maybeSingle();
   if (error) {
     console.error("[admin-cycles] update failed:", error.message);
     return NextResponse.json({ error: "تعذّر حفظ الدورة" }, { status: 500 });
+  }
+  if (!updated) {
+    return NextResponse.json({ error: "تغيّرت حالة الدورة قبل حفظ التعديل" }, { status: 409 });
   }
   await audit(admin, check.userId, "cycle_update", cycleId, update);
   return NextResponse.json({ ok: true });
