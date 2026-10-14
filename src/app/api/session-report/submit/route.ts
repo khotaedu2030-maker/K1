@@ -223,7 +223,11 @@ export async function POST(req: Request) {
     reason: !e.attended ? e.absenceReason ?? "unexcused" : null,
     marked_by: teacherCheck.teacherId,
   }));
-  await admin.from("attendance").upsert(attendanceRows, { onConflict: "session_id,child_id" });
+  const { error: attendanceError } = await admin.from("attendance").upsert(attendanceRows, { onConflict: "session_id,child_id" });
+  if (attendanceError) {
+    console.error("[session-report] attendance save failed:", attendanceError.message);
+    return NextResponse.json({ error: "تعذّر حفظ الحضور" }, { status: 500 });
+  }
 
   for (const e of entries) {
     if (e.attended) continue;

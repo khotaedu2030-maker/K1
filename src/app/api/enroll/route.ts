@@ -112,7 +112,7 @@ export async function POST(req: Request) {
   if (!plan || !plan.active || plan.product !== cohort.product) {
     return NextResponse.json({ error: "هذه الباقة غير متاحة حاليًا" }, { status: 409 });
   }
-  if (plan.price_sar === null) {
+  if (!Number.isFinite(Number(plan.price_sar)) || Number(plan.price_sar) <= 0) {
     return NextResponse.json({ error: "لم يُعتمَد سعر لهذه الباقة بعد" }, { status: 409 });
   }
   // P0: دفاع إضافي عن قيد قاعدة البيانات (enforce_cohort_days_match_plan) — رسالة واضحة بدل
