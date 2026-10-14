@@ -27,10 +27,12 @@ export async function POST(req: Request) {
   if (sessionRejection) return sessionRejection;
 
   const admin = createSupabaseAdminClient();
-  const { data: child } = await admin.from("children").select("parent_id").eq("id", session.childId).maybeSingle();
-  const { data: parent } = child
+  const { data: child, error: childError } = await admin.from("children").select("parent_id").eq("id", session.childId).maybeSingle();
+  if (childError) return NextResponse.json({ error: "تعذّر التحقق من حساب الطالب" }, { status: 503 });
+  const { data: parent, error: parentError } = child
     ? await admin.from("parents").select("email").eq("id", child.parent_id).maybeSingle()
-    : { data: null };
+    : { data: null, error: null };
+  if (parentError) return NextResponse.json({ error: "تعذّر التحقق من حساب ولي الأمر" }, { status: 503 });
 
   if (!parent?.email) return NextResponse.json({ error: "لا يوجد بريد إلكتروني مسجَّل لهذا الحساب" }, { status: 500 });
 

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { STUDENT_SESSION_COOKIE } from "@/lib/student-mode-constants";
+import { getActiveStaffRole } from "@/lib/parent-role-boundary";
 
 export { STUDENT_SESSION_COOKIE };
 export { STUDENT_SESSION_TTL_HOURS } from "@/lib/student-mode-constants";
@@ -28,6 +29,13 @@ export async function getActiveStudentSession(): Promise<ActiveStudentSession | 
   } = await authed.auth.getUser();
   if (!user) return null;
 
+  try {
+    if (await getActiveStaffRole(user.id)) return null;
+  } catch (error) {
+    console.error("[student-mode] staff-role lookup failed:", error);
+    return null;
+  }
+
   const admin = createSupabaseAdminClient();
   const { data: session } = await admin
     .from("student_mode_sessions")
@@ -39,12 +47,22 @@ export async function getActiveStudentSession(): Promise<ActiveStudentSession | 
   if (session.parent_user_id !== user.id) return null; // لا نثق بجلسة تخص مستخدمًا آخر
   if (new Date(session.expires_at).getTime() < Date.now()) return null;
 
-  const { data: child } = await admin
+  const { data: child, error: childError } = await admin
     .from("children")
-    .select("first_name, grade")
+    .select("first_name, grade, parent_id")
     .eq("id", session.child_id)
     .maybeSingle();
-  if (!child) return null;
+  if (childError || !child) return null;
+
+  // A student-mode session must lose access if the child is transferred to another parent.
+  // An auth user's old browser cookie cannot preserve access to a former dependent.
+  const { data: currentParent, error: parentError } = await admin
+    .from("parents")
+    .select("id")
+    .eq("id", child.parent_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (parentError || !currentParent) return null;
 
   return { sessionId: session.id, childId: session.child_id, firstName: child.first_name, grade: child.grade };
 }

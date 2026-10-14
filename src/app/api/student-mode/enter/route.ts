@@ -33,7 +33,11 @@ export async function POST(req: Request) {
   if (!parentIdentity.ok) return NextResponse.json({ error: parentIdentity.error }, { status: parentIdentity.status });
   const parent = { id: parentIdentity.parentId };
 
-  const { data: child } = await admin.from("children").select("id, parent_id").eq("id", childId).maybeSingle();
+  const { data: child, error: childError } = await admin.from("children").select("id, parent_id").eq("id", childId).maybeSingle();
+  if (childError) {
+    console.error("[student-mode] enter child lookup failed:", childError.message);
+    return NextResponse.json({ error: "تعذّر التحقق من الطفل" }, { status: 503 });
+  }
   if (!child || child.parent_id !== parent.id) {
     return NextResponse.json({ error: "هذا الطفل غير تابع لحسابك" }, { status: 403 });
   }

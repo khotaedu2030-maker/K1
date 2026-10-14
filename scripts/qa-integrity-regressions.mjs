@@ -159,4 +159,32 @@ const recommendationRequest = read("src/app/api/recommendations/request/route.ts
 assert.match(recommendationRequest, /parentError/, "recommendation requests must fail closed on parent lookup errors");
 assert.match(recommendationRequest, /recommendationError/, "recommendation requests must fail closed on recommendation lookup errors");
 
+
+const studentModeGuard = read("src/lib/student-mode.ts");
+assert.match(studentModeGuard, /getActiveStaffRole\(user\.id\)/, "student mode must reject a parent session that becomes a staff identity");
+assert.match(studentModeGuard, /select\("first_name, grade, parent_id"\)/, "student mode must check current child ownership");
+assert.match(studentModeGuard, /eq\("user_id", user\.id\)/, "student mode must invalidate old cookies after a child ownership transfer");
+
+const studentExitOtpVerify = read("src/app/api/student-mode/exit/verify/route.ts");
+assert.match(studentExitOtpVerify, /deactivateError/, "student exit must check persistence errors after OTP");
+assert.match(studentExitOtpVerify, /if \(!deactivated\)/, "student exit must not report success without deactivating the session");
+assert.match(studentExitOtpVerify, /eq\("active", true\)/, "student exit deactivation must be conditional");
+
+const studentExitOtpRequest = read("src/app/api/student-mode/exit/request-otp/route.ts");
+assert.match(studentExitOtpRequest, /parentError/, "student exit OTP requests must fail closed on parent lookup errors");
+
+const studentModeEnter = read("src/app/api/student-mode/enter/route.ts");
+assert.match(studentModeEnter, /childError/, "student mode entry must fail closed when ownership lookup fails");
+
+const makeupRedeem = read("src/app/api/makeup/redeem/route.ts");
+assert.match(makeupRedeem, /creditError/, "makeup redemption must fail closed when credit lookup fails");
+assert.match(makeupRedeem, /childError/, "makeup redemption must fail closed when child ownership lookup fails");
+
+const cancellation = read("src/app/api/session/cancel/route.ts");
+assert.match(cancellation, /sessionError/, "cancellation must fail closed on session lookup errors");
+assert.match(cancellation, /if \(!cancelledSession\)/, "cancellation must detect scheduled status races");
+const cancelWriteAt = cancellation.indexOf('.update({ status: "cancelled", cancelled_by: cancelledBy })');
+const creditIssueAt = cancellation.indexOf('for (const sub of activeSubs ?? [])');
+assert.ok(cancelWriteAt !== -1 && creditIssueAt !== -1 && cancelWriteAt < creditIssueAt, "cancellation must commit before issuing compensation");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");

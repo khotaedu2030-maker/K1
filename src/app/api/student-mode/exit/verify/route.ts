@@ -19,13 +19,15 @@ export async function POST(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: "الطلب طويل جدًا" }, { status: 413 });
   const body = parsed.body;
   const code = typeof body?.code === "string" ? body.code.trim() : "";
-  if (!code || code.length > 32) return NextResponse.json({ error: "الرمز مطلوب أو غير صالح" }, { status: 400 });
+  if (!/^\d{6,8}$/.test(code)) return NextResponse.json({ error: "الرمز مطلوب أو غير صالح" }, { status: 400 });
 
   const admin = createSupabaseAdminClient();
-  const { data: child } = await admin.from("children").select("parent_id").eq("id", session.childId).maybeSingle();
-  const { data: parent } = child
+  const { data: child, error: childError } = await admin.from("children").select("parent_id").eq("id", session.childId).maybeSingle();
+  if (childError) return NextResponse.json({ error: "تعذّر التحقق من حساب الطالب" }, { status: 503 });
+  const { data: parent, error: parentError } = child
     ? await admin.from("parents").select("email").eq("id", child.parent_id).maybeSingle()
-    : { data: null };
+    : { data: null, error: null };
+  if (parentError) return NextResponse.json({ error: "تعذّر التحقق من حساب ولي الأمر" }, { status: 503 });
 
   if (!parent?.email) return NextResponse.json({ error: "لا يوجد بريد إلكتروني مسجَّل لهذا الحساب" }, { status: 500 });
 
@@ -50,9 +52,28 @@ export async function POST(req: Request) {
   if (emailRejection) return emailRejection;
 
   const { error } = await admin.auth.verifyOtp({ email: parent.email, token: code, type: "email" });
-  if (error) return NextResponse.json({ error: "رمز غير صحيح" }, { status: 401 });
+  if (error) {
+    if (error.status !== 400 && error.status !== 401) {
+      console.error("[student-mode] exit OTP verification failed:", error.message);
+      return NextResponse.json({ error: "تعذّر التحقق من الرمز الآن" }, { status: 503 });
+    }
+    return NextResponse.json({ error: "رمز غير صحيح" }, { status: 401 });
+  }
 
-  await admin.from("student_mode_sessions").update({ active: false }).eq("id", session.sessionId);
+  const { data: deactivated, error: deactivateError } = await admin
+    .from("student_mode_sessions")
+    .update({ active: false })
+    .eq("id", session.sessionId)
+    .eq("active", true)
+    .select("id")
+    .maybeSingle();
+  if (deactivateError) {
+    console.error("[student-mode] exit deactivation failed:", deactivateError.message);
+    return NextResponse.json({ error: "تعذّر إنهاء جلسة الطالب" }, { status: 503 });
+  }
+  if (!deactivated) {
+    return NextResponse.json({ error: "جلسة الطالب تغيّرت بالفعل" }, { status: 409 });
+  }
 
   const res = NextResponse.json({ ok: true });
   res.cookies.set(STUDENT_SESSION_COOKIE, "", { path: "/", maxAge: 0 });
