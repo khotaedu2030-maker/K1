@@ -6,6 +6,20 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { resolveParentContext } from "@/lib/pilot-parent";
 import { getGradeLabelArabic } from "@/lib/grade-config";
 import { formatDaysList, formatCohortDisplayName } from "@/lib/plan-display";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+
+type PaymentSubscription = {
+  parent_id: string;
+  children: SupabaseRelation<{ grade: number | null }>;
+  cohorts: SupabaseRelation<{
+    title: string;
+    product: string;
+    days_of_week: number[] | null;
+    start_time: string;
+    end_time: string;
+  }>;
+  plans: SupabaseRelation<{ name: string | null; price_sar: number | null; sessions_per_month: number | null }>;
+};
 
 export default async function P({ searchParams }: { searchParams: Promise<{ sub?: string }> }) {
   const params = await searchParams;
@@ -35,20 +49,23 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
         .eq("id", subscriptionId)
         .maybeSingle();
 
-      const sub = subscription as any;
+      const sub = subscription as PaymentSubscription | null;
       if (sub && sub.parent_id !== context!.parentId) {
         // لا يُسمَح بعرض/دفع اشتراك يعود لولي أمر آخر — لا نكشف أي تفاصيل عنه.
         ownershipMismatch = true;
       } else if (sub) {
-        amountSar = sub?.plans?.price_sar ?? null;
+        const child = supabaseRelationOne(sub.children);
+        const cohort = supabaseRelationOne(sub.cohorts);
+        const plan = supabaseRelationOne(sub.plans);
+        amountSar = plan?.price_sar ?? null;
         summary = {
-          program: sub.cohorts?.product === "focus_room" ? "جلسات التركيز" : "خُطى متابعة",
-          grade: sub.children?.grade ? getGradeLabelArabic(sub.children.grade) : null,
-          plan: sub.plans?.name ?? null,
-          days: sub.cohorts?.days_of_week ? formatDaysList(sub.cohorts.days_of_week as number[], "، ") : null,
-          sessionsPerMonth: sub.plans?.sessions_per_month ?? null,
-          cohortTitle: sub.cohorts?.title ? formatCohortDisplayName(sub.cohorts.title) : null,
-          time: sub.cohorts ? `${String(sub.cohorts.start_time).slice(0, 5)} – ${String(sub.cohorts.end_time).slice(0, 5)}` : null,
+          program: cohort?.product === "focus_room" ? "جلسات التركيز" : "خُطى متابعة",
+          grade: child?.grade ? getGradeLabelArabic(child.grade) : null,
+          plan: plan?.name ?? null,
+          days: cohort?.days_of_week ? formatDaysList(cohort.days_of_week, "، ") : null,
+          sessionsPerMonth: plan?.sessions_per_month ?? null,
+          cohortTitle: cohort?.title ? formatCohortDisplayName(cohort.title) : null,
+          time: cohort ? `${String(cohort.start_time).slice(0, 5)} – ${String(cohort.end_time).slice(0, 5)}` : null,
         };
       }
     } catch {

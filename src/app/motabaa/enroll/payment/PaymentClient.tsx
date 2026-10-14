@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatSessionCount } from "@/lib/plan-display";
@@ -21,9 +21,25 @@ export default function PaymentClient({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // الـcallback يثبت الدفع على الخادم قبل إعادته لهذه الصفحة؛ query يعكس النتيجة ولا يتحقق منها.
+  const callbackStatus = searchParams.get("paid") === "1"
+    ? "paid"
+    : searchParams.get("failed") === "1"
+      ? "failed"
+      : searchParams.get("cancelled") === "1"
+        ? "cancelled"
+        : null;
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [completed, setCompleted] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [dismissedCallbackStatus, setDismissedCallbackStatus] = useState<string | null>(null);
+  const done = completed || callbackStatus === "paid";
+  const callbackError = callbackStatus === "failed"
+    ? "تعذّر تأكيد الدفع. حاول مرة أخرى، أو تواصل معنا إذا استمرت المشكلة."
+    : callbackStatus === "cancelled"
+      ? "تم إلغاء عملية الدفع."
+      : null;
+  const error = localError ?? (callbackStatus !== dismissedCallbackStatus ? callbackError : null);
   const [redirecting, setRedirecting] = useState(false);
   // إقرارات ما قبل الدفع — غير محدَّدة افتراضيًا، يجب تفعيل الاثنتين قبل تمكين أي زر دفع.
   // ⚠️ لا تُخزَّن هذه الموافقة في قاعدة البيانات حاليًا (يتطلب تعديل schema، خارج نطاق هذه
@@ -32,17 +48,10 @@ export default function PaymentClient({
   const [agreedGuardian, setAgreedGuardian] = useState(false);
   const canConfirm = agreedPolicies && agreedGuardian;
 
-  // عودة من Paylink عبر /api/payments/paylink/callback — لا نثق بهذه الحالة كدليل دفع بحد
-  // ذاتها (التحقق الفعلي تم Server-side قبل إعادة التوجيه)، نستخدمها فقط لعرض الحالة المناسبة.
-  useEffect(() => {
-    if (searchParams.get("paid") === "1") setDone(true);
-    else if (searchParams.get("failed") === "1") setError("تعذّر تأكيد الدفع. حاول مرة أخرى، أو تواصل معنا إذا استمرت المشكلة.");
-    else if (searchParams.get("cancelled") === "1") setError("تم إلغاء عملية الدفع.");
-  }, [searchParams]);
-
   async function payWithPaylink() {
     setLoading(true);
-    setError(null);
+    setLocalError(null);
+    setDismissedCallbackStatus(callbackStatus);
     setRedirecting(false);
     const res = await fetch("/api/payments/paylink/create", {
       method: "POST",
@@ -52,19 +61,19 @@ export default function PaymentClient({
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setLoading(false);
-      setError(data.error ?? "تعذّر بدء عملية الدفع.");
+      setLocalError(data.error ?? "تعذّر بدء عملية الدفع.");
       return;
     }
     if (data.alreadyPaid) {
       // اكتُشف أثناء منع تكرار الفواتير أن دفعة سابقة لهذا الاشتراك مكتملة فعليًا — التفعيل
       // تم من جهة الخادم بالفعل، لا حاجة لتحويل المستخدم إلى Paylink مرة أخرى.
       setLoading(false);
-      setDone(true);
+      setCompleted(true);
       return;
     }
     if (!data.paymentUrl) {
       setLoading(false);
-      setError("تعذّر بدء عملية الدفع.");
+      setLocalError("تعذّر بدء عملية الدفع.");
       return;
     }
     setRedirecting(true);
@@ -73,7 +82,8 @@ export default function PaymentClient({
 
   async function confirm() {
     setLoading(true);
-    setError(null);
+    setLocalError(null);
+    setDismissedCallbackStatus(callbackStatus);
     const res = await fetch("/api/payment/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -82,10 +92,10 @@ export default function PaymentClient({
     setLoading(false);
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "تعذّر تأكيد الدفع.");
+      setLocalError(d.error ?? "تعذّر تأكيد الدفع.");
       return;
     }
-    setDone(true);
+    setCompleted(true);
   }
 
   if (done) {

@@ -4,6 +4,16 @@ import EnrollForm from "./EnrollForm";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getGradeLabelArabic, parseAndValidateGrade } from "@/lib/grade-config";
 import { formatDaysList, formatCohortDisplayName } from "@/lib/plan-display";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+
+type EnrollmentCohort = {
+  title: string;
+  product: string;
+  days_of_week: number[] | null;
+  start_time: string;
+  end_time: string;
+  plans: SupabaseRelation<{ name: string | null; price_sar: number | null; sessions_per_month: number | null }>;
+};
 
 async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?: string; cohort?: string }> }) {
   const params = await searchParams;
@@ -36,10 +46,12 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
         .single();
 
       if (cohort) {
-        const days = formatDaysList(cohort.days_of_week as number[], "، ");
-        const planName = (cohort as any).plans?.name ?? null;
-        const priceSar = (cohort as any).plans?.price_sar as number | null;
-        const sessionsPerMonth = (cohort as any).plans?.sessions_per_month as number | null;
+        const enrollmentCohort = cohort as EnrollmentCohort;
+        const plan = supabaseRelationOne(enrollmentCohort.plans);
+        const days = enrollmentCohort.days_of_week ? formatDaysList(enrollmentCohort.days_of_week, "، ") : null;
+        const planName = plan?.name ?? null;
+        const priceSar = plan?.price_sar ?? null;
+        const sessionsPerMonth = plan?.sessions_per_month ?? null;
         details.program = cohort.product === "focus_room" ? "جلسات التركيز" : "خُطى متابعة";
         details.plan = planName;
         details.days = days;

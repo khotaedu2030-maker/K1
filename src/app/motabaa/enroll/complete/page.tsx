@@ -25,7 +25,7 @@ export default function CompleteEnrollmentPage() {
 
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      setStatus("missing");
+      Promise.resolve().then(() => setStatus("missing"));
       return;
     }
 
@@ -33,7 +33,7 @@ export default function CompleteEnrollmentPage() {
     try {
       payload = JSON.parse(raw);
     } catch {
-      setStatus("missing");
+      Promise.resolve().then(() => setStatus("missing"));
       return;
     }
 
