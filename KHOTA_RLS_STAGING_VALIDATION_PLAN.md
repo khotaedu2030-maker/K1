@@ -45,3 +45,39 @@ Only the ten policies referenced in `20261015_revoke_inactive_teacher_reads.sql`
 
 ## Rollback design
 Create an explicit rollback migration from the **original policy conditions** captured before changing staging. Never automatically roll back by deleting the RLS helper alone: the ten policies reference it. Do not run DDL outside of the reviewed deployment process.
+
+
+## Supabase staging validation — 2026-10-15
+
+**Created a separate Supabase Free-plan project** in organization Khota K1, region ap-southeast-1, project ref `iteskfrpeeclzshauxog`. The project creation quote was **$0/month** at creation. Production remains `jylenzphqkmucwxqlzmq` and was **not modified**.
+
+The new project was initially empty. Two migrations were applied **to this staging project only**:
+1. `staging_rls_synthetic_fixture`: 12 synthetic public tables with the 10 reviewed legacy teacher SELECT policies, relevant parent policies, and fake identities/rows. Uses Supabase-managed auth schema and roles; no data from production was copied.
+2. `staging_inactive_teacher_rls_guard_validation`: the exact RLS SQL from this draft PR.
+
+**Verified on the actual Supabase staging PostgreSQL service** by executing statements under `SET LOCAL ROLE authenticated`, with `request.jwt.claim.sub` set to each synthetic identity. Counted visible rows on all 10 affected tables for each case:
+
+| Identity | Expected rows per protected table | Observed on all 10 |
+| --- | ---: | ---: |
+| Linked active teacher | 1 | 1 |
+| Active unrelated teacher | 0 | 0 |
+| Same teacher with `active=false` | 0 | 0 |
+| Same teacher with `active=NULL` | 0 | 0 |
+| Correct parent | 1 | 1 |
+| Unrelated parent | 0 | 0 |
+
+All 60 table/read assertions passed and **no RLS recursion occurred**. Teacher status changes happened in ROLLBACK transactions, leaving the staging fixture in its initial state.
+
+Other verified staging state:
+- 12 synthetic public tables, all with RLS enabled.
+- Exactly 10 teacher policies include the new active-teacher guard.
+- Two `khota_rls` SECURITY DEFINER helpers are owned by `postgres` and have fixed empty `search_path`; `anon` cannot execute either, `authenticated` can.
+- Supabase Security Advisor reported no security lints for this **synthetic 12-table staging fixture** at verification time.
+
+**Limits — still a DRAFT, not approved for production:**
+- This project does **not** yet contain the complete production-equivalent 40-table schema or a deployed isolated Vercel Preview, and the tests are impersonated Postgres roles rather than real Supabase Auth session/JWT and PostgREST/API end-to-end tests.
+- The Supabase production migration ledger is empty despite 40 existing public tables. Do not blindly replay all historical migration files or the legacy `schema.sql`; stage schema reconciliation must be independently reviewed.
+- Check explicitly that `khota_rls` is not among exposed API schemas. No claim of this settings validation is made here.
+- Decide expired-subscription teacher visibility and historical retention separately.
+- Keep PR #55 in draft and request explicit approval before any production merge or migration.
+
