@@ -43,3 +43,5 @@ jobs:
           count=$(psql -X -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_policies WHERE schemaname='public' AND qual LIKE '%khota_rls.current_teacher_is_active()%'")
           test "$count" = 10
           echo "Verified ten teacher-policy guards on ephemeral PostgreSQL 17"
+      - name: Test actual authenticated role reads and messaging recursion
+        run: psql -X -v ON_ERROR_STOP=1 -f scripts/rls-integration/assertions.sql
