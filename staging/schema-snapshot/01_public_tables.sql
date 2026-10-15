@@ -536,4 +536,6 @@ CREATE TABLE public."weekly_goals" (
     completed_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now()
 );
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC, anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 COMMIT;
