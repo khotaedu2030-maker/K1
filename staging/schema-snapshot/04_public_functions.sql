@@ -1811,4 +1811,6 @@ begin
 end;
 $function$
 ;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO service_role;
 COMMIT;
