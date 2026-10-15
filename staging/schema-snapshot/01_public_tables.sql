@@ -2,6 +2,21 @@
 -- ONLY run on isolated Supabase khota-staging (iteskfrpeeclzshauxog).
 -- Never run on production. No business records, auth accounts or payment data copied.
 BEGIN;
+-- Hard stop for existing live accounts, and for anything beyond a blank DB or
+-- the known 12-table disposable test fixture. Never permit accidental reuse
+-- on a functioning 40-table KHOTA database.
+DO $safe_rebuild$
+DECLARE table_count integer;
+BEGIN
+  IF EXISTS (SELECT 1 FROM auth.users LIMIT 1) THEN
+    RAISE EXCEPTION 'Refusing staging-only rebuild: Auth users exist';
+  END IF;
+  SELECT count(*) INTO table_count FROM pg_class c JOIN pg_namespace n
+    ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p');
+  IF table_count NOT IN (0,12) THEN
+    RAISE EXCEPTION 'Refusing staging-only rebuild: public table count % is unsafe',table_count;
+  END IF;
+END $safe_rebuild$;
 DO $reset_fixture$ DECLARE t record;
 BEGIN
   FOR t IN SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
