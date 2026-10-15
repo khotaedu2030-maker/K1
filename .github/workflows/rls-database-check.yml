@@ -1,0 +1,45 @@
+name: RLS database migration checks
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/20261015_revoke_inactive_teacher_reads.sql"
+      - "scripts/rls-integration/**"
+      - ".github/workflows/rls-database-check.yml"
+  workflow_dispatch:
+
+jobs:
+  migration-postgres17:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-temporary
+          POSTGRES_DB: khota_rls_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d khota_rls_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: ci-only-temporary
+      PGDATABASE: khota_rls_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Create synthetic baseline with the reviewed policies
+        run: psql -X -v ON_ERROR_STOP=1 -f scripts/rls-integration/setup.sql
+      - name: Apply the staged migration to ephemeral PostgreSQL 17
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261015_revoke_inactive_teacher_reads.sql
+      - name: Confirm all ten teacher policies were guarded
+        run: |
+          count=$(psql -X -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_policies WHERE schemaname='public' AND qual LIKE '%khota_rls.current_teacher_is_active()%'")
+          test "$count" = 10
+          echo "Verified ten teacher-policy guards on ephemeral PostgreSQL 17"
