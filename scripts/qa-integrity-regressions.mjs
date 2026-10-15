@@ -213,7 +213,7 @@ assert.match(rlsPatch, /SET search_path = ''/, "teacher RLS helper must have a f
 assert.match(rlsPatch, /t\.active IS TRUE/, "teacher RLS helper must reject inactive and NULL active flags");
 assert.match(rlsPatch, /t\.user_id = \(SELECT auth\.uid\(\)\)/, "teacher RLS helper must only inspect the authenticated identity");
 assert.match(rlsPatch, /GRANT EXECUTE ON FUNCTION khota_rls\.current_teacher_is_active\(\) TO authenticated/, "authenticated users must be able to evaluate the RLS helper");
-assert.match(rlsPatch, /p\.roles = ARRAY\['public'\]::name\[\]/, "migration must verify existing role grants before rewriting");
+assert.match(rlsPatch, /pol\.roles = ARRAY\['public'\]::name\[\]/, "migration must verify existing role grants before rewriting");
 assert.match(rlsPatch, /pol\.qual/, "migration must preserve existing policy qualifiers");
 assert.match(rlsPatch, /IF n <> 10 THEN/, "migration must reject unexpected policy drift");
 const teacherRlsPolicies = [
