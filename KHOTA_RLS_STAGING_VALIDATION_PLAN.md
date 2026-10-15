@@ -30,13 +30,18 @@ Only the ten policies referenced in `20261015_revoke_inactive_teacher_reads.sql`
    - **Correct parent** can still read their own child, subscription and earlier teacher message history.
    - **Unrelated parent/anon** cannot read the student's private data.
    - Server teacher routes still reject disabled teachers; legitimate active teacher / parent UI stays functional.
-5. Run Supabase Security Advisor, CI, and end-to-end school/parent flows. A green CI here includes **static policy assertions only** and **does not establish real database behavior**.
+5. Run Supabase Security Advisor, CI, and end-to-end school/parent flows. GitHub CI now runs **actual PostgreSQL 17 authenticated-role reads** on a fresh synthetic fixture in addition to static checks, including active/inactive/NULL teachers, unrelated users, parents, and message recursion. This validates the fixture only, not real Supabase staging conditions, Auth/JWT wiring, or the deployed 40-table schema.
 6. Capture redacted before/after test evidence. Only then request a **separate explicit production rollout decision**, including backup/rollback and a maintenance window if appropriate.
 
 ## Remaining separate advisory items
 - `enforce_cohort_days_match_plan`: inspect function body before choosing a safe fixed `search_path` migration; avoid changing search_path blindly.
 - Leaked-password protection: Auth dashboard setting. Review whether the site is OTP-only and choose an appropriate setting; no change made.
 - Historical student visibility for active teachers, RPC privilege review and PostgREST role tests remain separate.
+
+## CI finding and resolution
+- First PostgreSQL behavior test identified **pre-existing infinite recursion** between the `subscriptions_of_own_teacher` policy and `cohorts_of_own_children`; the original `subscriptions` read walked into `cohorts` RLS, which walked back into `subscriptions`.
+- The migration replaces only that teacher-subscription condition with the equivalent `khota_rls.current_teacher_owns_cohort(cohort_id)` helper. This deliberately changes its implementation, while preserving permitted teacher-cohort access and requiring `active IS TRUE`.
+- The disposable PostgreSQL 17 test has passed all role scenarios as of commit `f9cf257b`; the isolated Supabase staging requirement remains open.
 
 ## Rollback design
 Create an explicit rollback migration from the **original policy conditions** captured before changing staging. Never automatically roll back by deleting the RLS helper alone: the ten policies reference it. Do not run DDL outside of the reviewed deployment process.
