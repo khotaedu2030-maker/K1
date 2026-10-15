@@ -21,6 +21,27 @@ REVOKE ALL ON FUNCTION khota_rls.current_teacher_is_active()
 FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION khota_rls.current_teacher_is_active() TO authenticated;
 
+-- The old subscriptions_of_own_teacher reads cohorts through RLS, while
+-- cohorts_of_own_children reads subscriptions through RLS. That causes
+-- infinite recursion when tested as a real authenticated role. The scoped
+-- membership check below removes this existing dependency loop.
+CREATE FUNCTION khota_rls.current_teacher_owns_cohort(p_cohort_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = ''
+AS $cohort$
+  SELECT EXISTS (
+    SELECT 1 FROM public.cohorts c
+    JOIN public.teachers t ON t.id = c.teacher_id
+    WHERE c.id = p_cohort_id
+      AND t.user_id = (SELECT auth.uid())
+      AND t.active IS TRUE
+  );
+$cohort$;
+REVOKE ALL ON FUNCTION khota_rls.current_teacher_owns_cohort(uuid)
+FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION khota_rls.current_teacher_owns_cohort(uuid) TO authenticated;
+
 DO $migration$
 DECLARE policy_row record; n integer;
 BEGIN
@@ -63,10 +84,22 @@ BEGIN
       ON pol.tablename = expected.tablename AND pol.policyname = expected.policyname
     WHERE pol.schemaname = 'public'
   LOOP
-    EXECUTE format(
-      'ALTER POLICY %I ON public.%I TO authenticated USING ((%s) AND (SELECT khota_rls.current_teacher_is_active()))',
-      policy_row.policyname, policy_row.tablename, policy_row.qual
-    );
+    IF policy_row.tablename = 'subscriptions'
+       AND policy_row.policyname = 'subscriptions_of_own_teacher' THEN
+      -- Only exception to preserving the original qualifier verbatim:
+      -- original nested cohorts -> subscriptions RLS is recursive.
+      -- The replacement verifies exactly the same cohort/teacher relationship
+      -- and additionally requires teachers.active IS TRUE.
+      EXECUTE format(
+        'ALTER POLICY %I ON public.%I TO authenticated USING (khota_rls.current_teacher_owns_cohort(cohort_id) AND (SELECT khota_rls.current_teacher_is_active()))',
+        policy_row.policyname, policy_row.tablename
+      );
+    ELSE
+      EXECUTE format(
+        'ALTER POLICY %I ON public.%I TO authenticated USING ((%s) AND (SELECT khota_rls.current_teacher_is_active()))',
+        policy_row.policyname, policy_row.tablename, policy_row.qual
+      );
+    END IF;
   END LOOP;
 END;
 $migration$;
