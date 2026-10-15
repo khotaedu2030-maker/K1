@@ -216,6 +216,9 @@ assert.match(rlsPatch, /GRANT EXECUTE ON FUNCTION khota_rls\.current_teacher_is_
 assert.match(rlsPatch, /pol\.roles = ARRAY\['public'\]::name\[\]/, "migration must verify existing role grants before rewriting");
 assert.match(rlsPatch, /pol\.qual/, "migration must preserve existing policy qualifiers");
 assert.match(rlsPatch, /IF n <> 10 THEN/, "migration must reject unexpected policy drift");
+assert.match(rlsPatch, /current_teacher_owns_cohort\(p_cohort_id uuid\)/, "teacher RLS must use bounded cohort membership helper");
+assert.match(rlsPatch, /khota_rls\.current_teacher_owns_cohort\(cohort_id\)/, "subscription teacher policy must not recurse through cohorts RLS");
+assert.match(rlsPatch, /t\.user_id = \(SELECT auth\.uid\(\)\)/, "membership helper must be bound to caller's authenticated identity");
 const teacherRlsPolicies = [
   ["children", "children_of_teacher_sessions"],
   ["assessments", "assessments_of_teacher_students"],
