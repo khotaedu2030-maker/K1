@@ -205,4 +205,36 @@ assert.match(paylinkGateway, /ambiguous: true/, "Paylink ambiguous invoice outco
 assert.match(paylinkCreate, /FINAL_UNPAID_PAYLINK_STATUSES\.has\(status\)/, "only recognized terminal invoice states can clear pending rows");
 assert.match(paylinkCreate, /if \(!\(await markPendingPaymentFailed/, "pending payment release must check write success");
 
+
+const rlsPatch = read("supabase/migrations/20261015_revoke_inactive_teacher_reads.sql");
+assert.match(rlsPatch, /CREATE SCHEMA khota_rls/, "teacher RLS helper must use a dedicated schema");
+assert.match(rlsPatch, /SECURITY DEFINER/, "teacher RLS helper must avoid recursion through messaging policies");
+assert.match(rlsPatch, /SET search_path = ''/, "teacher RLS helper must have a fixed search_path");
+assert.match(rlsPatch, /t\.active IS TRUE/, "teacher RLS helper must reject inactive and NULL active flags");
+assert.match(rlsPatch, /t\.user_id = \(SELECT auth\.uid\(\)\)/, "teacher RLS helper must only inspect the authenticated identity");
+assert.match(rlsPatch, /GRANT EXECUTE ON FUNCTION khota_rls\.current_teacher_is_active\(\) TO authenticated/, "authenticated users must be able to evaluate the RLS helper");
+assert.match(rlsPatch, /pol\.roles = ARRAY\['public'\]::name\[\]/, "migration must verify existing role grants before rewriting");
+assert.match(rlsPatch, /pol\.qual/, "migration must preserve existing policy qualifiers");
+assert.match(rlsPatch, /IF n <> 10 THEN/, "migration must reject unexpected policy drift");
+assert.match(rlsPatch, /current_teacher_owns_cohort\(p_cohort_id uuid\)/, "teacher RLS must use bounded cohort membership helper");
+assert.match(rlsPatch, /khota_rls\.current_teacher_owns_cohort\(cohort_id\)/, "subscription teacher policy must not recurse through cohorts RLS");
+assert.match(rlsPatch, /t\.user_id = \(SELECT auth\.uid\(\)\)/, "membership helper must be bound to caller's authenticated identity");
+const teacherRlsPolicies = [
+  ["children", "children_of_teacher_sessions"],
+  ["assessments", "assessments_of_teacher_students"],
+  ["child_progress_snapshots", "progress_snapshots_of_teacher_students"],
+  ["independence_assessments", "independence_of_teacher_students"],
+  ["weekly_goals", "weekly_goals_of_teacher_students"],
+  ["sessions", "sessions_of_own_teacher"],
+  ["cohorts", "cohorts_of_own_teacher"],
+  ["subscriptions", "subscriptions_of_own_teacher"],
+  ["message_threads", "threads_of_teacher"],
+  ["messages", "messages_of_thread_teacher"],
+];
+for (const [table, policy] of teacherRlsPolicies) {
+  assert.ok(rlsPatch.includes(`('${table}', '${policy}')`), `missing teacher RLS guard: ${table}.${policy}`);
+}
+assert.ok(!rlsPatch.includes("parents_self_select"), "parent self-read policies must remain unchanged");
+assert.ok(!rlsPatch.includes("teachers_visible_to_messaging_parents"), "parent messaging history must remain unchanged");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
