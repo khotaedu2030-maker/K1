@@ -9,10 +9,11 @@ export const metadata = {
 
 export default function P() {
   const rows: [string, string | null][] = [
-    ["الاسم التجاري", legalProfile.brandName],
+    ["اسم العلامة", legalProfile.brandName],
     ["اسم مقدّم الخدمة", legalProfile.providerName],
-    ["نوع التسجيل", legalProfile.registrationType],
-    ["رقم الوثيقة", legalProfile.registrationNumber],
+    // نوع التسجيل لا يُعرض منفردًا دون رقم ثبتت صحته.
+    ["نوع التسجيل", legalProfile.registrationNumber ? legalProfile.registrationType : null],
+    ["رقم التسجيل", legalProfile.registrationType ? legalProfile.registrationNumber : null],
     ["مقر العمل", legalProfile.businessAddress],
     ["البريد الإلكتروني للدعم", legalProfile.supportEmail],
     ["رقم التواصل", legalProfile.supportPhone],
