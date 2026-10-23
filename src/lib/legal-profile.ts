@@ -19,7 +19,8 @@ export type LegalProfile = {
 export const legalProfile: LegalProfile = {
   brandName: "خُطى | KHOTA",
   providerName: null,
-  registrationType: "وثيقة عمل حر",
+  // لا نفترض صدور وثيقة عمل حر أو سجل تجاري قبل التحقق من بيانات المنشأة.
+  registrationType: null,
   registrationNumber: null,
   businessAddress: null,
   supportEmail: null,
