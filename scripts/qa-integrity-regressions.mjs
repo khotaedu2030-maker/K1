@@ -205,4 +205,12 @@ assert.match(paylinkGateway, /ambiguous: true/, "Paylink ambiguous invoice outco
 assert.match(paylinkCreate, /FINAL_UNPAID_PAYLINK_STATUSES\.has\(status\)/, "only recognized terminal invoice states can clear pending rows");
 assert.match(paylinkCreate, /if \(!\(await markPendingPaymentFailed/, "pending payment release must check write success");
 
+// لا يجوز إظهار صفة تسجيل نظامي غير مثبتة قبل تأسيس كيان خُطى.
+const legalProfile = read("src/lib/legal-profile.ts");
+const legalPage = read("src/app/legal/page.tsx");
+assert.match(legalProfile, /registrationType: null,/, "unconfirmed commercial/freelance registration must remain unset");
+assert.match(legalPage, /legalProfile\.registrationNumber \? legalProfile\.registrationType : null/, "registration type must not display without a registration number");
+assert.match(legalPage, /legalProfile\.registrationType \? legalProfile\.registrationNumber : null/, "registration number must not display without a documented type");
+assert.match(legalPage, /\["اسم العلامة", legalProfile\.brandName\]/, "unregistered brand must not be presented as a registered trade name");
+
 console.log("ALL INTEGRITY REGRESSION CHECKS PASSED");
