@@ -44,5 +44,5 @@ assert.equal(check(withTeacher(null, "scheduled", null)), "بدون معلم");
 assert.equal(check(withTeacher(null)), "بيانات المعلم المعيّن غير متاحة");
 assert.equal(check(withTeacher(null, "completed")), null, "historical completed session is not an assignment alert");
 assert.equal(check(withTeacher({ full_name: "أحمد", active: false }, "cancelled")), null);
-assert.doesNotMatch(fs.readFileSync(path.join(root, "src/app/admin/page.tsx"), "utf8"), /s\\.(teachers|cohorts)\\[0\\]/, "admin overview must not assume array-only embedded relations");
+assert.doesNotMatch(fs.readFileSync(path.join(root, "src/app/admin/page.tsx"), "utf8"), /s\.(teachers|cohorts)\[0\]/, "admin overview must not assume array-only embedded relations");
 console.log("PASS operational teacher alert classification and Supabase to-one relation shapes");
