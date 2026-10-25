@@ -4,6 +4,7 @@ import { formatSessionTime } from "@/lib/arabic-time";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getSessionTeacherAlert, type SessionTeacherAlertInput } from "@/lib/admin-session-alerts";
+import { getRecentAttendanceReview } from "@/lib/admin-attendance-review";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 import { addRiyadhCalendarDays, formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
 
@@ -46,19 +47,13 @@ async function getOverviewData() {
     supabase.from("teachers").select("*", { count: "exact", head: true }).eq("active", true),
     supabase
       .from("sessions")
-      .select("id")
+      .select("id, cohort_id, session_date")
       .eq("status", "completed")
       .lt("session_date", today)
       .gte("session_date", weekAgo),
   ]);
 
-  const recentSessionIds = (recentCompletedSessions ?? []).map((session: { id: string }) => session.id);
-  const { data: recentAttendance } = recentSessionIds.length
-    ? await supabase.from("attendance").select("session_id").in("session_id", recentSessionIds)
-    : { data: [] as { session_id: string }[] };
-
-  const sessionsWithAttendance = new Set((recentAttendance ?? []).map((row: { session_id: string }) => row.session_id));
-  const unrecordedAttendanceSessions = recentSessionIds.filter((id) => !sessionsWithAttendance.has(id)).length;
+  const attendanceReview = await getRecentAttendanceReview(recentCompletedSessions ?? []);
 
   return {
     children: children ?? 0,
@@ -70,7 +65,7 @@ async function getOverviewData() {
     newPremiumRequests: newPremiumRequests ?? 0,
     unusedMakeupCredits: unusedMakeupCredits ?? 0,
     activeTeachers: activeTeachers ?? 0,
-    unrecordedAttendanceSessions,
+    attendanceReview,
   };
 }
 
@@ -151,13 +146,19 @@ export default async function AdminOverviewPage() {
         </div>
       </div>
 
-      {d.unrecordedAttendanceSessions > 0 && (
+      {(d.attendanceReview.unrecordedSessionIds.length > 0 || d.attendanceReview.partialSessionIds.length > 0 || d.attendanceReview.error) && (
         <div className="dashcard" style={{ marginTop: 20, borderColor: "var(--p)" }}>
-          <span className="badge" style={{ color: "var(--p)" }}>تنبيه تشغيلي</span>
-          <p style={{ marginTop: 8 }}>
-            {d.unrecordedAttendanceSessions} جلسة مكتملة خلال آخر 7 أيام بلا أي سجل حضور —
-            راجع <Link href="/admin/attendance" style={{ color: "var(--t)", fontWeight: 700 }}>صفحة الحضور</Link>.
-          </p>
+          <span className="badge" style={{ color: "var(--p)" }}>تنبيه تشغيلي للحضور</span>
+          {d.attendanceReview.error ? (
+            <p style={{ marginTop: 8 }}>تعذّر التحقق من اكتمال سجلات الحضور. يرجى مراجعة صفحة الحضور.</p>
+          ) : (
+            <p style={{ marginTop: 8 }}>
+              {d.attendanceReview.unrecordedSessionIds.length} جلسة مكتملة بلا أي سجل حضور،
+              و{d.attendanceReview.partialSessionIds.length} جلسة قد يكون حضور بعض طلابها غير مسجّل
+              (وفق الاشتراكات الفعّالة حاليًا) خلال آخر 7 أيام.
+            </p>
+          )}
+          <Link href="/admin/attendance" style={{ color: "var(--t)", fontWeight: 700 }}>مراجعة سجلات الحضور</Link>
         </div>
       )}
     </AdminShell>
