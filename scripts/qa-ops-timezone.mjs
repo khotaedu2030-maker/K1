@@ -12,12 +12,12 @@ const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
 const ts = createRequire(path.join(root, "package.json"))("typescript");
 
 function loadRiyadhCalendar() {
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   const transpiled = ts.transpileModule(read("src/lib/riyadh-time.ts"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  vm.runInNewContext(transpiled, { exports: module.exports, module, Intl, Date, String, Number });
-  return module.exports;
+  vm.runInNewContext(transpiled, { exports: moduleRecord.exports, module: moduleRecord, Intl, Date, String, Number });
+  return moduleRecord.exports;
 }
 
 const { getRiyadhCalendarDate, formatRiyadhCalendarDate } = loadRiyadhCalendar();
