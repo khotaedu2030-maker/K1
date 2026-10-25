@@ -3,15 +3,14 @@ import AdminShell from "@/components/AdminShell";
 import { formatSessionTime } from "@/lib/arabic-time";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { getSessionTeacherAlert, type SessionTeacherAlertInput } from "@/lib/admin-session-alerts";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 import { addRiyadhCalendarDays, formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
 
-type TodaySession = {
+type TodaySession = SessionTeacherAlertInput & {
   id: string;
   starts_at: string;
-  status: string;
-  teacher_id: string | null;
-  cohorts: { title: string }[];
-  teachers: { full_name: string; active: boolean }[];
+  cohorts: SupabaseRelation<{ title: string | null }>;
 };
 
 async function getOverviewData() {
@@ -92,12 +91,12 @@ export default async function AdminOverviewPage() {
   const d = await getOverviewData();
 
   const actionQueue = [
-    ...d.todaySessions
-      .filter((s: TodaySession) => s.status === "scheduled" && (!s.teacher_id || !s.teachers[0] || s.teachers[0].active === false))
-      .map((s: TodaySession) => ({
-        label: `${formatSessionTime(s.starts_at)} — ${s.cohorts[0]?.title ?? "—"} — ${!s.teacher_id || !s.teachers[0] ? "بدون معلم" : `المعلم المعيّن (${s.teachers[0].full_name}) غير نشط`}`,
-        href: "/admin/sessions",
-      })),
+    ...d.todaySessions.flatMap((s: TodaySession) => {
+      const alert = getSessionTeacherAlert(s);
+      return alert
+        ? [{ label: `${formatSessionTime(s.starts_at)} — ${supabaseRelationOne(s.cohorts)?.title ?? "—"} — ${alert}`, href: "/admin/sessions" }]
+        : [];
+    }),
     d.pendingApplications > 0 && { label: `${d.pendingApplications} طلب معلم جديد بانتظار المراجعة`, href: "/admin/teacher-applications" },
     d.newContactRequests > 0 && { label: `${d.newContactRequests} رسالة تواصل جديدة`, href: "/admin/requests" },
     d.newPremiumRequests > 0 && { label: `${d.newPremiumRequests} طلب اهتمام جديد`, href: "/admin/requests" },
@@ -143,8 +142,8 @@ export default async function AdminOverviewPage() {
             <div style={{ marginTop: 10 }}>
               {d.todaySessions.slice(0, 8).map((s: TodaySession) => (
                 <div className="taskline" key={s.id}>
-                  <span>{formatSessionTime(s.starts_at)} — {s.cohorts[0]?.title ?? "—"}</span>
-                  <span>{s.status}{s.status === "scheduled" && (!s.teacher_id || !s.teachers[0]) ? " — بدون معلم" : s.status === "scheduled" && s.teachers[0]?.active === false ? ` — ${s.teachers[0].full_name} (غير نشط)` : ""}</span>
+                  <span>{formatSessionTime(s.starts_at)} — {supabaseRelationOne(s.cohorts)?.title ?? "—"}</span>
+                  <span>{s.status}{getSessionTeacherAlert(s) ? ` — ${getSessionTeacherAlert(s)}` : ""}</span>
                 </div>
               ))}
             </div>
