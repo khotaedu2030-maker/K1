@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AdminShell from "@/components/AdminShell";
+import { formatSessionTime } from "@/lib/arabic-time";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { addRiyadhCalendarDays, formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
@@ -94,7 +95,7 @@ export default async function AdminOverviewPage() {
     ...d.todaySessions
       .filter((s: TodaySession) => s.status === "scheduled" && (!s.teacher_id || !s.teachers[0] || s.teachers[0].active === false))
       .map((s: TodaySession) => ({
-        label: `${new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })} — ${s.cohorts[0]?.title ?? "—"} — ${!s.teacher_id || !s.teachers[0] ? "بدون معلم" : `المعلم المعيّن (${s.teachers[0].full_name}) غير نشط`}`,
+        label: `${formatSessionTime(s.starts_at)} — ${s.cohorts[0]?.title ?? "—"} — ${!s.teacher_id || !s.teachers[0] ? "بدون معلم" : `المعلم المعيّن (${s.teachers[0].full_name}) غير نشط`}`,
         href: "/admin/sessions",
       })),
     d.pendingApplications > 0 && { label: `${d.pendingApplications} طلب معلم جديد بانتظار المراجعة`, href: "/admin/teacher-applications" },
@@ -142,7 +143,7 @@ export default async function AdminOverviewPage() {
             <div style={{ marginTop: 10 }}>
               {d.todaySessions.slice(0, 8).map((s: TodaySession) => (
                 <div className="taskline" key={s.id}>
-                  <span>{new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })} — {s.cohorts[0]?.title ?? "—"}</span>
+                  <span>{formatSessionTime(s.starts_at)} — {s.cohorts[0]?.title ?? "—"}</span>
                   <span>{s.status}{s.status === "scheduled" && (!s.teacher_id || !s.teachers[0]) ? " — بدون معلم" : s.status === "scheduled" && s.teachers[0]?.active === false ? ` — ${s.teachers[0].full_name} (غير نشط)` : ""}</span>
                 </div>
               ))}
