@@ -2,6 +2,7 @@ import AdminShell from "@/components/AdminShell";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { adminRoleHasPermission } from "@/lib/admin-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { getRecentAttendanceReview } from "@/lib/admin-attendance-review";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 import AttendanceOverrideButton from "./AttendanceOverrideButton";
 import { addRiyadhCalendarDays, formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
@@ -29,7 +30,7 @@ export default async function AdminAttendancePage() {
 
   const { data: recentSessions } = await supabase
     .from("sessions")
-    .select("id, session_date, cohorts(title)")
+    .select("id, cohort_id, session_date, cohorts(title)")
     .lt("session_date", today)
     .gte("session_date", weekAgo)
     .eq("status", "completed")
@@ -45,8 +46,7 @@ export default async function AdminAttendancePage() {
         .limit(200)
     : { data: [] };
 
-  const recordedSessionIds = new Set((recentAttendance ?? []).map((a: { session_id: string }) => a.session_id));
-  const unrecorded = (recentSessions ?? []).filter((s: { id: string }) => !recordedSessionIds.has(s.id));
+  const review = await getRecentAttendanceReview(recentSessions ?? []);
 
   return (
     <AdminShell adminName={admin.full_name} role={admin.role}>
@@ -54,12 +54,20 @@ export default async function AdminAttendancePage() {
         <h1>الحضور</h1>
       </div>
 
-      {unrecorded.length > 0 && (
+      {(review.error || review.unrecordedSessionIds.length > 0 || review.partialSessionIds.length > 0) && (
         <div className="dashcard" style={{ marginBottom: 20, borderColor: "var(--p)" }}>
-          <span className="badge" style={{ color: "var(--p)" }}>جلسات قد يكون حضورها غير مسجَّل</span>
-          <p style={{ color: "var(--gray)", marginTop: 8, fontSize: 13 }}>
-            {unrecorded.length} جلسة مكتملة خلال آخر 7 أيام بلا أي سجل حضور مرتبط ظاهر هنا.
-          </p>
+          <span className="badge" style={{ color: "var(--p)" }}>مراجعة اكتمال الحضور</span>
+          {review.error ? (
+            <p style={{ color: "var(--gray)", marginTop: 8, fontSize: 13 }}>
+              تعذّر التحقق من جميع السجلات. لا تفترض اكتمال الحضور قبل إعادة المراجعة.
+            </p>
+          ) : (
+            <p style={{ color: "var(--gray)", marginTop: 8, fontSize: 13 }}>
+              {review.unrecordedSessionIds.length} جلسة بلا أي تسجيل حضور،
+              و{review.partialSessionIds.length} جلسة بها سجلات لبعض الطلاب
+              ويحتمل نقص تسجيل طلاب آخرين وفق الاشتراكات الفعالة حاليًا.
+            </p>
+          )}
         </div>
       )}
 
