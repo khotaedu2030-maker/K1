@@ -9,11 +9,12 @@
     "lint": "eslint",
     "qa:plan-days": "node scripts/qa-plan-days.mjs",
     "qa:roles": "node scripts/role-boundary-audit.mjs",
-    "qa:release": "node scripts/qa-release-readiness.mjs && node scripts/qa-release-behavior.mjs && node scripts/qa-integrity-regressions.mjs && node scripts/qa-gateway-pilot.mjs",
+    "qa:release": "node scripts/qa-release-readiness.mjs && node scripts/qa-release-behavior.mjs && node scripts/qa-integrity-regressions.mjs && node scripts/qa-gateway-pilot.mjs && node --test scripts/qa-staging-env.test.mjs",
     "qa:e2e": "node scripts/qa-e2e-readiness.mjs",
     "qa:db-static": "node scripts/audit-db-static.mjs",
     "paylink:smoke": "node --env-file=.env.local scripts/paylink-smoke.mjs",
-    "qa": "npm run qa:plan-days && npm run qa:roles"
+    "qa": "npm run qa:plan-days && npm run qa:roles",
+    "qa:staging-env": "node scripts/qa-staging-env.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
