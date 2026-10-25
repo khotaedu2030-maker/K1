@@ -54,15 +54,14 @@ export default function EnrollForm({
     const internationalPhone = normalizeSaudiPhone(phone);
     const payload = { parentName, email: normalizedEmail, phone: internationalPhone, childName, grade, cohortId };
 
-    // /api/enroll يتطلب الآن جلسة Supabase Auth حقيقية — لا يُستدعى مباشرة بلا جلسة إطلاقًا،
-    // منعًا لحجز مقعد قبل أي تحقق OTP فعلي. إن لم تكن هناك جلسة، نُخزِّن بيانات النموذج مؤقتًا
-    // (لا شيء حسّاس ماليًا هنا) ونمرّ عبر تسجيل الدخول أولًا، ثم /motabaa/enroll/complete
-    // يستكمل الاستدعاء الفعلي بعد التحقق الناجح.
+    // /api/enroll يتطلب جلسة Auth حقيقية؛ لا نحجز مقعدًا قبل التحقق من البريد.
+    // المستخدم الذي بدأ من صفحة الاشتراك قد يكون جديدًا؛ /signup يدعم إنشاء الحساب
+    // وكذلك التحقق من بريد حساب موجود، مع استمرار البيانات المحفوظة بعد نجاح OTP.
     const { data: sessionData } = await supabase.auth.getSession();
     if (!sessionData.session) {
       sessionStorage.setItem("khota_pending_enrollment", JSON.stringify(payload));
       setLoading(false);
-      router.push(`/login?next=${encodeURIComponent("/motabaa/enroll/complete")}&email=${encodeURIComponent(normalizedEmail)}`);
+      router.push(`/signup?next=${encodeURIComponent("/motabaa/enroll/complete")}&email=${encodeURIComponent(normalizedEmail)}`);
       return;
     }
 
