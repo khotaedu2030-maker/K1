@@ -1,3 +1,7 @@
+// باقات ومجموعات خُطى تتغير خلال التشغيل، ولا يصح تثبيتها وقت بناء الموقع.
+// تصيير الصفحة عند كل طلب يمنع ظهور قائمة قديمة أو فارغة بعد إضافة مجموعات جديدة.
+export const dynamic = "force-dynamic";
+
 import Shell from "@/components/Shell";
 import { Suspense } from "react";
 import PlansSelector, { type PlanRow, type CohortRow } from "./PlansSelector";
