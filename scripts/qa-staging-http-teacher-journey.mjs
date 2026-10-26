@@ -397,7 +397,7 @@ try{
   const firstSessionDb=await admin.from("sessions")
     .select("session_date,starts_at,ends_at,status").eq("id",firstSessionId).single();
   verify(!firstSessionDb.error && firstSessionDb.data?.status==="scheduled" &&
-    firstSessionDb.data.starts_at===firstFuture.starts_at &&
+    new Date(firstSessionDb.data.starts_at).getTime()===new Date(firstFuture.starts_at).getTime() &&
     firstSessionDb.data.session_date===firstFuture.session_date,
     "Fixture's real Staging DB first-session schedule matches the verified generator output");
 
