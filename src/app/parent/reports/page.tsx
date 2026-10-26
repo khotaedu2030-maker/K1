@@ -60,7 +60,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ chil
         <div className="narrow">
           <span className="eyebrow">لوحة ولي الأمر</span>
           <h1 className="title" style={{ fontSize: 34 }}>التقدّم — البداية → الآن</h1>
-          {(children ?? []).length > 1 && <ParentChildTabs children={children ?? []} selectedId={firstChild?.id ?? null} basePath="/parent/reports" />}
+          {(children ?? []).length > 1 && <ParentChildTabs options={children ?? []} selectedId={firstChild?.id ?? null} basePath="/parent/reports" />}
           {(children ?? []).length > 0 && !firstChild && <p className="lead">الطفل المطلوب غير مرتبط بحسابك.</p>}
           <p className="lead">
             مؤشرات متابعة داخلية في خُطى، وليست قياسات علمية معيارية.
