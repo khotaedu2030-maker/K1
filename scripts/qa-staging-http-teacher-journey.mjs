@@ -13,6 +13,7 @@ import { resolve } from "node:path";
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
 import { validateStagingConfig } from "./qa-staging-env.mjs";
+import { simulateFirstMonthSessionPreparation, formatFirstSessionDay, formatFirstSessionTime, formatFirstSessionDate } from "./qa-first-session-generator-harness.mjs";
 
 const env = process.env;
 if (!process.argv.includes("--ephemeral-staging-only") ||
@@ -364,6 +365,42 @@ try{
   const studentSchedule=await request("/student/schedule",{cookieHeader:childCookie});
   verify(studentSchedule.status===200 && studentSchedule.html.includes("مجموعة HTTP اختبار"),
     "Student can see only enrolled group schedule");
+
+  // This is a synthetic, ALREADY-ACTIVE student fixture. We exercise precisely the
+  // private production first-month scheduling logic with mock DB reads/write capture,
+  // then insert just its first future output as a temporary fixture. This is NOT a
+  // payment-free pilot activation; the real payment gate remains unchanged.
+  const planned=await simulateFirstMonthSessionPreparation({
+    cohort:{id:created.cohort,teacher_id:t1,capacity:4,days_of_week:[1,3],
+      start_time:"17:00",end_time:"17:45",meeting_url:null},
+  });
+  verify(planned.result.ok && planned.writeCount===1 &&
+    planned.callOptions?.onConflict==="cohort_id,starts_at" &&
+    planned.callOptions?.ignoreDuplicates===true,
+    "Production session generator must create an idempotent future timetable without payment DB actions");
+  const firstFuture=planned.result.sessionsToInsert.find((s)=>
+    new Date(s.starts_at).getTime()>Date.now()+3*60*60_000);
+  verify(!!firstFuture && firstFuture.status==="scheduled",
+    "Production generator provides a valid future first-session fixture for this active group");
+  const firstSessionId=await insert("sessions",{...firstFuture});
+  created.sessions.push(firstSessionId);
+  const parentFirstSessionView=await request("/parent/schedule",{cookieHeader:parent.cookieHeader});
+  verify(parentFirstSessionView.status===200 &&
+    parentFirstSessionView.html.includes(formatFirstSessionDay(firstFuture.starts_at)) &&
+    parentFirstSessionView.html.includes(formatFirstSessionTime(firstFuture.starts_at)),
+    "Parent's actual HTTP schedule shows production-generated first-session day and Riyadh time");
+  const studentFirstSessionView=await request("/student/schedule",{cookieHeader:childCookie});
+  verify(studentFirstSessionView.status===200 &&
+    studentFirstSessionView.html.includes(formatFirstSessionDay(firstFuture.starts_at)) &&
+    studentFirstSessionView.html.includes(formatFirstSessionTime(firstFuture.starts_at)),
+    "Student's authenticated schedule shows the same generated first-session day and Riyadh time");
+  const firstSessionDb=await admin.from("sessions")
+    .select("session_date,starts_at,ends_at,status").eq("id",firstSessionId).single();
+  verify(!firstSessionDb.error && firstSessionDb.data?.status==="scheduled" &&
+    firstSessionDb.data.starts_at===firstFuture.starts_at &&
+    firstSessionDb.data.session_date===firstFuture.session_date,
+    "Fixture's real Staging DB first-session schedule matches the verified generator output");
+
   const studentParentAttempt=await request("/parent",{cookieHeader:childCookie});
   verify([307,308,302].includes(studentParentAttempt.status) &&
     (studentParentAttempt.location||"").includes("/student/today"),
