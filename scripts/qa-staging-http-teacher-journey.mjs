@@ -413,10 +413,10 @@ try{
     "اكتمل عدد المقاعد", "تعذّر التحقق من المجموعة", "المجموعة المطلوبة غير موجودة",
   ].filter((s)=>publicCheckout.html.includes(s));
   verify(publicCheckout.status===200 && publicCheckout.html.includes("اسم ولي الأمر") &&
-    publicCheckout.html.includes("مجموعة HTTP اختبار"),
+    publicCheckout.html.includes("تفاصيل الاشتراك"),
     "Open same-grade priced cohort should show enrollment form: HTTP="+publicCheckout.status+
     " form="+publicCheckout.html.includes("اسم ولي الأمر")+
-    " group="+publicCheckout.html.includes("مجموعة HTTP اختبار")+
+    " summary="+publicCheckout.html.includes("تفاصيل الاشتراك")+
     " reason="+(checkoutRejections.join(",")||"unknown"));
   const wrongGradeCheckout=await request("/motabaa/enroll?grade=8&cohort="+created.cohort);
   verify(wrongGradeCheckout.status===200 &&
