@@ -222,7 +222,7 @@ try{
   verify(opsAttendance.status===200 && !opsAttendance.html.includes("هذه الصفحة لحسابات الإدارة فقط"),
     "Operations manager can read attendance operations");
   const financeAttendance=await request("/admin/attendance",{cookieHeader:finance.cookieHeader});
-  verify(financeAttendance.status===200 && financeAttendance.html.includes("هذه الصفحة لحسابات الإدارة فقط"),
+  verify(financeAttendance.status===200 && financeAttendance.html.includes("غير مصرَّح"),
     "Finance admin must not read attendance page without permission");
   const fakeAssignment={sessionId:randomUUID(),teacherId:t1,reason:"اختبار صلاحية فقط"};
   const opsDeniedMissing=await request("/api/admin/sessions",{method:"POST",cookieHeader:ops.cookieHeader,body:fakeAssignment});
