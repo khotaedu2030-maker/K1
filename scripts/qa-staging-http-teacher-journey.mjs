@@ -449,6 +449,15 @@ try{
   verify(!subError && newSub?.status==="pending_payment" &&
     newSub.parent_id===created.parent && newSub.child_id===enrolledChildren[0].id,
     "Enrollment must remain pending payment, never silently activate during payment pause");
+  const {count:sessionCount,error:sessionCountError}=await admin.from("sessions")
+    .select("id",{head:true,count:"exact"}).eq("cohort_id",created.cohort);
+  verify(!sessionCountError && sessionCount===created.sessions.length,
+    "Pending enrollment must not generate first-session records before verified activation");
+  const blockedPaylink=await request("/api/payments/paylink/create",{
+    method:"POST",cookieHeader:parent.cookieHeader,body:{subscriptionId},
+  });
+  verify(blockedPaylink.status===503,
+    "Paused Paylink must reject invoice creation for pending subscription");
   const retryEnroll=await request("/api/enroll",{method:"POST",cookieHeader:parent.cookieHeader,body:enrollPayload});
   verify(retryEnroll.status===200 && JSON.parse(retryEnroll.html).subscriptionId===subscriptionId,
     "Retry with same child/cohort must return same held subscription");
