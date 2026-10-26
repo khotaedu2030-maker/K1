@@ -35,6 +35,7 @@ const today=read("src/app/student/today/page.tsx");
 const schedule=read("src/app/student/schedule/page.tsx");
 const card=read("src/app/student/today/StudentSessionCard.tsx");
 assert.match(today,/\.gte\("ends_at", new Date\(\)\.toISOString\(\)\)/,"next session should not select already-ended sessions");
+assert.match(today,/\.eq\("status", "scheduled"\)/,"student join card must not show cancelled/completed sessions");
 assert.match(schedule,/riyadhWallClockToUtcInstant\(getRiyadhCalendarDate\(new Date\(\)\), 0, 0\)/,"schedule query must start at Riyadh midnight");
 assert.match(schedule,/formatSessionDay\(s\.starts_at\)/,"schedule day uses Riyadh formatter");
 assert.match(schedule,/formatSessionTime\(s\.starts_at\)/,"schedule time uses Riyadh formatter");
