@@ -31,7 +31,7 @@ const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_RO
 const makeBrowserAuth = () => createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, {
   auth: { persistSession:false, autoRefreshToken:false, detectSessionInUrl:false },
 });
-const created = {users:[],teachers:[],parent:null,children:[],cohort:null,sessions:[]};
+const created = {users:[],teachers:[],admins:[],parent:null,children:[],cohort:null,sessions:[],studentModes:[]};
 const rateLimitKeys = new Set();
 const tag = randomUUID().slice(0,8);
 let childProcess = null, problems = [], checks = 0;
@@ -122,7 +122,7 @@ async function request(path,{method="GET",cookieHeader="",body=null,origin=null}
     redirect:"manual",signal:AbortSignal.timeout(20000),
   });
   const payload=await r.text();
-  return {status:r.status,location:r.headers.get("location"),html:payload};
+  return {status:r.status,location:r.headers.get("location"),html:payload,setCookies:r.headers.getSetCookie()};
 }
 async function erase(table,key,id){
   if(!id)return;
@@ -136,11 +136,13 @@ async function cleanup(){
       await erase(name,"child_id",child);
     }
   }
+  for(const modeId of created.studentModes)await erase("student_mode_sessions","id",modeId);
   for(const sid of created.sessions)await erase("sessions","id",sid);
   for(const child of created.children)await erase("children","id",child);
   if(created.parent)await erase("parents","id",created.parent);
   if(created.cohort)await erase("cohorts","id",created.cohort);
   for(const teacher of created.teachers)await erase("teachers","id",teacher);
+  for(const adminId of created.admins)await erase("admins","id",adminId);
   for(const uid of created.users){
     const {error}=await admin.auth.admin.deleteUser(uid);
     if(error)problems.push("cleanup-auth");
@@ -160,14 +162,22 @@ try{
   const teacher=await identity("teacher");
   const unrelated=await identity("unrelated");
   const parent=await identity("parent");
+  const ops=await identity("ops-manager");
+  const finance=await identity("finance-admin");
   const t1=await insert("teachers",{user_id:teacher.id,full_name:"معلم اختبار HTTP",active:true});
   const t2=await insert("teachers",{user_id:unrelated.id,full_name:"معلم بعيد",active:true});
   created.teachers.push(t1,t2);
+  const opsId=await insert("admins",{user_id:ops.id,full_name:"مدير عمليات QA",role:"operations_manager",active:true});
+  const financeId=await insert("admins",{user_id:finance.id,full_name:"مسؤول مالية QA",role:"finance_admin",active:true});
+  created.admins.push(opsId,financeId);
   created.parent=await insert("parents",{
     user_id:parent.id,full_name:"ولي أمر HTTP",phone:"+966500000000",
   });
   const child=await insert("children",{parent_id:created.parent,first_name:"طالب اختبار HTTP",grade:4});
   created.children.push(child);
+  const sibling=await insert("children",{parent_id:created.parent,first_name:"طالب اختبار ثانٍ",grade:4});
+  created.children.push(sibling);
+  const siblingTask=await insert("daily_tasks",{child_id:sibling,title:"مهمة لطالب آخر",status:"pending"});
   created.cohort=await insert("cohorts",{
     product:"motabaa",plan_id:"staging-khota-2-20261025",teacher_id:t1,grade_band:"4-6",status:"open",
     title:"مجموعة HTTP اختبار "+tag,capacity:4,days_of_week:[1,3],start_time:"17:00",end_time:"17:45",
@@ -186,6 +196,8 @@ try{
   rateLimitKeys.add(limiterKey("session-report:teacher",teacher.id));
   rateLimitKeys.add(limiterKey("session-report:teacher",unrelated.id));
   rateLimitKeys.add(limiterKey("session-report:session",session));
+  rateLimitKeys.add(limiterKey("student-mode:enter:user",parent.id));
+  rateLimitKeys.add(limiterKey("student-mode:enter:child",child));
 
   const teacherHome=await request("/teacher",{cookieHeader:teacher.cookieHeader});
   verify(teacherHome.status===200 && teacherHome.html.includes("معلم اختبار HTTP"),
@@ -202,6 +214,29 @@ try{
   const parentPageBefore=await request("/parent",{cookieHeader:parent.cookieHeader});
   verify(parentPageBefore.status===200 && parentPageBefore.html.includes("طالب اختبار HTTP"),
     "Logged-in parent must see their child");
+  const opsPage=await request("/admin",{cookieHeader:ops.cookieHeader});
+  verify(opsPage.status===200 && opsPage.html.includes("مدير عمليات QA"),"Operations manager must see admin overview");
+  const financePage=await request("/admin",{cookieHeader:finance.cookieHeader});
+  verify(financePage.status===200 && financePage.html.includes("مسؤول مالية QA"),"Finance admin can see its own admin overview");
+  const opsAttendance=await request("/admin/attendance",{cookieHeader:ops.cookieHeader});
+  verify(opsAttendance.status===200 && !opsAttendance.html.includes("هذه الصفحة لحسابات الإدارة فقط"),
+    "Operations manager can read attendance operations");
+  const financeAttendance=await request("/admin/attendance",{cookieHeader:finance.cookieHeader});
+  verify(financeAttendance.status===200 && financeAttendance.html.includes("هذه الصفحة لحسابات الإدارة فقط"),
+    "Finance admin must not read attendance page without permission");
+  const fakeAssignment={sessionId:randomUUID(),teacherId:t1,reason:"اختبار صلاحية فقط"};
+  const opsDeniedMissing=await request("/api/admin/sessions",{method:"POST",cookieHeader:ops.cookieHeader,body:fakeAssignment});
+  verify(opsDeniedMissing.status===404,"Operations manager permitted API must proceed to missing session check");
+  const financeForbidden=await request("/api/admin/sessions",{method:"POST",cookieHeader:finance.cookieHeader,body:fakeAssignment});
+  verify(financeForbidden.status===403,"Finance admin cannot manage sessions");
+  const parentForbidden=await request("/api/admin/sessions",{method:"POST",cookieHeader:parent.cookieHeader,body:fakeAssignment});
+  verify(parentForbidden.status===403,"Parent cannot manage admin sessions");
+  const adminDisable=await admin.from("admins").update({active:false}).eq("id",opsId);
+  if(adminDisable.error)fail("Staging admin disable failed");
+  const blockedOps=await request("/api/admin/sessions",{method:"POST",cookieHeader:ops.cookieHeader,body:fakeAssignment});
+  verify(blockedOps.status===403,"Revoked admin must lose permission despite existing SSR cookie");
+  const adminEnable=await admin.from("admins").update({active:true}).eq("id",opsId);
+  if(adminEnable.error)fail("Staging admin reactivation failed");
   const entry={childId:child,subjectsCompleted:["رياضيات"],independenceRating:4,focusRating:4,
     tomorrowReadiness:"جيدة",teacherNote:"تقرير مؤقت",needsSpecialist:false,
     materialsReady:true,tomorrowTestStatus:"",remainingReview:"مراجعة مؤقتة",
@@ -227,7 +262,75 @@ try{
   const parentPageAfter=await request("/parent",{cookieHeader:parent.cookieHeader});
   verify(parentPageAfter.status===200 && parentPageAfter.html.includes("مراجعة مؤقتة"),
     "Parent dashboard must display teacher's report-derived review task");
-  console.log("PASS live Staging localhost HTTP integration: "+checks+
+  const guestEnter=await request("/api/student-mode/enter",{method:"POST",body:{childId:child}});
+  verify(guestEnter.status===401,"Guest must not open student mode");
+  const invalidChildEnter=await request("/api/student-mode/enter",{
+    method:"POST",cookieHeader:parent.cookieHeader,body:{childId:randomUUID()},
+  });
+  verify(invalidChildEnter.status===403,"Parent cannot open mode for an unrelated child");
+  const studentEnter=await request("/api/student-mode/enter",{
+    method:"POST",cookieHeader:parent.cookieHeader,body:{childId:child},
+  });
+  verify(studentEnter.status===200 && JSON.parse(studentEnter.html).ok===true,
+    "Parent can open verified student-mode via real HTTP");
+  const encodedCookie=studentEnter.setCookies?.find(c=>c.startsWith("khota_student_session="))?.split(";")[0];
+  if(!encodedCookie)fail("Student mode cookie was not issued");
+  const studentModeId=decodeURIComponent(encodedCookie.split("=")[1]);
+  verify(/^[0-9a-f-]{36}$/i.test(studentModeId),"Student mode cookie contains only opaque session UUID");
+  created.studentModes.push(studentModeId);
+  const childCookie=parent.cookieHeader+"; "+encodedCookie;
+  const studentToday=await request("/student/today",{cookieHeader:childCookie});
+  verify(studentToday.status===200 && studentToday.html.includes("طالب اختبار HTTP"),
+    "Activated student sees only their own Today dashboard");
+  const studentTasks=await request("/student/tasks",{cookieHeader:childCookie});
+  verify(studentTasks.status===200 && studentTasks.html.includes("مراجعة مؤقتة"),
+    "Student can see their own report-derived tasks");
+  verify(!studentTasks.html.includes("مهمة لطالب آخر"),
+    "Student cannot see sibling's tasks on student dashboard");
+  const studentSchedule=await request("/student/schedule",{cookieHeader:childCookie});
+  verify(studentSchedule.status===200 && studentSchedule.html.includes("مجموعة HTTP اختبار"),
+    "Student can see only enrolled group schedule");
+  const studentParentAttempt=await request("/parent",{cookieHeader:childCookie});
+  verify([307,308,302].includes(studentParentAttempt.status) &&
+    (studentParentAttempt.location||"").includes("/student/today"),
+    "Student-mode session redirects away from parent's dashboard");
+  const studentTeacherAttempt=await request("/teacher",{cookieHeader:childCookie});
+  verify([307,308,302].includes(studentTeacherAttempt.status) &&
+    (studentTeacherAttempt.location||"").includes("/student/today"),
+    "Student mode cannot access teacher workspace");
+  const studentAdminAttempt=await request("/admin",{cookieHeader:childCookie});
+  verify([307,308,302].includes(studentAdminAttempt.status) &&
+    (studentAdminAttempt.location||"").includes("/student/today"),
+    "Student mode cannot access admin workspace");
+  const studentForbiddenPost=await request("/api/session-report/submit",{
+    method:"POST",cookieHeader:childCookie,body:payload,
+  });
+  verify(studentForbiddenPost.status===403,"Student mode forbids teacher POST via proxy allowlist");
+  const ownTasks=await admin.from("daily_tasks").select("id,status").eq("child_id",child);
+  if(ownTasks.error||!ownTasks.data?.length)fail("Own task fixture missing");
+  const ownTask=ownTasks.data.find(t=>t.status==="pending");
+  if(!ownTask)fail("Own pending task missing");
+  const crossChildToggle=await request("/api/student/tasks/toggle",{
+    method:"POST",cookieHeader:childCookie,body:{taskId:siblingTask},
+  });
+  verify(crossChildToggle.status===403,"Student cannot mutate sibling's task by ID");
+  const ownToggle=await request("/api/student/tasks/toggle",{
+    method:"POST",cookieHeader:childCookie,body:{taskId:ownTask.id},
+  });
+  verify(ownToggle.status===200 && JSON.parse(ownToggle.html).status==="done",
+    "Student can complete own task with actual HTTP route");
+  const {data:taskAfter,error:taskError}=await admin.from("daily_tasks").select("status").eq("id",ownTask.id).single();
+  verify(!taskError&&taskAfter?.status==="done","Own task mutation persists in real Staging DB");
+  const {error:disableModeError}=await admin.from("student_mode_sessions").update({active:false}).eq("id",studentModeId);
+  if(disableModeError)fail("Student mode deactivation fixture failed");
+  const deactivatedAttempt=await request("/student/today",{cookieHeader:childCookie});
+  verify([307,308,302].includes(deactivatedAttempt.status) &&
+    (deactivatedAttempt.location||"").includes("/student"),
+    "Deactivated student session cannot load student dashboard even with old cookie");
+  const childToParentAfter=await request("/parent",{cookieHeader:childCookie});
+  verify(childToParentAfter.status===200&&childToParentAfter.html.includes("طالب اختبار HTTP"),
+    "Revoked student cookie restores parent's dashboard access");
+    console.log("PASS live Staging localhost HTTP integration: "+checks+
     " assertions using actual Next proxy, Supabase SSR cookies, teacher/parent pages, CSRF, role checks, teacher POST, rate limits and DB.");
 }catch(e){
   problems.push("test");
