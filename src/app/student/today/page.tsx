@@ -34,6 +34,7 @@ export default async function P() {
         .from("sessions")
         .select("id, starts_at, ends_at, cohorts(title)")
         .in("cohort_id", cohortIds)
+        .eq("status", "scheduled")
         .gte("ends_at", new Date().toISOString())
         .order("starts_at", { ascending: true })
         .limit(1)
