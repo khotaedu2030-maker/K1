@@ -4,7 +4,7 @@ type ChildOption = { id: string; first_name: string };
 export default function ParentChildTabs({options, selectedId, basePath}: {
   options: ChildOption[];
   selectedId: string | null;
-  basePath: "/parent" | "/parent/reports" | "/parent/reports/weekly";
+  basePath: "/parent" | "/parent/tasks" | "/parent/reports" | "/parent/reports/weekly";
 }) {
   if (options.length < 2) return null;
   return (
