@@ -9,7 +9,7 @@
     "lint": "eslint",
     "qa:plan-days": "node scripts/qa-plan-days.mjs",
     "qa:roles": "node scripts/role-boundary-audit.mjs",
-    "qa:release": "node scripts/qa-release-readiness.mjs && node scripts/qa-release-behavior.mjs && node scripts/qa-ops-timezone.mjs && node scripts/qa-student-schedule-timezone.mjs && node scripts/qa-parent-child-selection.mjs && node scripts/qa-parent-family-schedule.mjs && node scripts/qa-parent-tasks.mjs && node scripts/qa-enrollment-eligibility.mjs && node scripts/qa-first-session-dryrun.mjs && node scripts/qa-admin-session-alerts.mjs && node scripts/qa-admin-attendance-review.mjs && node scripts/qa-integrity-regressions.mjs && node scripts/qa-gateway-pilot.mjs && node --test scripts/qa-staging-env.test.mjs",
+    "qa:release": "node scripts/qa-release-readiness.mjs && node scripts/qa-release-behavior.mjs && node scripts/qa-ops-timezone.mjs && node scripts/qa-student-schedule-timezone.mjs && node scripts/qa-parent-child-selection.mjs && node scripts/qa-parent-family-schedule.mjs && node scripts/qa-parent-tasks.mjs && node scripts/qa-enrollment-eligibility.mjs && node scripts/qa-first-session-dryrun.mjs && node scripts/qa-pilot-activation.mjs && node scripts/qa-admin-session-alerts.mjs && node scripts/qa-admin-attendance-review.mjs && node scripts/qa-integrity-regressions.mjs && node scripts/qa-gateway-pilot.mjs && node --test scripts/qa-staging-env.test.mjs",
     "qa:e2e": "node scripts/qa-e2e-readiness.mjs",
     "qa:db-static": "node scripts/audit-db-static.mjs",
     "paylink:smoke": "node --env-file=.env.local scripts/paylink-smoke.mjs",
