@@ -22,6 +22,7 @@ const SECTIONS: { label: string; href: string; permission?: string }[] = [
   { label: "الجلسات", href: "/admin/sessions", permission: "session.manage" },
   { label: "الحضور", href: "/admin/attendance", permission: "attendance.read" },
   { label: "مراجعة طلبات التجميد", href: "/admin/subscriptions", permission: "subscription.review" },
+  { label: "تفعيل التجربة المجانية", href: "/admin/pilot-activations", permission: "pilot.activate" },
   { label: "المدفوعات", href: "/admin/payments", permission: "payment.read" },
   { label: "التعويضات", href: "/admin/makeup-credits", permission: "makeup.manage" },
   { label: "طلبات التسجيل والتواصل", href: "/admin/requests", permission: "request.read" },
