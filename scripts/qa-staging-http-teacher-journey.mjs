@@ -307,6 +307,28 @@ try{
   const siblingWeekly=await request("/parent/reports/weekly?child="+encodeURIComponent(sibling),{cookieHeader:parent.cookieHeader});
   verify(siblingWeekly.status===200 && siblingWeekly.html.includes("طالب اختبار ثانٍ"),
     "Weekly parent report must render the explicitly owned sibling");
+  // Real HTTP parent-task visibility by child and task status.
+  await insert("daily_tasks",{child_id:child,title:"مهمة معلقة للأول",status:"pending",due_date:"2026-10-01"});
+  await insert("daily_tasks",{child_id:child,title:"مهمة منجزة للأول",status:"done"});
+  await insert("daily_tasks",{child_id:child,title:"مراجعة المعلم للأول",status:"needs_review"});
+  const firstTasksPage=await request("/parent/tasks?child="+encodeURIComponent(child),{cookieHeader:parent.cookieHeader});
+  verify(firstTasksPage.status===200 && firstTasksPage.html.includes("مهمة معلقة للأول") &&
+    firstTasksPage.html.includes("مهمة منجزة للأول") && firstTasksPage.html.includes("مراجعة المعلم للأول") &&
+    !firstTasksPage.html.includes("مهمة لطالب آخر"),
+    "Parent task view separates the selected child's pending, done and teacher-review tasks");
+  const siblingTasksPage=await request("/parent/tasks?child="+encodeURIComponent(sibling),{cookieHeader:parent.cookieHeader});
+  verify(siblingTasksPage.status===200 && siblingTasksPage.html.includes("مهمة لطالب آخر") &&
+    !siblingTasksPage.html.includes("مهمة معلقة للأول") && !siblingTasksPage.html.includes("مراجعة المعلم للأول"),
+    "Sibling task view excludes first child's assignments");
+  const forbiddenTasksPage=await request("/parent/tasks?child="+randomUUID(),{cookieHeader:parent.cookieHeader});
+  verify(forbiddenTasksPage.status===200 && forbiddenTasksPage.html.includes("الطفل المطلوب غير مرتبط بحسابك") &&
+    !forbiddenTasksPage.html.includes("مهمة معلقة للأول") && !forbiddenTasksPage.html.includes("مهمة لطالب آخر"),
+    "Foreign child's task URL does not reveal other children's tasks");
+  const homeWithTaskSummary=await request("/parent?child="+encodeURIComponent(child),{cookieHeader:parent.cookieHeader});
+  verify(homeWithTaskSummary.status===200 &&
+    homeWithTaskSummary.html.includes("بانتظار مراجعة المعلم") &&
+    homeWithTaskSummary.html.includes("جميع مهام"),
+    "Parent dashboard links detailed tasks and identifies the teacher review state");
   const guestEnter=await request("/api/student-mode/enter",{method:"POST",body:{childId:child}});
   verify(guestEnter.status===401,"Guest must not open student mode");
   const invalidChildEnter=await request("/api/student-mode/enter",{
