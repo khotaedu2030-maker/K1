@@ -60,6 +60,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ chil
         <div className="narrow">
           <span className="eyebrow">لوحة ولي الأمر</span>
           <h1 className="title" style={{ fontSize: 34 }}>التقدّم — البداية → الآن</h1>
+          {firstChild && <p className="lead">تقدّم {firstChild.first_name}</p>}
           {(children ?? []).length > 1 && <ParentChildTabs options={children ?? []} selectedId={firstChild?.id ?? null} basePath="/parent/reports" />}
           {(children ?? []).length > 0 && !firstChild && <p className="lead">الطفل المطلوب غير مرتبط بحسابك.</p>}
           <p className="lead">
@@ -79,7 +80,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ chil
                 const to = latest[d.key];
                 if (from == null || to == null) return null;
                 return (
-                  <div className="taskline" key={d.key}>
+                  <div className="taskline" key={d.key} aria-label={`${d.label}: ${from} من 5 إلى ${to} من 5`}>
                     <span style={{ minWidth: 100 }}>{d.label}</span>
                     <span>
                       {from}/5 → <b style={{ color: to > from ? "var(--t)" : to < from ? "var(--p)" : "inherit" }}>{to}/5</b>
