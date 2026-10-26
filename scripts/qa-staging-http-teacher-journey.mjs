@@ -13,7 +13,7 @@ import { resolve } from "node:path";
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
 import { validateStagingConfig } from "./qa-staging-env.mjs";
-import { simulateFirstMonthSessionPreparation, formatFirstSessionDay, formatFirstSessionTime, formatFirstSessionDate } from "./qa-first-session-generator-harness.mjs";
+import { simulateFirstMonthSessionPreparation, formatFirstSessionDay, formatFirstSessionTime } from "./qa-first-session-generator-harness.mjs";
 
 const env = process.env;
 if (!process.argv.includes("--ephemeral-staging-only") ||
