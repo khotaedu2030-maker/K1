@@ -407,9 +407,17 @@ try{
   // Actual booking gate -> authenticated parent -> pending-payment-only enrollment.
   // Keep real payments OFF; never invoke activation or manual payment confirmation.
   const publicCheckout=await request("/motabaa/enroll?grade=4&cohort="+created.cohort);
+  const checkoutRejections=[
+    "التسجيل مغلق حاليًا", "هذه المجموعة غير متاحة", "صف الطالب لا يطابق",
+    "الباقة المرتبطة", "بيانات أيام المجموعة", "تعذّر التحقق من المقاعد",
+    "اكتمل عدد المقاعد", "تعذّر التحقق من المجموعة", "المجموعة المطلوبة غير موجودة",
+  ].filter((s)=>publicCheckout.html.includes(s));
   verify(publicCheckout.status===200 && publicCheckout.html.includes("اسم ولي الأمر") &&
     publicCheckout.html.includes("مجموعة HTTP اختبار"),
-    "Open same-grade priced cohort should show enrollment form");
+    "Open same-grade priced cohort should show enrollment form: HTTP="+publicCheckout.status+
+    " form="+publicCheckout.html.includes("اسم ولي الأمر")+
+    " group="+publicCheckout.html.includes("مجموعة HTTP اختبار")+
+    " reason="+(checkoutRejections.join(",")||"unknown"));
   const wrongGradeCheckout=await request("/motabaa/enroll?grade=8&cohort="+created.cohort);
   verify(wrongGradeCheckout.status===200 &&
     wrongGradeCheckout.html.includes("صف الطالب لا يطابق المجموعة المختارة") &&
