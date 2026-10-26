@@ -16,7 +16,7 @@ function evaluate(tsCode, dependencies={}) {
     module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,
   }}).outputText;
   const context={module:moduleRecord,exports:moduleRecord.exports,
-    Intl,Date,String,Number,Math,Set,Map,Array,Object,
+    Intl,Date,String,Number,Math,Set,Map,Array,Object,console:{error(){},warn(){},log(){}},
     require:(name)=>{
       if(name==="server-only")return {};
       if(Object.prototype.hasOwnProperty.call(dependencies,name))return dependencies[name];
