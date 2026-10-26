@@ -21,7 +21,7 @@ export default async function P() {
   const junior = tone === "junior";
   const admin = createSupabaseAdminClient();
 
-  // أقرب جلسة اليوم (أو القادمة إن لم توجد جلسة اليوم)
+  // الجلسة الجارية أو القادمة، وليس جلسة انتهى وقتها في وقت سابق اليوم.
   const { data: subs } = await admin
     .from("subscriptions")
     .select("cohort_id")
@@ -34,7 +34,7 @@ export default async function P() {
         .from("sessions")
         .select("id, starts_at, ends_at, cohorts(title)")
         .in("cohort_id", cohortIds)
-        .gte("starts_at", new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
+        .gte("ends_at", new Date().toISOString())
         .order("starts_at", { ascending: true })
         .limit(1)
     : { data: [] };
