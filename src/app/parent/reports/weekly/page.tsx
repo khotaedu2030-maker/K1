@@ -157,7 +157,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ chil
         <div className="narrow">
           <span className="eyebrow">خُطى الأسبوعي</span>
           <h1 className="title" style={{ fontSize: 34 }}>{firstChild.first_name}</h1>
-          {(children ?? []).length > 1 && <ParentChildTabs children={children ?? []} selectedId={firstChild.id} basePath="/parent/reports/weekly" />}
+          {(children ?? []).length > 1 && <ParentChildTabs options={children ?? []} selectedId={firstChild.id} basePath="/parent/reports/weekly" />}
           <p className="lead">
             الفترة: {weekAgoStr} — {formatRiyadhCalendarDate(todayInRiyadh)}
           </p>
