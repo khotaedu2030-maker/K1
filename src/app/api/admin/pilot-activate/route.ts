@@ -2,15 +2,11 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { preparePilotSessionSchedule } from "@/lib/activate-subscription";
+import { pilotActivationEnabled } from "@/lib/pilot-activation-config";
 import { checkRateLimit, declaredBodyExceeds, readJsonBodyLimited, rateLimitRejectionResponse } from "@/lib/api-rate-limit";
 
 // This is a FREE administrative entitlement, not manual or Paylink payment.
 // Closed in every environment except the separately owned staging project.
-export function pilotActivationEnabled(): boolean {
-  return process.env.KHOTA_FREE_PILOT_ACTIVATION_ENABLED === "true" &&
-    process.env.VERCEL_PROJECT_ID === "prj_mpaXaRNmczd9jbqjtigtyKpMDJ5r" &&
-    (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").includes("iteskfrpeeclzshauxog");
-}
 
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 
