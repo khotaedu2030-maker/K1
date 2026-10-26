@@ -1,6 +1,10 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { resolveParentContext } from "@/lib/pilot-parent";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import ParentChildTabs from "@/components/ParentChildTabs";
+import { resolveOwnedChild } from "@/lib/parent-child-selection";
+import { getRiyadhCalendarDate, addRiyadhCalendarDays, formatRiyadhCalendarDate, riyadhWallClockToUtcInstant } from "@/lib/riyadh-time";
 
 const dimLabels: Record<string, string> = {
   reading_score: "القراءة",
@@ -21,13 +25,10 @@ type ProgressSnapshot = {
 };
 
 // خُطى الأسبوعي — يُولَّد بالكامل من بيانات حقيقية عند كل طلب، ولا يُخزَّن كنص ثابت.
-export default async function P() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export default async function P({ searchParams }: { searchParams: Promise<{ child?: string }> }) {
+  const context = await resolveParentContext();
 
-  if (!user) {
+  if (!context) {
     return (
       <Shell>
         <main className="placeholder-page">
@@ -40,27 +41,26 @@ export default async function P() {
     );
   }
 
-  const { data: parent } = await supabase.from("parents").select("id").eq("user_id", user.id).maybeSingle();
-  const { data: children } = parent
-    ? await supabase.from("children").select("id, first_name").eq("parent_id", parent.id)
-    : { data: [] };
-  const firstChild = children?.[0] ?? null;
+  const supabase = createSupabaseAdminClient();
+  const { data: children } = await supabase.from("children").select("id, first_name").eq("parent_id", context.parentId);
+  const firstChild = resolveOwnedChild(children ?? [], (await searchParams).child);
 
   if (!firstChild) {
     return (
       <Shell>
         <main className="placeholder-page">
           <div className="narrow">
-            <p className="lead">لا يوجد أبناء مسجّلون بعد.</p>
+            <p className="lead">{(children ?? []).length ? "الطفل المطلوب غير مرتبط بحسابك." : "لا يوجد أبناء مسجّلون بعد."}</p>
           </div>
         </main>
       </Shell>
     );
   }
 
-  const weekAgo = new Date();
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  const weekAgoStr = weekAgo.toISOString().slice(0, 10);
+  const todayInRiyadh = getRiyadhCalendarDate(new Date());
+  const weekAgoInRiyadh = addRiyadhCalendarDays(todayInRiyadh, -7);
+  const weekAgoStr = formatRiyadhCalendarDate(weekAgoInRiyadh);
+  const createdAfter = riyadhWallClockToUtcInstant(weekAgoInRiyadh, 0, 0).toISOString();
 
   // الحضور خلال الأسبوع
   const { data: subs } = await supabase.from("subscriptions").select("cohort_id").eq("child_id", firstChild.id).eq("status", "active");
@@ -81,7 +81,7 @@ export default async function P() {
     .from("daily_tasks")
     .select("status")
     .eq("child_id", firstChild.id)
-    .gte("created_at", weekAgoStr);
+    .gte("created_at", createdAfter);
   const doneTasks = (taskRows ?? []).filter((t) => t.status === "done").length;
 
   // هدف الأسبوع
@@ -94,10 +94,10 @@ export default async function P() {
     .maybeSingle();
 
   const goalStatusLabel: Record<string, string> = {
-    achieved: "Achieved",
-    partially_achieved: "Partial",
-    active: "In progress",
-    carried_forward: "In progress",
+    achieved: "تحقّق ✓",
+    partially_achieved: "تحقّق جزئيًا",
+    active: "قيد التنفيذ",
+    carried_forward: "مُرحّل للأسبوع القادم",
     cancelled: "—",
   };
 
@@ -139,7 +139,7 @@ export default async function P() {
     .from("daily_pulse_reports")
     .select("readiness_status")
     .eq("child_id", firstChild.id)
-    .gte("created_at", weekAgoStr);
+    .gte("created_at", createdAfter);
   const readyCount = (readinessRows ?? []).filter((r) => r.readiness_status === "ready").length;
 
   // آخر توصية معلم
@@ -157,8 +157,9 @@ export default async function P() {
         <div className="narrow">
           <span className="eyebrow">خُطى الأسبوعي</span>
           <h1 className="title" style={{ fontSize: 34 }}>{firstChild.first_name}</h1>
+          {(children ?? []).length > 1 && <ParentChildTabs children={children ?? []} selectedId={firstChild.id} basePath="/parent/reports/weekly" />}
           <p className="lead">
-            الفترة: {weekAgoStr} — {new Date().toISOString().slice(0, 10)}
+            الفترة: {weekAgoStr} — {formatRiyadhCalendarDate(todayInRiyadh)}
           </p>
 
           <div className="dashcard">
