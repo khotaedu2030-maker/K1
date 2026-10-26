@@ -111,7 +111,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ chil
             {firstChild ? ` — هذه خُطى ${firstChild.first_name} هذا الأسبوع.` : ""}
           </h1>
 
-          {(children ?? []).length > 1 && <ParentChildTabs children={children ?? []} selectedId={firstChild?.id ?? null} basePath="/parent" />}
+          {(children ?? []).length > 1 && <ParentChildTabs options={children ?? []} selectedId={firstChild?.id ?? null} basePath="/parent" />}
           {!firstChild ? (
             <div className="dashcard" style={{ marginTop: 20 }}>
               <p>{(children ?? []).length ? "الطفل المطلوب غير مرتبط بحسابك." : "لا يوجد أبناء مسجّلون بعد على هذا الحساب."}</p>
