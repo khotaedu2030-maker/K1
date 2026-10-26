@@ -5,6 +5,9 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getGradeLabelArabic, parseAndValidateGrade } from "@/lib/grade-config";
 import { formatDaysList, formatCohortDisplayName } from "@/lib/plan-display";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+import { resolveGradeBand } from "@/lib/grade-config";
+import { getRuntimeSettings } from "@/lib/platform-settings";
+import Link from "next/link";
 
 type EnrollmentCohort = {
   title: string;
@@ -12,7 +15,9 @@ type EnrollmentCohort = {
   days_of_week: number[] | null;
   start_time: string;
   end_time: string;
-  plans: SupabaseRelation<{ name: string | null; price_sar: number | null; sessions_per_month: number | null }>;
+  status: string;
+  grade_band: string | null;
+  plans: SupabaseRelation<{ name: string | null; product: string; active: boolean; price_sar: number | null; sessions_per_month: number | null; days_per_week: number | null }>;
 };
 
 async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?: string; cohort?: string }> }) {
@@ -25,6 +30,13 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
   const grade = parsedGrade.ok ? parsedGrade.grade : 0;
   const gradeLabel = parsedGrade.ok ? getGradeLabelArabic(parsedGrade.grade) : "غير محدَّد";
 
+  // The query URL is not authorization: fail closed before asking families for
+  // personally identifiable information when the cohort or plan is not enrollable.
+  let unavailableReason: string | null = null;
+  if (!parsedGrade.ok || !cohortId) {
+    unavailableReason = "اختر الصف والمجموعة من صفحة الباقات أولًا.";
+  }
+
   const details = {
     grade: gradeLabel,
     program: "خُطى متابعة",
@@ -36,18 +48,38 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
     price: null as string | null,
   };
 
-  if (cohortId) {
+  if (!unavailableReason && cohortId) {
     try {
       const supabase = createSupabaseAdminClient();
       const { data: cohort } = await supabase
         .from("cohorts")
-        .select("title, product, days_of_week, start_time, end_time, plan_id, plans(name, price_sar, sessions_per_month)")
+        .select("title, product, grade_band, status, days_of_week, start_time, end_time, plan_id, plans(name, product, active, price_sar, sessions_per_month, days_per_week)")
         .eq("id", cohortId)
         .single();
 
-      if (cohort) {
+      if (!cohort) {
+        unavailableReason = "المجموعة المطلوبة غير موجودة. اختر مجموعة متاحة من الباقات.";
+      } else {
         const enrollmentCohort = cohort as EnrollmentCohort;
         const plan = supabaseRelationOne(enrollmentCohort.plans);
+        const { data: seats, error: seatsError } = await supabase.rpc("cohort_available_seats", { p_cohort_id: cohortId });
+        const settings = await getRuntimeSettings();
+        if (!settings.registrationEnabled) {
+          unavailableReason = "التسجيل مغلق حاليًا.";
+        } else if (enrollmentCohort.status !== "open") {
+          unavailableReason = "هذه المجموعة غير متاحة للتسجيل حاليًا.";
+        } else if (enrollmentCohort.grade_band !== resolveGradeBand(grade)) {
+          unavailableReason = "صف الطالب لا يطابق المجموعة المختارة.";
+        } else if (!plan || !plan.active || plan.product !== enrollmentCohort.product ||
+          !Number.isFinite(Number(plan.price_sar)) || Number(plan.price_sar) <= 0) {
+          unavailableReason = "الباقة المرتبطة بالمجموعة غير متاحة حاليًا.";
+        } else if (plan.days_per_week != null && enrollmentCohort.days_of_week?.length !== plan.days_per_week) {
+          unavailableReason = "بيانات أيام المجموعة غير متطابقة مع الباقة. اختر مجموعة أخرى.";
+        } else if (seatsError || typeof seats !== "number") {
+          unavailableReason = "تعذّر التحقق من المقاعد المتاحة حاليًا. أعد المحاولة.";
+        } else if (seats <= 0) {
+          unavailableReason = "اكتمل عدد المقاعد في هذه المجموعة. اختر مجموعة أخرى.";
+        }
         const days = enrollmentCohort.days_of_week ? formatDaysList(enrollmentCohort.days_of_week, "، ") : null;
         const planName = plan?.name ?? null;
         const priceSar = plan?.price_sar ?? null;
@@ -61,8 +93,22 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
         details.price = priceSar ? `${priceSar} ر.س` : "السعر يُعلن قريبًا";
       }
     } catch {
-      // بلا اتصال حقيقي بقاعدة البيانات — نكتفي بالملخص الأساسي (الصف فقط)
+      // A broken DB/RPC lookup must not present an apparently valid signup form.
+      unavailableReason = "تعذّر التحقق من المجموعة الآن. أعد المحاولة لاحقًا.";
     }
+  }
+
+  if (unavailableReason) {
+    return (
+      <div className="container">
+        <span className="badge">التسجيل غير متاح لهذه المجموعة</span>
+        <h1 className="title" style={{ fontSize: 32, marginTop: 16 }}>تحقق من اختيار المجموعة</h1>
+        <p className="lead">{unavailableReason}</p>
+        <Link className="btn outline" href={"/motabaa/plans?grade=" + (grade || 4)} style={{ marginTop: 16, display: "inline-flex" }}>
+          العودة للباقات والمجموعات
+        </Link>
+      </div>
+    );
   }
 
   return <EnrollForm grade={grade} cohortId={cohortId} details={details} />;
