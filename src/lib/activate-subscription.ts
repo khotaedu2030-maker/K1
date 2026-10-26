@@ -47,7 +47,8 @@ type SessionPrepResult =
 // تغيير في الخطوات أو الترتيب أو شروط الرفض — استخراج بحت، لا تعديل سلوك.
 async function prepareSessionsForActivation(
   supabase: ReturnType<typeof createSupabaseAdminClient>,
-  subscription: { id: string; plan_id: string; cohort_id: string | null }
+  subscription: { id: string; plan_id: string; cohort_id: string | null },
+  persistSessions = true
 ): Promise<SessionPrepResult> {
   const { data: plan, error: planFetchError } = await supabase
     .from("plans")
@@ -131,7 +132,7 @@ async function prepareSessionsForActivation(
     cursorCal = addRiyadhCalendarDays(cursorCal, 1);
   }
 
-  if (sessionsToInsert.length > 0) {
+  if (persistSessions && sessionsToInsert.length > 0) {
     const { error: sessionsError } = await supabase
       .from("sessions")
       .upsert(sessionsToInsert, { onConflict: "cohort_id,starts_at", ignoreDuplicates: true });
@@ -144,6 +145,14 @@ async function prepareSessionsForActivation(
     startDate: formatRiyadhCalendarDate(startCal),
     renewalDate: formatRiyadhCalendarDate(renewalCal),
   };
+}
+
+// Non-writing preparation: the pilot RPC alone performs the atomic write.
+export async function preparePilotSessionSchedule(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  subscription: { id: string; plan_id: string; cohort_id: string | null }
+): Promise<SessionPrepResult> {
+  return prepareSessionsForActivation(supabase, subscription, false);
 }
 
 export async function activateSubscriptionAfterPayment(
