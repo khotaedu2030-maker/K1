@@ -130,6 +130,13 @@ async function erase(table,key,id){
   if(error)problems.push("cleanup-"+table);
 }
 async function cleanup(){
+  // Any enrollment-created child also belongs exclusively to our synthetic parent.
+  // Reconcile IDs before deletion even if an earlier HTTP assertion interrupted.
+  if(created.parent){
+    const {data:allOwned,error:lookupError}=await admin.from("children").select("id").eq("parent_id",created.parent);
+    if(lookupError)problems.push("cleanup-child-lookup");
+    for(const row of allOwned||[])if(!created.children.includes(row.id))created.children.push(row.id);
+  }
   // Generated data only; never remove the pre-existing staging sample plan/cohort.
   for(const child of created.children){
     for(const name of ["daily_tasks","makeup_credits","daily_pulse_reports","attendance","recommendations"]){
@@ -397,6 +404,58 @@ try{
   const childToParentAfter=await request("/parent",{cookieHeader:childCookie});
   verify(childToParentAfter.status===200&&childToParentAfter.html.includes("طالب اختبار HTTP"),
     "Revoked student cookie restores parent's dashboard access");
+  // Actual booking gate -> authenticated parent -> pending-payment-only enrollment.
+  // Keep real payments OFF; never invoke activation or manual payment confirmation.
+  const publicCheckout=await request("/motabaa/enroll?grade=4&cohort="+created.cohort);
+  verify(publicCheckout.status===200 && publicCheckout.html.includes("اسم ولي الأمر") &&
+    publicCheckout.html.includes("مجموعة HTTP اختبار"),
+    "Open same-grade priced cohort should show enrollment form");
+  const wrongGradeCheckout=await request("/motabaa/enroll?grade=8&cohort="+created.cohort);
+  verify(wrongGradeCheckout.status===200 &&
+    wrongGradeCheckout.html.includes("صف الطالب لا يطابق المجموعة المختارة") &&
+    !wrongGradeCheckout.html.includes("اسم ولي الأمر"),
+    "Wrong grade cannot collect parent identity before detecting mismatch");
+  const missingCheckout=await request("/motabaa/enroll?grade=4&cohort="+randomUUID());
+  verify(missingCheckout.status===200 && missingCheckout.html.includes("المجموعة المطلوبة غير موجودة") &&
+    !missingCheckout.html.includes("اسم ولي الأمر"),
+    "Deleted or fabricated group cannot present enrollment form");
+  const guestEnroll=await request("/api/enroll",{
+    method:"POST",body:{parentName:"ولي أمر تجريبي",phone:"0500000000",childName:"طالب تجربة",grade:4,cohortId:created.cohort},
+  });
+  verify(guestEnroll.status===401,"Unverified guest cannot reserve a seat");
+  const enrollPayload={parentName:"ولي أمر HTTP",phone:"0500000000",
+    childName:"طالب تسجيل مؤقت "+tag,grade:4,cohortId:created.cohort};
+  rateLimitKeys.add(limiterKey("enroll:user",parent.id));
+  const enrollResponse=await request("/api/enroll",{method:"POST",cookieHeader:parent.cookieHeader,body:enrollPayload});
+  const enrolled=enrollResponse.status===200?JSON.parse(enrollResponse.html):{};
+  const subscriptionId=enrolled.subscriptionId;
+  // Reconcile newly added child even if later assertions fail, before verifying success.
+  const {data:enrolledChildren,error:childLookupError}=await admin.from("children")
+    .select("id").eq("parent_id",created.parent).eq("first_name",enrollPayload.childName);
+  if(childLookupError)fail("Synthetic enrollment child lookup failed");
+  for(const row of enrolledChildren||[])if(!created.children.includes(row.id))created.children.push(row.id);
+  verify(enrollResponse.status===200 && typeof subscriptionId==="string" &&
+    enrolledChildren?.length===1,"Authenticated enrollment creates exactly one synthetic child and a subscription");
+  const {data:newSub,error:subError}=await admin.from("subscriptions")
+    .select("id,status,parent_id,child_id").eq("id",subscriptionId).maybeSingle();
+  verify(!subError && newSub?.status==="pending_payment" &&
+    newSub.parent_id===created.parent && newSub.child_id===enrolledChildren[0].id,
+    "Enrollment must remain pending payment, never silently activate during payment pause");
+  const retryEnroll=await request("/api/enroll",{method:"POST",cookieHeader:parent.cookieHeader,body:enrollPayload});
+  verify(retryEnroll.status===200 && JSON.parse(retryEnroll.html).subscriptionId===subscriptionId,
+    "Retry with same child/cohort must return same held subscription");
+  const {count:enrollmentRows,error:subCountError}=await admin.from("subscriptions")
+    .select("id",{head:true,count:"exact"}).eq("child_id",enrolledChildren[0].id).eq("cohort_id",created.cohort);
+  verify(!subCountError && enrollmentRows===1,"Idempotent enrollment may not duplicate the seat hold");
+  const paymentScreen=await request("/motabaa/enroll/payment?sub="+subscriptionId,{cookieHeader:parent.cookieHeader});
+  verify(paymentScreen.status===200 &&
+    paymentScreen.html.includes("الدفع الإلكتروني متوقف مؤقتًا") &&
+    !paymentScreen.html.includes("تم حجز مقعد طفلك في خُطى"),
+    "Payment paused checkout must not claim active subscription or ready first session");
+  const subList=await request("/parent/subscriptions",{cookieHeader:parent.cookieHeader});
+  verify(subList.status===200 && subList.html.includes("بانتظار الدفع") &&
+    subList.html.includes("طالب تسجيل مؤقت"),
+    "Parent subscriptions list reflects pending enrollment rather than active");
     console.log("PASS live Staging localhost HTTP integration: "+checks+
     " assertions using actual Next proxy, Supabase SSR cookies, teacher/parent pages, CSRF, role checks, teacher POST, rate limits and DB.");
 }catch(e){
