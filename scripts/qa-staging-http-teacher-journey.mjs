@@ -262,6 +262,49 @@ try{
   const parentPageAfter=await request("/parent",{cookieHeader:parent.cookieHeader});
   verify(parentPageAfter.status===200 && parentPageAfter.html.includes("مراجعة مؤقتة"),
     "Parent dashboard must display teacher's report-derived review task");
+
+  // Parent multi-child regression: add the sibling to the SAME group only
+  // after the original report was completed so its expected roster is unchanged.
+  await insert("subscriptions",{
+    parent_id:created.parent,child_id:sibling,cohort_id:created.cohort,
+    plan_id:"staging-khota-2-20261025",status:"active",start_date:riyadhDate(start),
+  });
+  await insert("child_progress_snapshots",{
+    child_id:child,created_by:t1,source:"teacher",focus_score:4,
+  });
+  await insert("child_progress_snapshots",{
+    child_id:sibling,created_by:t1,source:"teacher",focus_score:1,
+  });
+  const futureStart=new Date(Date.now()+2*60*60_000);
+  const futureEnd=new Date(futureStart.getTime()+45*60_000);
+  const sharedSession=await insert("sessions",{
+    cohort_id:created.cohort,teacher_id:t1,status:"scheduled",
+    session_date:riyadhDate(futureStart),
+    starts_at:futureStart.toISOString(),ends_at:futureEnd.toISOString(),
+  });
+  created.sessions.push(sharedSession);
+  const parentSharedSchedule=await request("/parent/schedule",{cookieHeader:parent.cookieHeader});
+  verify(parentSharedSchedule.status===200 &&
+    parentSharedSchedule.html.includes("طالب اختبار HTTP") &&
+    parentSharedSchedule.html.includes("طالب اختبار ثانٍ"),
+    "Parent schedule must display both siblings enrolled in one cohort");
+  const secondOverview=await request("/parent?child="+encodeURIComponent(sibling),{cookieHeader:parent.cookieHeader});
+  verify(secondOverview.status===200 && secondOverview.html.includes("هذه خُطى طالب اختبار ثانٍ") &&
+    !secondOverview.html.includes("مراجعة مؤقتة"),
+    "Parent overview must switch to sibling data, not mix with first child");
+  const firstReport=await request("/parent/reports?child="+encodeURIComponent(child),{cookieHeader:parent.cookieHeader});
+  const siblingReport=await request("/parent/reports?child="+encodeURIComponent(sibling),{cookieHeader:parent.cookieHeader});
+  verify(firstReport.status===200 && firstReport.html.includes("4/5") &&
+    siblingReport.status===200 && siblingReport.html.includes("1/5") &&
+    !siblingReport.html.includes("4/5"),
+    "Parent progress reports must only use the selected child's snapshots");
+  const foreignReport=await request("/parent/reports?child="+randomUUID(),{cookieHeader:parent.cookieHeader});
+  verify(foreignReport.status===200 && foreignReport.html.includes("الطفل المطلوب غير مرتبط بحسابك") &&
+    !foreignReport.html.includes("4/5") && !foreignReport.html.includes("1/5"),
+    "Foreign child ID in query must fail closed with no progress disclosure");
+  const siblingWeekly=await request("/parent/reports/weekly?child="+encodeURIComponent(sibling),{cookieHeader:parent.cookieHeader});
+  verify(siblingWeekly.status===200 && siblingWeekly.html.includes("طالب اختبار ثانٍ"),
+    "Weekly parent report must render the explicitly owned sibling");
   const guestEnter=await request("/api/student-mode/enter",{method:"POST",body:{childId:child}});
   verify(guestEnter.status===401,"Guest must not open student mode");
   const invalidChildEnter=await request("/api/student-mode/enter",{
