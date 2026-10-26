@@ -7,8 +7,7 @@ import { formatRelativeSessionTime, formatSessionDay, formatSessionDate, formatS
 export type NextSession = {
   id: string;
   cohortId: string;
-  childId: string | null;
-  childName: string | null;
+  children: { id: string; name: string }[];
   programTitle: string | null;
   startsAt: string;
   endsAt: string;
@@ -47,20 +46,23 @@ export default function NextSessionCard({ session }: { session: NextSession | nu
       </div>
 
       <p style={{ margin: "14px 0 4px", fontWeight: 700 }}>{toParentFacingProgramName(session.programTitle)}</p>
-      {session.childName && <p style={{ margin: 0, color: "var(--gray)" }}>{session.childName}</p>}
+      {session.children.length > 0 && <p style={{ margin: 0, color: "var(--gray)" }}>{session.children.map((child) => child.name).join("، ")}</p>}
 
       <p style={{ color: "var(--t)", fontWeight: 800, marginTop: 14 }}>{relativeText}</p>
 
       <div style={{ marginTop: 18 }}>
-        {session.childId ? (
-          <SessionJoinButton
-            sessionId={session.id}
-            childId={session.childId}
-            startsAt={session.startsAt}
-            endsAt={session.endsAt}
-            meetingUrl={session.meetingUrl}
-          />
-        ) : null}
+        {session.children.map((child) => (
+          <div key={child.id} style={{ marginBottom: 12 }}>
+            {session.children.length > 1 && <b style={{ display: "block", marginBottom: 6 }}>{child.name}</b>}
+            <SessionJoinButton
+              sessionId={session.id}
+              childId={child.id}
+              startsAt={session.startsAt}
+              endsAt={session.endsAt}
+              meetingUrl={session.meetingUrl}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
