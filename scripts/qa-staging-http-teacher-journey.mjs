@@ -294,10 +294,12 @@ try{
     "Parent overview must switch to sibling data, not mix with first child");
   const firstReport=await request("/parent/reports?child="+encodeURIComponent(child),{cookieHeader:parent.cookieHeader});
   const siblingReport=await request("/parent/reports?child="+encodeURIComponent(sibling),{cookieHeader:parent.cookieHeader});
-  verify(firstReport.status===200 && firstReport.html.includes("4/5") &&
-    siblingReport.status===200 && siblingReport.html.includes("1/5") &&
-    !siblingReport.html.includes("4/5"),
-    "Parent progress reports must only use the selected child's snapshots");
+  verify(firstReport.status===200 &&
+    firstReport.html.includes("التركيز: 4 من 5 إلى 4 من 5") &&
+    siblingReport.status===200 &&
+    siblingReport.html.includes("التركيز: 1 من 5 إلى 1 من 5") &&
+    !siblingReport.html.includes("التركيز: 4 من 5 إلى 4 من 5"),
+    "Parent progress reports must only use selected child's score and accessible dimension label");
   const foreignReport=await request("/parent/reports?child="+randomUUID(),{cookieHeader:parent.cookieHeader});
   verify(foreignReport.status===200 && foreignReport.html.includes("الطفل المطلوب غير مرتبط بحسابك") &&
     !foreignReport.html.includes("4/5") && !foreignReport.html.includes("1/5"),
