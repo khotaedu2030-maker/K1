@@ -60,6 +60,22 @@ assert.match(read("src/lib/messaging-authorization.ts"), /getActiveStaffRole\(us
 
 const adminActive = read("src/app/api/admin/admin-users/active/route.ts");
 assert.match(adminActive, /typeof active !== "boolean"/, "admin activation must require an explicit boolean");
+const settingsPage = read("src/app/admin/settings/page.tsx");
+const settingsForm = read("src/app/admin/settings/SettingsForm.tsx");
+const settingsRuntime = read("src/lib/platform-settings.ts");
+const settingsSeed = read("supabase/migrations/20261027_seed_admin_settings_for_staging.sql");
+assert.match(settingsPage, /<SettingsForm initial=\{settings\}/, "settings page must expose live database settings");
+assert.match(settingsPage, /تعذّر تحميل إعدادات المنصة/, "settings errors must be explicit, not show false defaults");
+assert.match(settingsForm, /"\/api\/admin\/settings"/, "settings must submit through authenticated save API");
+assert.match(settingsForm, /role="switch"/, "registration switch must be editable");
+assert.match(settingsForm, /registrationEnabled: values\.registration_enabled/, "registration switch must reach server");
+assert.match(settingsForm, /pauseMinDays: values\.pause_min_days/, "pause controls must reach server");
+assert.match(settingsForm, /"حفظ التعديلات"/, "settings UI must have a real save action");
+assert.match(settingsForm, /disabled=\{!dirty \|\| loading\}/, "save must be inactive when no changes exist");
+assert.match(settingsForm, /"\/admin\/admins"/, "role changes must remain in dedicated authorized administration");
+assert.match(settingsRuntime, /Number\.isInteger\(Number\(String\(data\.quiet_hours_start\)/, "midnight must be a valid persisted quiet hour");
+assert.match(settingsSeed, /on conflict \(id\) do nothing/, "settings migration must not overwrite live customizations");
+assert.match(settingsSeed, /'20:00'::time/, "seed must preserve current runtime quiet hours");
 const adminSettings = read("src/app/api/admin/settings/route.ts");
 assert.match(adminSettings, /isValidTimeHHMM/, "admin quiet hours must validate real clock times");
 const cohortOps = read("src/app/api/admin/cohort-operations/route.ts");
