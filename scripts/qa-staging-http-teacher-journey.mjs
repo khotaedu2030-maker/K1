@@ -512,6 +512,23 @@ try{
     paymentScreen.html.includes("الدفع الإلكتروني متوقف مؤقتًا") &&
     !paymentScreen.html.includes("تم حجز مقعد طفلك في خُطى"),
     "Payment paused checkout must not claim active subscription or ready first session");
+  const forgedPaidView=await request(
+    "/motabaa/enroll/payment?sub="+subscriptionId+"&paid=1",
+    {cookieHeader:parent.cookieHeader}
+  );
+  verify(forgedPaidView.status===200 &&
+    forgedPaidView.html.includes("الدفع الإلكتروني متوقف مؤقتًا") &&
+    !forgedPaidView.html.includes("تم حجز مقعد طفلك في خُطى.") &&
+    !forgedPaidView.html.includes("تم تفعيل الاشتراك"),
+    "A forged paid=1 URL must NEVER display successful activation while DB subscription is pending");
+  const unknownPaidView=await request(
+    "/motabaa/enroll/payment?sub="+randomUUID()+"&paid=1",
+    {cookieHeader:parent.cookieHeader}
+  );
+  verify(unknownPaidView.status===200 &&
+    unknownPaidView.html.includes("هذا الاشتراك غير متاح لحسابك") &&
+    !unknownPaidView.html.includes("تم حفظ طلب تسجيلك"),
+    "An unknown subscription id must not claim a valid saved seat or payment");
   const subList=await request("/parent/subscriptions",{cookieHeader:parent.cookieHeader});
   verify(subList.status===200 && subList.html.includes("بانتظار الدفع") &&
     subList.html.includes("طالب تسجيل مؤقت"),
@@ -572,6 +589,14 @@ try{
   verify(grant.status===200 && JSON.parse(grant.html).freePilot===true &&
     JSON.parse(grant.html).alreadyActive===false,
     "Staging super admin may activate synthetic pilot without paid transaction");
+  const verifiedActiveView=await request(
+    "/motabaa/enroll/payment?sub="+subscriptionId,
+    {cookieHeader:parent.cookieHeader}
+  );
+  verify(verifiedActiveView.status===200 &&
+    verifiedActiveView.html.includes("تم تفعيل الاشتراك") &&
+    !verifiedActiveView.html.includes("الدفع الإلكتروني متوقف مؤقتًا"),
+    "Confirmed active trial subscription shows success based on DB state, not URL flag");
   const {data:activated,error:activeError}=await admin.from("subscriptions")
     .select("status,start_date,renewal_date").eq("id",subscriptionId).single();
   verify(!activeError && activated?.status==="active" &&
