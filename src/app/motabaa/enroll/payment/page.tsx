@@ -85,8 +85,8 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
     <Shell>
       <main className="section">
         <div className="narrow">
-          <span className="eyebrow">الخطوة الأخيرة</span>
-          <h1 className="title" style={{ fontSize: 34 }}>أكمل اشتراكك</h1>
+          <span className="eyebrow">{paymentsEnabled ? "الخطوة الأخيرة" : "متابعة الطلب"}</span>
+          <h1 className="title" style={{ fontSize: 34 }}>{paymentsEnabled ? "أكمل اشتراكك" : "طلب تسجيل طفلك"}</h1>
           {lookupError ? (
             <p role="alert">تعذّر التحقق من حالة الاشتراك الآن. أعد تحميل الصفحة بعد قليل.</p>
           ) : unavailable ? (
