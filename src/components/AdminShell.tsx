@@ -63,8 +63,8 @@ export default function AdminShell({ adminName, role, children }: { adminName: s
   }, []);
 
   useEffect(() => {
-    void loadBadges();
     const onRefresh = () => { void loadBadges(); };
+    const firstRefresh = window.setTimeout(onRefresh, 0);
     const onVisibility = () => {
       if (document.visibilityState === "visible") void loadBadges();
     };
@@ -73,6 +73,7 @@ export default function AdminShell({ adminName, role, children }: { adminName: s
     window.addEventListener("khota-admin-badges-refresh", onRefresh);
     const interval = window.setInterval(onRefresh, 45_000);
     return () => {
+      window.clearTimeout(firstRefresh);
       window.clearInterval(interval);
       window.removeEventListener("focus", onRefresh);
       document.removeEventListener("visibilitychange", onVisibility);
