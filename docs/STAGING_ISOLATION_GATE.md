@@ -38,6 +38,12 @@ This is an operational checklist for [launch issue #56](https://github.com/khota
 - Keep real Paylink disabled until legally/operationally ready and a separately approved production rollout is made.
 - Record dated acceptance evidence for the first 20-student controlled pilot in #56.
 
-## Operational status
-- New isolated Vercel staging project: **NOT YET CREATED OR VERIFIED**.
-- Production `k1` untouched. Do not use a `READY` Vercel build or CI test status as proof of real end-to-end functionality.
+## Operational status — updated 27 October 2026
+
+- **Isolated Vercel project created and verified:** `khota-staging-web` (`prj_mpaXaRNmczd9jbqjtigtyKpMDJ5r`), `https://khota-staging-web-khota.vercel.app`. No official `k1` project settings or production Supabase changes were authorized or made by these checks.
+- Isolated Supabase project `iteskfrpeeclzshauxog`; staging-only backend credential ownership independently probed with Supabase Auth Admin API and a dedicated staging plan. Original staging cohort and plan are preserved.
+- **Release candidate:** DRAFT PR #74, `release/staging-candidate-rls-and-app-20261027`. Staging deployment `dpl_5MXNvjcHjXmdSihbHiDjWGjgVss3` READY. GitHub CI and PostgreSQL 17 synthetic RLS role checks PASS; 81/81 Next.js localhost Auth/SSR-cookie/HTTP/DB assertions PASS; synthetic cleanup independently confirmed.
+- **Security parity repaired in source:** ten inactive-teacher read policies were hardened in isolated staging, and the reviewed migration file plus PostgreSQL tests are now included with release candidate. **Production RLS remains unchanged pending separately approved preflight, backup, migration, and rollback.**
+- Free trial activation is enabled only on independently isolated staging; it is a server-authorized no-fee entitlement with an audit row, not a payment. Production payment remains disabled.
+- **Still unverified and required before public launch:** real email OTP delivery, real-device iOS/Android interactions, an authorized teacher account and genuine Teams meeting URL, production DB migration gate, production deployment approval, and appropriate commercial permits.
+- Do not use a Vercel READY status or 81 simulated/HTTP tests as proof of complete real-browser end-to-end acceptance. The release decision checklist lives in `docs/RELEASE_CANDIDATE_GO_NO_GO_20261027.md`.

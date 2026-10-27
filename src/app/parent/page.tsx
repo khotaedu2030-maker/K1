@@ -3,18 +3,24 @@ import Shell from "@/components/Shell";
 import { resolveParentContext } from "@/lib/pilot-parent";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import PilotLogoutButton from "./PilotLogoutButton";
+import ParentChildTabs from "@/components/ParentChildTabs";
+import { resolveOwnedChild } from "@/lib/parent-child-selection";
+import { formatSessionDay, formatSessionDate } from "@/lib/arabic-time";
+import { summarizeParentTasks, type ParentTask } from "@/lib/parent-task-summary";
+import { getRiyadhCalendarDate, formatRiyadhCalendarDate } from "@/lib/riyadh-time";
 
 const links = [
   ["الأبناء", "/parent/children"],
   ["الجدول", "/parent/schedule"],
   ["التقارير", "/parent/reports"],
+  ["المهام", "/parent/tasks"],
   ["الرسائل", "/parent/messages"],
   ["التوصيات", "/parent/recommendations"],
   ["الاشتراك", "/parent/subscriptions"],
   ["المدفوعات", "/parent/payments"],
 ];
 
-export default async function P() {
+export default async function P({ searchParams }: { searchParams: Promise<{ child?: string }> }) {
   const context = await resolveParentContext();
 
   if (!context) {
@@ -41,8 +47,8 @@ export default async function P() {
 
   const { data: children } = await admin.from("children").select("id, first_name").eq("parent_id", parent.id);
 
-  const firstChild = children?.[0] ?? null;
-  let tasks: { title: string; status: string }[] = [];
+  const firstChild = resolveOwnedChild(children ?? [], (await searchParams).child);
+  let tasks: ParentTask[] = [];
   let recommendation: { reason: string } | null = null;
   let pulse: { tasks_completed: string[]; independence_rating: number | null; focus_rating: number | null; tomorrow_readiness: string | null; readiness_status: string | null; remaining_review: string | null; created_at: string } | null = null;
   let weeklyGoal: { title: string; status: string; progress: number | null } | null = null;
@@ -50,7 +56,7 @@ export default async function P() {
 
   if (firstChild) {
     const [tasksResult, recommendationResult, pulseResult, weeklyGoalResult, independenceResult] = await Promise.all([
-      admin.from("daily_tasks").select("title, status").eq("child_id", firstChild.id).order("created_at", { ascending: false }).limit(5),
+      admin.from("daily_tasks").select("id, title, subject, status, due_date, created_at").eq("child_id", firstChild.id).order("created_at", { ascending: false }).limit(100),
       admin.from("recommendations").select("reason").eq("child_id", firstChild.id).eq("status", "open").limit(1).maybeSingle(),
       admin
         .from("daily_pulse_reports")
@@ -81,6 +87,9 @@ export default async function P() {
     latestIndependence = independenceResult.data;
   }
 
+  const taskSummary = summarizeParentTasks(tasks, formatRiyadhCalendarDate(getRiyadhCalendarDate(new Date())));
+  const previewTasks = [...taskSummary.pending, ...taskSummary.needsReview, ...taskSummary.done].slice(0, 5);
+
   const readinessLabel: Record<string, string> = {
     ready: "جاهز ✓",
     needs_light_review: "يحتاج مراجعة خفيفة",
@@ -108,9 +117,10 @@ export default async function P() {
             {firstChild ? ` — هذه خُطى ${firstChild.first_name} هذا الأسبوع.` : ""}
           </h1>
 
+          {(children ?? []).length > 1 && <ParentChildTabs options={children ?? []} selectedId={firstChild?.id ?? null} basePath="/parent" />}
           {!firstChild ? (
             <div className="dashcard" style={{ marginTop: 20 }}>
-              <p>لا يوجد أبناء مسجّلون بعد على هذا الحساب.</p>
+              <p>{(children ?? []).length ? "الطفل المطلوب غير مرتبط بحسابك." : "لا يوجد أبناء مسجّلون بعد على هذا الحساب."}</p>
               <Link className="btn" href="/motabaa/plans">تسجيل طفل ←</Link>
             </div>
           ) : (
@@ -121,7 +131,7 @@ export default async function P() {
                   <div className="dashcard next-session-hero">
                     <span className="badge">بطاقة الإنجاز اليومية</span>
                     <p style={{ color: "var(--gray)", marginTop: 8 }}>
-                      آخر تحديث: {new Date(pulse.created_at).toLocaleDateString("ar-SA", { weekday: "long", day: "numeric", month: "short" })}
+                      آخر تحديث: {formatSessionDay(pulse.created_at)} {formatSessionDate(pulse.created_at)}
                     </p>
                     {(pulse.tasks_completed ?? []).length > 0 && (
                       <div style={{ marginTop: 12 }}>
@@ -168,17 +178,30 @@ export default async function P() {
 
                 <div style={{ marginTop: 20 }}>
                   <div className="dashcard">
-                    <b>ماذا أنجز مؤخرًا؟</b>
-                    {tasks && tasks.length > 0 ? (
-                      tasks.map((t: { title: string; status: string }, i: number) => (
-                        <div className="taskline" key={i}>
+                    <b>متابعة مهام {firstChild.first_name}</b>
+                    <p style={{ color: "var(--gray)", fontSize: 13, marginTop: 8 }}>
+                      قيد الإنجاز: {taskSummary.pending.length} · تنتظر المعلم: {taskSummary.needsReview.length} · منجزة: {taskSummary.done.length}
+                      {taskSummary.overdueCount > 0 ? " · متأخرة: " + taskSummary.overdueCount : ""}
+                    </p>
+                    {previewTasks.length > 0 ? (
+                      previewTasks.map((t) => (
+                        <div className="taskline" key={t.id}>
                           <span className={t.status === "done" ? "ok" : "warn"}>{t.status === "done" ? "✓" : "△"}</span>
-                          <span>{t.title}</span>
+                          <span>
+                            {t.title}
+                            <small style={{ display: "block", color: "var(--gray)" }}>
+                              {t.status === "done" ? "أنجزها الطالب" : t.status === "needs_review" ? "بانتظار مراجعة المعلم" : "قيد الإنجاز"}
+                            </small>
+                          </span>
                         </div>
                       ))
                     ) : (
                       <p style={{ color: "var(--gray)" }}>لا توجد مهام مسجّلة بعد.</p>
                     )}
+                    <Link className="btn small outline" href={"/parent/tasks?child=" + encodeURIComponent(firstChild.id)} style={{ marginTop: 14 }}>
+                      جميع مهام {firstChild.first_name}
+                    </Link>
+                    {tasks.length === 100 && <p style={{ color: "var(--gray)", fontSize: 12 }}>الملخص لأحدث 100 مهمة.</p>}
                   </div>
                 </div>
               </div>
@@ -224,7 +247,7 @@ export default async function P() {
                   <b>روابط سريعة</b>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
                     {links.map((l) => (
-                      <Link key={l[1]} href={l[1]} style={{ color: "var(--t)", fontWeight: 700, fontSize: 14.5 }}>{l[0]} ←</Link>
+                      <Link key={l[1]} href={(l[1] === "/parent/reports" || l[1] === "/parent/tasks") && firstChild ? l[1] + "?child=" + encodeURIComponent(firstChild.id) : l[1]} style={{ color: "var(--t)", fontWeight: 700, fontSize: 14.5 }}>{l[0]} ←</Link>
                     ))}
                   </div>
                 </div>

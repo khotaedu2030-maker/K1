@@ -3,6 +3,8 @@ import Shell from "@/components/Shell";
 import PauseRequestForm from "./PauseRequestForm";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+import { areOnlinePaymentsEnabled } from "@/lib/payment-settings";
+import { getGradeLabelArabic } from "@/lib/grade-config";
 
 // نستخدم هنا فقط (تنسيق تاريخ عربي بسيط لتاريخ خام YYYY-MM-DD، بلا وقت) — لا علاقة له
 // بمنطق الاشتراك نفسه، عرض فقط.
@@ -48,6 +50,7 @@ type SubscriptionRow = {
 };
 
 export default async function P() {
+  const paymentsEnabled = areOnlinePaymentsEnabled();
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -67,7 +70,7 @@ export default async function P() {
   }
 
   const { data: parent } = await supabase.from("parents").select("id").eq("user_id", user.id).maybeSingle();
-  const { data: children } = parent ? await supabase.from("children").select("id, first_name").eq("parent_id", parent.id) : { data: [] };
+  const { data: children } = parent ? await supabase.from("children").select("id, first_name, grade").eq("parent_id", parent.id) : { data: [] };
   const childIds = (children ?? []).map((c) => c.id);
 
   const { data: subscriptions } = childIds.length
@@ -79,7 +82,8 @@ export default async function P() {
     ? await supabase.from("subscription_pauses").select("id, subscription_id, start_date, end_date, status").in("subscription_id", subIds).order("created_at", { ascending: false })
     : { data: [] as PauseRow[] };
 
-  const childName = new Map((children ?? []).map((c) => [c.id, c.first_name]));
+  const childInfo = new Map((children ?? []).map((c) => [c.id, { name: c.first_name, grade: c.grade }]));
+  const pendingLabel = paymentsEnabled ? statusLabel.pending_payment : "الطلب محفوظ — بانتظار التفعيل";
   const pausesBySub = new Map<string, PauseRow[]>();
   for (const p of (pauses ?? []) as PauseRow[]) {
     if (!pausesBySub.has(p.subscription_id)) pausesBySub.set(p.subscription_id, []);
@@ -93,7 +97,7 @@ export default async function P() {
           <div className="admin-page-head">
             <div>
               <span className="eyebrow">لوحة ولي الأمر</span>
-              <h1 className="title" style={{ fontSize: 34 }}>الاشتراك</h1>
+              <h1 className="title" style={{ fontSize: 34 }}>اشتراكات الأبناء</h1>
             </div>
             <Link className="btn outline small" href="/parent/payments">المدفوعات ←</Link>
           </div>
@@ -104,8 +108,13 @@ export default async function P() {
 
           {((subscriptions ?? []) as SubscriptionRow[]).map((s) => (
             <div className="dashcard" key={s.id} style={{ marginBottom: 16 }}>
-              <b>{childName.get(s.child_id)} — {supabaseRelationOne(s.plans)?.name}</b>
-              <div className="taskline"><span>الحالة</span><span className="badge">{statusLabel[s.status] ?? s.status}</span></div>
+              <b>{childInfo.get(s.child_id)?.name ?? "طالب"} ({childInfo.get(s.child_id)?.grade ? getGradeLabelArabic(childInfo.get(s.child_id)!.grade) : "صف غير محدد"}) — {supabaseRelationOne(s.plans)?.name}</b>
+              <div className="taskline"><span>الحالة</span><span className="badge">{s.status === "pending_payment" ? pendingLabel : (statusLabel[s.status] ?? s.status)}</span></div>
+              {!paymentsEnabled && s.status === "pending_payment" && (
+                <p style={{ color: "var(--gray)", fontSize: 13, marginTop: 8 }}>
+                  الدفع الإلكتروني متوقف حاليًا، والاشتراك لم يُفعَّل بعد. يمكنك متابعة حالة الطلب هنا.
+                </p>
+              )}
               {s.start_date && <div className="taskline"><span>تاريخ البداية</span><span>{formatPlainDateArabic(s.start_date)}</span></div>}
               {s.renewal_date && <div className="taskline"><span>نهاية الدورة الحالية</span><span>{formatPlainDateArabic(s.renewal_date)}</span></div>}
 

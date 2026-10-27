@@ -1,6 +1,9 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { resolveParentContext } from "@/lib/pilot-parent";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import ParentChildTabs from "@/components/ParentChildTabs";
+import { resolveOwnedChild } from "@/lib/parent-child-selection";
 
 type ProgressSnapshot = {
   reading_score: number | null;
@@ -20,13 +23,10 @@ const dims: { key: keyof ProgressSnapshot; label: string }[] = [
   { key: "independence_score", label: "الاستقلالية" },
 ];
 
-export default async function P() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export default async function P({ searchParams }: { searchParams: Promise<{ child?: string }> }) {
+  const context = await resolveParentContext();
 
-  if (!user) {
+  if (!context) {
     return (
       <Shell>
         <main className="placeholder-page">
@@ -39,11 +39,9 @@ export default async function P() {
     );
   }
 
-  const { data: parent } = await supabase.from("parents").select("id").eq("user_id", user.id).maybeSingle();
-  const { data: children } = parent
-    ? await supabase.from("children").select("id, first_name").eq("parent_id", parent.id)
-    : { data: [] };
-  const firstChild = children?.[0] ?? null;
+  const supabase = createSupabaseAdminClient();
+  const { data: children } = await supabase.from("children").select("id, first_name").eq("parent_id", context.parentId);
+  const firstChild = resolveOwnedChild(children ?? [], (await searchParams).child);
 
   const { data: snapshots } = firstChild
     ? await supabase
@@ -62,15 +60,18 @@ export default async function P() {
         <div className="narrow">
           <span className="eyebrow">لوحة ولي الأمر</span>
           <h1 className="title" style={{ fontSize: 34 }}>التقدّم — البداية → الآن</h1>
+          {firstChild && <p className="lead">تقدّم {firstChild.first_name}</p>}
+          {(children ?? []).length > 1 && <ParentChildTabs options={children ?? []} selectedId={firstChild?.id ?? null} basePath="/parent/reports" />}
+          {(children ?? []).length > 0 && !firstChild && <p className="lead">الطفل المطلوب غير مرتبط بحسابك.</p>}
           <p className="lead">
             مؤشرات متابعة داخلية في خُطى، وليست قياسات علمية معيارية.
           </p>
 
           <div className="actions" style={{ marginBottom: 20 }}>
-            <Link className="btn outline" href="/parent/reports/weekly">التقرير الأسبوعي ←</Link>
+            <Link className="btn outline" href={firstChild ? "/parent/reports/weekly?child=" + encodeURIComponent(firstChild.id) : "/parent/reports/weekly"}>التقرير الأسبوعي ←</Link>
           </div>
 
-          {!first || !latest ? (
+          {!firstChild || !first || !latest ? (
             <p style={{ color: "var(--gray)" }}>لا توجد تقييمات مسجّلة بعد لعرض التقدّم.</p>
           ) : (
             <div className="dashcard">
@@ -79,7 +80,7 @@ export default async function P() {
                 const to = latest[d.key];
                 if (from == null || to == null) return null;
                 return (
-                  <div className="taskline" key={d.key}>
+                  <div className="taskline" key={d.key} aria-label={`${d.label}: ${from} من 5 إلى ${to} من 5`}>
                     <span style={{ minWidth: 100 }}>{d.label}</span>
                     <span>
                       {from}/5 → <b style={{ color: to > from ? "var(--t)" : to < from ? "var(--p)" : "inherit" }}>{to}/5</b>

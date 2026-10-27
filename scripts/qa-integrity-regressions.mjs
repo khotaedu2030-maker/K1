@@ -60,6 +60,23 @@ assert.match(read("src/lib/messaging-authorization.ts"), /getActiveStaffRole\(us
 
 const adminActive = read("src/app/api/admin/admin-users/active/route.ts");
 assert.match(adminActive, /typeof active !== "boolean"/, "admin activation must require an explicit boolean");
+const settingsPage = read("src/app/admin/settings/page.tsx");
+const settingsForm = read("src/app/admin/settings/SettingsForm.tsx");
+const settingsRuntime = read("src/lib/platform-settings.ts");
+const settingsSeed = read("supabase/migrations/20261027_seed_admin_settings_for_staging.sql");
+assert.match(settingsPage, /<SettingsForm initial=\{settings\}/, "settings page must expose live database settings");
+assert.match(settingsPage, /تعذّر تحميل إعدادات المنصة/, "settings errors must be explicit, not show false defaults");
+assert.match(settingsForm, /"\/api\/admin\/settings"/, "settings must submit through authenticated save API");
+assert.match(settingsForm, /role="switch"/, "registration switch must be editable");
+assert.match(settingsForm, /registrationEnabled: values\.registration_enabled/, "registration switch must reach server");
+assert.match(settingsForm, /pauseMinDays: values\.pause_min_days/, "pause controls must reach server");
+assert.match(settingsForm, /"حفظ التعديلات"/, "settings UI must have a real save action");
+assert.match(settingsForm, /disabled=\{!dirty \|\| loading\}/, "save must be inactive when no changes exist");
+assert.match(settingsForm, /"\/admin\/admins"/, "role changes must remain in dedicated authorized administration");
+assert.match(settingsRuntime, /quietClockMinutes\(data\.quiet_hours_start/, "minute-accurate quiet-hours setting must be consumed");
+assert.match(settingsRuntime, /quietHoursStartMinutes: startMinutes/, "midnight must be preserved without coercing to a default");
+assert.match(settingsSeed, /on conflict \(id\) do nothing/, "settings migration must not overwrite live customizations");
+assert.match(settingsSeed, /'20:00'::time/, "seed must preserve current runtime quiet hours");
 const adminSettings = read("src/app/api/admin/settings/route.ts");
 assert.match(adminSettings, /isValidTimeHHMM/, "admin quiet hours must validate real clock times");
 const cohortOps = read("src/app/api/admin/cohort-operations/route.ts");
@@ -136,6 +153,13 @@ assert.match(studentTasks, /taskError/, "student tasks must fail closed on looku
 assert.match(studentTasks, /eq\("status", task\.status\)/, "student task toggles must guard against state races");
 assert.match(studentTasks, /if \(!updated\)/, "student task toggles must detect zero-row race outcomes");
 
+const provisionTeacher = read("src/app/api/admin/teachers/provision-identity/route.ts");
+assert.match(provisionTeacher, /hasProvisionProof\(candidate, teacherId, email\)/, "teacher recovery must require server-created provisioning proof");
+assert.match(provisionTeacher, /emailMatches\.length === 1/, "teacher provisioning must identify collisions without auto-linking");
+assert.match(provisionTeacher, /parentRole \|\| adminRole/, "teacher provisioning must reject existing parent/admin identities");
+assert.match(provisionTeacher, /البريد المستخدم في طلب المعلم مرتبط بحساب ولي أمر/, "parent-email collision must be actionable for admin");
+assert.match(provisionTeacher, /البريد المستخدم في طلب المعلم مرتبط بحساب إدارة/, "admin-email collision must be actionable for admin");
+assert.doesNotMatch(provisionTeacher, /admin\.auth\.admin\.updateUserById/, "teacher provisioning must not rewrite existing auth user roles");
 const roleResolution = read("src/app/api/auth/resolve-role/route.ts");
 assert.match(roleResolution, /adminError/, "role resolution must fail closed on admin lookup errors");
 assert.match(roleResolution, /teacherError/, "role resolution must fail closed on teacher lookup errors");

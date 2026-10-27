@@ -56,7 +56,7 @@ export async function POST(req: Request) {
 
   const bodyEmail = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   if (bodyEmail && bodyEmail !== email) {
-    console.error(`[enroll] عدم تطابق بريد: body=${bodyEmail} جلسة=${email} للمستخدم ${user.id}.`);
+    console.error(`[enroll] عدم تطابق بريد الحساب ونموذج التسجيل للمستخدم ${user.id}.`);
     return NextResponse.json({ error: "البريد المدخل لا يطابق الحساب المسجل دخوله." }, { status: 409 });
   }
 
@@ -173,7 +173,7 @@ export async function POST(req: Request) {
 
     if (byEmail && byEmail.user_id && byEmail.user_id !== user.id) {
       // صف موجود بنفس البريد لكن مرتبط بحساب مستخدم آخر فعليًا — تعارض حقيقي، لا دمج تلقائي.
-      console.error(`[enroll] تعارض: البريد ${email} مرتبط بالفعل بمستخدم آخر (${byEmail.user_id}) غير الحالي (${user.id}).`);
+      console.error(`[enroll] تعارض ربط بريد ولي الأمر؛ مستخدم سابق غير المستخدم الحالي ${user.id}.`);
       return NextResponse.json({ error: "هذا البريد مرتبط بحساب آخر بالفعل. تواصل معنا للمساعدة." }, { status: 409 });
     }
 
@@ -212,7 +212,7 @@ export async function POST(req: Request) {
       const phoneRows = byPhone ?? [];
       if (phoneRows.length > 1) {
         // أكثر من صف بنفس الجوال (تكرار قديم) — لا نُنشئ صفًا ثالثًا، نرفض ونُسجِّل للمراجعة.
-        console.error(`[enroll] تكرار جوال قديم (${phoneRows.length} صفوف) للجوال ${normalizedPhone} — يتطلب مراجعة يدوية قبل تسجيل المستخدم ${user.id}.`);
+        console.error(`[enroll] تكرار جوال قديم (${phoneRows.length} صفوف) يتطلب مراجعة يدوية قبل تسجيل المستخدم ${user.id}.`);
         return NextResponse.json({ error: "هذا الرقم مرتبط بأكثر من حساب. تواصل معنا للمساعدة." }, { status: 409 });
       }
 
@@ -220,7 +220,7 @@ export async function POST(req: Request) {
       if (phoneMatch && (phoneMatch.user_id || phoneMatch.email)) {
         // الصف الموجود ليس يتيمًا فعليًا (مرتبط بحساب آخر أو ببريد آخر بالفعل) — تعارض حقيقي،
         // لا ربط تلقائي آمن هنا.
-        console.error(`[enroll] تعارض: الجوال ${normalizedPhone} مرتبط بصف غير يتيم (${phoneMatch.id}) — لا يمكن ربطه تلقائيًا بالمستخدم ${user.id}.`);
+        console.error(`[enroll] تعارض ملكية جوال ولي الأمر عند ربط المستخدم ${user.id}.`);
         return NextResponse.json({ error: "هذا الرقم مرتبط بحساب آخر بالفعل. تواصل معنا للمساعدة." }, { status: 409 });
       }
 

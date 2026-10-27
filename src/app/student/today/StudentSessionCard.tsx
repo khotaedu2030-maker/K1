@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatSessionDay, formatSessionTime } from "@/lib/arabic-time";
+import { formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
 
 type SessionInfo = { id: string; startsAt: string; endsAt: string; title: string } | null;
 
@@ -26,7 +28,7 @@ export default function StudentSessionCard({ session, junior }: { session: Sessi
     return (
       <div className="student-card student-empty">
         <span className="icon">🌤️</span>
-        <p>لا توجد جلسة اليوم — يوم راحة!</p>
+        <p>لا توجد جلسة قادمة حاليًا.</p>
       </div>
     );
   }
@@ -34,6 +36,9 @@ export default function StudentSessionCard({ session, junior }: { session: Sessi
   const start = new Date(session.startsAt);
   const end = new Date(session.endsAt);
   const opensAt = new Date(start.getTime() - 10 * 60 * 1000);
+  const isTodayInRiyadh =
+    formatRiyadhCalendarDate(getRiyadhCalendarDate(start)) ===
+    formatRiyadhCalendarDate(getRiyadhCalendarDate(now));
 
   const status = now > end ? "ended" : now >= opensAt ? "joinable" : "early";
 
@@ -70,8 +75,8 @@ export default function StudentSessionCard({ session, junior }: { session: Sessi
       <span>{session.title}</span>
       {status === "early" ? (
         <span className="big-time">
-          {junior ? "جلستك اليوم" : "جلستك"} الساعة{" "}
-          {start.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+          {isTodayInRiyadh ? "جلستك اليوم" : `جلستك ${formatSessionDay(start)}`} الساعة{" "}
+          {formatSessionTime(start)}
         </span>
       ) : (
         <span className="big-time">جاهز الآن!</span>

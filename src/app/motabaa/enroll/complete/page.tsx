@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Shell from "@/components/Shell";
@@ -12,49 +12,88 @@ const STORAGE_KEY = "khota_pending_enrollment";
 // بيانات مالية أو حساسة) ويستدعي /api/enroll الآن فقط — بعد التحقق الفعلي من البريد، لا قبله.
 export default function CompleteEnrollmentPage() {
   const router = useRouter();
-  const [status, setStatus] = useState<"loading" | "error" | "missing">("loading");
+  const [status, setStatus] = useState<"loading" | "error" | "missing" | "auth">("loading");
   const [error, setError] = useState<string | null>(null);
   // حارس صريح ضد استدعاء POST /api/enroll مرتين — React Strict Mode (تطوير) أو إعادة تشغيل
   // الـeffect لأي سبب قد يُشغِّل هذا الكود أكثر من مرة على نفس الجلسة. ref (لا state) لأنه لا
   // يحتاج إعادة render، ويبقى صحيحًا فوريًا عبر استدعاءات متزامنة للـeffect نفسه.
   const submittedRef = useRef(false);
 
-  useEffect(() => {
+  const finishEnrollment = useCallback(async () => {
     if (submittedRef.current) return;
     submittedRef.current = true;
-
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      Promise.resolve().then(() => setStatus("missing"));
-      return;
-    }
-
-    let payload: Record<string, unknown>;
+    setStatus("loading");
+    setError(null);
     try {
-      payload = JSON.parse(raw);
-    } catch {
-      Promise.resolve().then(() => setStatus("missing"));
-      return;
-    }
-
-    (async () => {
-      const res = await fetch("/api/enroll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setStatus("error");
-        setError(data.error ?? "تعذّر إتمام التسجيل، حاول مرة أخرى.");
+      // Keep the pending request on failure. The API is idempotent for the same
+      // child/cohort, so retry must not create a second seat reservation.
+      let raw: string | null;
+      try {
+        raw = sessionStorage.getItem(STORAGE_KEY);
+      } catch {
+        raw = null;
+      }
+      if (!raw) {
+        setStatus("missing");
+        return;
+      }
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(raw);
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+          setStatus("missing");
+          return;
+        }
+      } catch {
+        setStatus("missing");
         return;
       }
 
-      sessionStorage.removeItem(STORAGE_KEY);
-      router.push(`/motabaa/enroll/payment?sub=${data.subscriptionId}`);
-    })();
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 25_000);
+      try {
+        const res = await fetch("/api/enroll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          setStatus("auth");
+          setError("انتهت جلسة الدخول. سجّل الدخول مجددًا لإكمال نفس طلب التسجيل.");
+          return;
+        }
+        if (!res.ok) {
+          setStatus("error");
+          setError(data.error ?? "تعذّر إتمام التسجيل، أعد المحاولة.");
+          return;
+        }
+        if (typeof data.subscriptionId !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/.test(data.subscriptionId)) {
+          setStatus("error");
+          setError("تعذّر تأكيد رقم الاشتراك. أعد المحاولة للتحقق من الحجز.");
+          return;
+        }
+        sessionStorage.removeItem(STORAGE_KEY);
+        router.replace(`/motabaa/enroll/payment?sub=${encodeURIComponent(data.subscriptionId)}`);
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    } catch {
+      setStatus("error");
+      setError("تعذّر الاتصال بالخادم. تحقق من الإنترنت وأعد المحاولة، ولن يُحجز المقعد مرتين.");
+    } finally {
+      submittedRef.current = false;
+    }
   }, [router]);
+
+  useEffect(() => {
+    // Start after mount, not synchronously inside the effect's rendering phase.
+    // React Strict Mode cleanup cancels the superseded initial attempt.
+    const timeout = window.setTimeout(() => { void finishEnrollment(); }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [finishEnrollment]);
 
   return (
     <Shell>
@@ -81,8 +120,24 @@ export default function CompleteEnrollmentPage() {
               <span className="badge">تعذّر إكمال التسجيل</span>
               <h1 className="title" style={{ fontSize: 30, marginTop: 16 }}>حدث خطأ</h1>
               <p className="lead" style={{ color: "var(--p)" }}>{error}</p>
-              <Link className="btn outline" href="/motabaa/plans" style={{ marginTop: 20, display: "inline-flex" }}>
-                العودة للخطط ←
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 20 }}>
+                <button className="btn" type="button" onClick={() => { void finishEnrollment(); }}>
+                  إعادة المحاولة
+                </button>
+                <Link className="btn outline" href="/motabaa/plans">
+                  العودة للخطط
+                </Link>
+              </div>
+            </>
+          )}
+          {status === "auth" && (
+            <>
+              <span className="badge">يلزم تسجيل الدخول</span>
+              <h1 className="title" style={{ fontSize: 30, marginTop: 16 }}>أكمل التحقق من حسابك</h1>
+              <p className="lead">{error}</p>
+              <Link className="btn" href="/login?next=%2Fmotabaa%2Fenroll%2Fcomplete"
+                style={{ marginTop: 20, display: "inline-flex" }}>
+                تسجيل الدخول وإكمال التسجيل
               </Link>
             </>
           )}

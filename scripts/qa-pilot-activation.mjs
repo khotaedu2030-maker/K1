@@ -1,0 +1,32 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
+const read=(p)=>readFileSync(p,"utf8");
+const config=read("src/lib/pilot-activation-config.ts");
+const perm=read("src/lib/admin-permissions.ts");
+const api=read("src/app/api/admin/pilot-activate/route.ts");
+const migration=read("supabase/migrations/20261026_pilot_trial_atomic_activation.sql");
+const activation=read("src/lib/activate-subscription.ts");
+assert.match(config,/KHOTA_FREE_PILOT_ACTIVATION_ENABLED.*"true"/);
+assert.match(config,/prj_mpaXaRNmczd9jbqjtigtyKpMDJ5r/);
+assert.match(config,/iteskfrpeeclzshauxog/);
+assert.match(api,/requirePermission\("pilot.activate"\)/);
+assert.match(api,/activate_pilot_trial_atomic/);
+assert.doesNotMatch(api,/activateSubscriptionAfterPayment|manual-dev|\.from\("payments"\)/);
+assert.match(perm,/"pilot.activate"/);
+assert.equal((perm.match(/"pilot.activate"/g)||[]).length,2,"only permission type and superadmin list");
+assert.match(migration,/pg_advisory_xact_lock/);
+assert.match(migration,/for update/);
+assert.match(migration,/teacher_not_ready/);
+assert.match(migration,/teams_link_missing/);
+assert.match(migration,/pilot_quota_full/);
+assert.match(migration,/insert into public\.admin_actions/);
+assert.match(migration,/revoke all on function public.activate_pilot_trial_atomic/);
+assert.doesNotMatch(migration,/insert into public\.payments|update public\.payments/);
+assert.match(activation,/persistSessions = true/);
+assert.match(activation,/preparePilotSessionSchedule/);
+for (const file of ["src/app/api/admin/pilot-activate/route.ts","src/app/admin/pilot-activations/page.tsx","src/app/admin/pilot-activations/ActivateTrialForm.tsx","src/lib/activate-subscription.ts"]) {
+  const result=ts.transpileModule(read(file),{fileName:file,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}});
+  assert.equal((result.diagnostics||[]).filter(d=>d.category===ts.DiagnosticCategory.Error).length,0,file+" syntax diagnostics");
+}
+console.log("PASS pilot admin-only staging gate, audit atomicity, no payment writes, safe inactive default");

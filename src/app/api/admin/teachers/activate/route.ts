@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkNewTeacherEmail } from "@/lib/teacher-email-eligibility";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -22,6 +23,13 @@ export async function POST(req: Request) {
   if (!UUID_RE.test(applicationId)) return NextResponse.json({ error: "معرّف الطلب غير صالح" }, { status: 400 });
 
   const admin = createSupabaseAdminClient();
+  const { data: application, error: applicationError } = await admin.from("teacher_applications")
+    .select("email").eq("id", applicationId).maybeSingle();
+  if (applicationError) return NextResponse.json({ error: "تعذّر التحقق من بريد المعلم" }, { status: 503 });
+  if (!application) return NextResponse.json({ error: "طلب المعلم غير موجود" }, { status: 404 });
+  const eligible = await checkNewTeacherEmail(admin, application.email);
+  if (!eligible.ok) return NextResponse.json({ error: eligible.reason }, { status: eligible.status });
+
   const { data, error } = await admin.rpc("activate_teacher_from_application_atomic", {
     p_application_id: applicationId,
     p_actor: adminCheck.userId,

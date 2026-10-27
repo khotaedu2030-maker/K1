@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, type ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { isValidSaudiLocalPhone, SAUDI_PHONE_ERROR, toSaudiLocalDisplayPhone } from "@/lib/phone";
 
 // لا نسمح بإعادة توجيه إلا لمسار داخلي فعلي يبدأ بـ / — يمنع Open Redirect عبر next مُعدَّل
 // (// أو http:// أو https:// أو أي رابط خارجي).
@@ -50,7 +51,10 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" | "signup" }) {
       try {
         const pending = JSON.parse(sessionStorage.getItem("khota_pending_enrollment") ?? "null") as { parentName?: string; phone?: string } | null;
         if (pending?.parentName) setParentName(pending.parentName);
-        if (pending?.phone) setPhone(pending.phone);
+        if (pending?.phone) {
+          const localPhone = toSaudiLocalDisplayPhone(pending.phone);
+          if (localPhone) setPhone(localPhone);
+        }
       } catch {
         // Pending enrollment data is optional and never trusted as identity.
       }
@@ -65,9 +69,22 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" | "signup" }) {
   async function sendOtp() {
     setError(null);
     const value = normalizedEmail();
-    if (!value || !value.includes("@")) {
+    if (value.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
       setError("أدخل بريدًا إلكترونيًا صحيحًا.");
       return;
+    }
+    // Validate identity fields BEFORE creating/sending a new Supabase OTP.
+    // A failed parent signup after OTP otherwise strands the user on a verified email.
+    if (mode === "signup") {
+      const name = parentName.trim();
+      if (name.length < 2 || name.length > 160) {
+        setError("اسم ولي الأمر يجب أن يكون بين حرفين و160 حرفًا.");
+        return;
+      }
+      if (!isValidSaudiLocalPhone(phone)) {
+        setError(SAUDI_PHONE_ERROR);
+        return;
+      }
     }
 
     setLoading(true);
@@ -90,6 +107,7 @@ function AuthFormInner({ mode }: { mode: "parent" | "staff" | "signup" }) {
       return;
     }
     setStep("otp");
+    setCode("");
   }
 
   async function verifyOtp() {

@@ -23,6 +23,16 @@ export function normalizeSaudiPhone(phone: string): string {
   return `+966${local.slice(1)}`;
 }
 
+// عند انتقال ولي الأمر من نموذج الحجز إلى إنشاء الحساب، تُحفَظ بيانات
+// الحجز مؤقتًا بصيغة دولية. نعيد عرض الجوال بالصيغة المحلية المتوقعة من
+// حقل التسجيل بدل عرضه كرقم +966 طويل لا يمكن تعديله في input طوله 10.
+export function toSaudiLocalDisplayPhone(phone: string): string | null {
+  const digits = phone.replace(/\D/g, "");
+  if (SAUDI_LOCAL_PHONE_REGEX.test(digits)) return digits;
+  if (/^9665\d{8}$/.test(digits)) return `0${digits.slice(3)}`;
+  return null;
+}
+
 // خاص بالتحقق/التطبيع server-side لرقم جوال قادم من body طلب API (مثل /api/enroll) — حيث لا
 // يجوز الوثوق بأن العميل التزم فعليًا بتطبيع normalizeSaudiPhone الذي يحدث في الواجهة فقط.
 // يقبل الصيغتين المحتملتين فعليًا لرقم مُطبَّع (محلي 05XXXXXXXX، أو دولي +9665XXXXXXXX سبق
