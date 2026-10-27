@@ -6,6 +6,7 @@ import Shell from "@/components/Shell";
 import { Suspense } from "react";
 import PlansSelector, { type PlanRow, type CohortRow } from "./PlansSelector";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 // Server Component: يقرأ الخطط والمجموعات الحقيقية من قاعدة البيانات (بيانات كتالوج عامة).
 // يستخدم public_cohorts_catalog() الآمنة بدل SELECT مباشر على cohorts — نفس الدالة يمكن استدعاؤها
@@ -50,7 +51,12 @@ async function getData() {
 }
 
 export default async function P() {
-  const { plans, cohorts, live } = await getData();
+  const [{ plans, cohorts, live }, auth] = await Promise.all([
+    getData(),
+    createSupabaseServerClient(),
+  ]);
+  // Session state is resolved from verified server-side Supabase Auth cookies, not a client guess.
+  const { data: { user } } = await auth.auth.getUser();
 
   return (
     <Shell>
@@ -63,7 +69,7 @@ export default async function P() {
           </div>
         )}
         <Suspense fallback={null}>
-          <PlansSelector plans={plans} cohorts={cohorts} />
+          <PlansSelector plans={plans} cohorts={cohorts} isSignedIn={Boolean(user)} />
         </Suspense>
       </main>
     </Shell>
