@@ -45,4 +45,10 @@ assert.equal(check(withTeacher(null)), "بيانات المعلم المعيّن
 assert.equal(check(withTeacher(null, "completed")), null, "historical completed session is not an assignment alert");
 assert.equal(check(withTeacher({ full_name: "أحمد", active: false }, "cancelled")), null);
 assert.doesNotMatch(fs.readFileSync(path.join(root, "src/app/admin/page.tsx"), "utf8"), /s\.(teachers|cohorts)\[0\]/, "admin overview must not assume array-only embedded relations");
+const adminPage = fs.readFileSync(path.join(root, "src/app/admin/page.tsx"), "utf8");
+assert.match(adminPage, /\.eq\("status", "pending_payment"\)/, "dashboard must count stored pending enrollments");
+assert.match(adminPage, /pendingSubs: pendingSubs \?\? 0/, "dashboard must expose pending request count");
+assert.match(adminPage, /cohortsMissingOperations/, "dashboard must count groups missing teacher or session URL");
+assert.match(adminPage, /href: "\/admin\/pilot-activations"/, "pending pilot requests must have an admin review route");
+assert.match(adminPage, /href: "\/admin\/groups"/, "incomplete groups must have an operational action link");
 console.log("PASS operational teacher alert classification and Supabase to-one relation shapes");
