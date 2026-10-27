@@ -21,14 +21,14 @@ export default async function TeachingReadinessPage() {
     admin.from("subscriptions").select("id", { count: "exact", head: true }).eq("status", "active"),
     admin.from("sessions").select("id", { count: "exact", head: true }),
   ]);
-  let lookupFailed = [cohortResult, teacherResult, planResult, pendingResult, activeResult, sessionResult].some((r) => Boolean(r.error));
+  const baseLookupFailed = [cohortResult, teacherResult, planResult, pendingResult, activeResult, sessionResult].some((r) => Boolean(r.error));
 
   const teachers: (TeacherForTeaching & { full_name: string })[] = await Promise.all((teacherResult.data ?? []).map(async (t) => {
-    if (!t.user_id) return { ...t, verifiedLogin: false };
+    if (!t.user_id) return { ...t, verifiedLogin: false, authLookupFailed: false };
     const { data: authRecord, error: authError } = await admin.auth.admin.getUserById(t.user_id);
-    if (authError) lookupFailed = true;
-    return { ...t, verifiedLogin: Boolean(authRecord.user?.email_confirmed_at) };
+    return { ...t, verifiedLogin: Boolean(authRecord.user?.email_confirmed_at), authLookupFailed: Boolean(authError) };
   }));
+  const lookupFailed = baseLookupFailed || teachers.some((t) => t.authLookupFailed);
   const teacherById = new Map(teachers.map((t) => [t.id, t]));
   const planById = new Map((planResult.data ?? []).map((p: PlanForTeaching) => [p.id, p]));
   const pendingByCohort = new Map<string, number>();
