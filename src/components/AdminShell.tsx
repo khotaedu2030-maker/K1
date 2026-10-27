@@ -19,6 +19,7 @@ const SECTIONS: { label: string; href: string; permission?: string }[] = [
   { label: "المعلمون", href: "/admin/teachers", permission: "teacher.manage" },
   { label: "طلبات المعلمين", href: "/admin/teacher-applications", permission: "teacher_application.review" },
   { label: "المجموعات", href: "/admin/groups", permission: "cohort.manage" },
+  { label: "تشغيل التعليم", href: "/admin/teaching-readiness", permission: "cohort.manage" },
   { label: "الجلسات", href: "/admin/sessions", permission: "session.manage" },
   { label: "الحضور", href: "/admin/attendance", permission: "attendance.read" },
   { label: "مراجعة طلبات التجميد", href: "/admin/subscriptions", permission: "subscription.review" },
