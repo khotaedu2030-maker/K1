@@ -5,6 +5,7 @@ export type CohortForTeaching = {
   id: string;
   title: string;
   status: string | null;
+  capacity: number | null;
   teacher_id: string | null;
   meeting_url: string | null;
   plan_id: string | null;
