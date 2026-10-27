@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AdminAccountMenu from "./AdminAccountMenu";
@@ -38,6 +38,47 @@ const SECTIONS: { label: string; href: string; permission?: string }[] = [
 export default function AdminShell({ adminName, role, children }: { adminName: string; role: string; children: ReactNode }) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [badgeCounts, setBadgeCounts] = useState<Record<string, number>>({});
+  const [badgeRefreshFailed, setBadgeRefreshFailed] = useState(false);
+
+  const loadBadges = useCallback(async () => {
+    if (document.visibilityState === "hidden") return;
+    try {
+      const response = await fetch("/api/admin/navigation-badges", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error("Unable to load admin badges");
+      const body = await response.json() as { counts?: Record<string, unknown> };
+      const next: Record<string, number> = {};
+      for (const [href, count] of Object.entries(body.counts ?? {})) {
+        if (typeof count === "number" && Number.isSafeInteger(count) && count >= 0) next[href] = count;
+      }
+      setBadgeCounts(next);
+      setBadgeRefreshFailed(false);
+    } catch {
+      // Do not silently clear existing actionable badges on transient failures.
+      setBadgeRefreshFailed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBadges();
+    const onRefresh = () => { void loadBadges(); };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadBadges();
+    };
+    window.addEventListener("focus", onRefresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("khota-admin-badges-refresh", onRefresh);
+    const interval = window.setInterval(onRefresh, 45_000);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onRefresh);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("khota-admin-badges-refresh", onRefresh);
+    };
+  }, [loadBadges, pathname]);
   const visibleSections = SECTIONS.filter((s) => !s.permission || adminRoleHasPermission(role, s.permission));
 
   return (
@@ -52,10 +93,12 @@ export default function AdminShell({ adminName, role, children }: { adminName: s
         <nav className={`admin-os-sidebar${drawerOpen ? " open" : ""}`} aria-label="أقسام الإدارة">
           <div className="admin-os-sidebar-head">
             <span>الأقسام</span>
+            {badgeRefreshFailed && <span className="admin-os-badge-error" title="تعذّر تحديث تنبيهات القائمة؛ تُعرض آخر بيانات ناجحة">!</span>}
             <button className="admin-os-close-btn" onClick={() => setDrawerOpen(false)} aria-label="إغلاق">✕</button>
           </div>
           {visibleSections.map((s) => {
             const active = s.href === "/admin" ? pathname === "/admin" : pathname.startsWith(s.href);
+            const count = badgeCounts[s.href] ?? 0;
             return (
               <Link
                 key={s.href}
@@ -63,7 +106,13 @@ export default function AdminShell({ adminName, role, children }: { adminName: s
                 className={`admin-os-nav-link${active ? " active" : ""}`}
                 onClick={() => setDrawerOpen(false)}
               >
-                {s.label}
+                <span>{s.label}</span>
+                {count > 0 && (
+                  <span className="admin-os-nav-badge" title={`${count} عنصر يحتاج متابعة`} aria-label={`${count} عنصر يحتاج متابعة`}>
+                    <span aria-hidden="true">★</span>
+                    {count > 1 && <span aria-hidden="true">{count > 99 ? "99+" : count}</span>}
+                  </span>
+                )}
               </Link>
             );
           })}
