@@ -50,13 +50,13 @@ export default async function PilotActivationAdminPage() {
 
   // Preflight fails closed on lookup errors, rather than showing a usable
   // activation control. The RPC independently rechecks everything atomically.
-  let lookupFailed = Boolean(teacherResult.error || planResult.error);
+  const baseLookupFailed = Boolean(teacherResult.error || planResult.error);
   const teachers: TeacherForTeaching[] = await Promise.all((teacherResult.data ?? []).map(async (teacher) => {
-    if (!teacher.user_id) return { ...teacher, verifiedLogin: false };
+    if (!teacher.user_id) return { ...teacher, verifiedLogin: false, authLookupFailed: false };
     const { data: authRecord, error: authError } = await admin.auth.admin.getUserById(teacher.user_id);
-    if (authError) lookupFailed = true;
-    return { ...teacher, verifiedLogin: Boolean(authRecord.user?.email_confirmed_at) };
+    return { ...teacher, verifiedLogin: Boolean(authRecord.user?.email_confirmed_at), authLookupFailed: Boolean(authError) };
   }));
+  const lookupFailed = baseLookupFailed || teachers.some((teacher) => teacher.authLookupFailed);
   const teacherById = new Map(teachers.map((teacher) => [teacher.id, teacher]));
   const planById = new Map((planResult.data ?? []).map((plan) => [plan.id, plan]));
 
@@ -80,9 +80,7 @@ export default async function PilotActivationAdminPage() {
         const cohort = supabaseRelationOne(sub.cohorts);
         const teacher = cohort?.teacher_id ? teacherById.get(cohort.teacher_id) ?? null : null;
         const plan = cohort?.plan_id ? planById.get(cohort.plan_id) ?? null : null;
-        const expired = Boolean(sub.hold_expires_at && new Date(sub.hold_expires_at).getTime() <= Date.now());
         const issues = teachingReadinessIssues(cohort ?? null, teacher, plan);
-        if (expired) issues.push("انتهت مهلة حجز هذا المقعد.");
         if (lookupFailed) issues.push("تعذّر فحص الجاهزية من قاعدة البيانات.");
         const ready = issues.length === 0;
         return (
