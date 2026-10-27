@@ -136,6 +136,13 @@ assert.match(studentTasks, /taskError/, "student tasks must fail closed on looku
 assert.match(studentTasks, /eq\("status", task\.status\)/, "student task toggles must guard against state races");
 assert.match(studentTasks, /if \(!updated\)/, "student task toggles must detect zero-row race outcomes");
 
+const provisionTeacher = read("src/app/api/admin/teachers/provision-identity/route.ts");
+assert.match(provisionTeacher, /hasProvisionProof\(candidate, teacherId, email\)/, "teacher recovery must require server-created provisioning proof");
+assert.match(provisionTeacher, /emailMatches\.length === 1/, "teacher provisioning must identify collisions without auto-linking");
+assert.match(provisionTeacher, /parentRole \|\| adminRole/, "teacher provisioning must reject existing parent/admin identities");
+assert.match(provisionTeacher, /البريد المستخدم في طلب المعلم مرتبط بحساب ولي أمر/, "parent-email collision must be actionable for admin");
+assert.match(provisionTeacher, /البريد المستخدم في طلب المعلم مرتبط بحساب إدارة/, "admin-email collision must be actionable for admin");
+assert.doesNotMatch(provisionTeacher, /admin\.auth\.admin\.updateUserById/, "teacher provisioning must not rewrite existing auth user roles");
 const roleResolution = read("src/app/api/auth/resolve-role/route.ts");
 assert.match(roleResolution, /adminError/, "role resolution must fail closed on admin lookup errors");
 assert.match(roleResolution, /teacherError/, "role resolution must fail closed on teacher lookup errors");
