@@ -3,9 +3,8 @@ import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
-// الحقول الأربعة الأولى فقط مُستهلَكة فعليًا بمنطق تشغيلي حقيقي (راجع src/lib/platform-settings.ts).
-// السبعة الجديدة (Phase 1 Correction) تُحفَظ فعليًا هنا لكن بلا أي مستهلك تشغيلي بعد — Foundation
-// فقط، الربط الفعلي بالسلوك مؤجَّل لـPhase 3 صراحةً. الحقول المتبقية بالجدول (booking_window_days،
+// الإعدادات المسموح بها في هذه الواجهة مربوطة الآن بمستهلك تشغيلي فعلي.
+// الحقول غير المرتبطة بميزة مكتملة (booking_window_days،
 // default_session_duration_minutes، support_email/phone) لا تُستقبَل من هذا الـbody إطلاقًا —
 // نجلب قيمها الحالية المخزَّنة ونُمرِّرها كما هي، بلا أي احتمال إعادة تعيين غير مقصودة.
 function isValidTimeHHMM(value: string) {
@@ -58,10 +57,10 @@ export async function POST(req: Request) {
     !isValidTimeHHMM(quietStart) || !isValidTimeHHMM(quietEnd) ||
     !Number.isInteger(seatHoldHours) || seatHoldHours < 1 || seatHoldHours > 72 ||
     !Number.isInteger(attendanceLockHours) || attendanceLockHours < 1 || attendanceLockHours > 168 ||
-    !Number.isInteger(cap1_3) || cap1_3 < 1 || cap1_3 > 30 ||
-    !Number.isInteger(cap4_6) || cap4_6 < 1 || cap4_6 > 30 ||
-    !Number.isInteger(cap7_9) || cap7_9 < 1 || cap7_9 > 30 ||
-    !Number.isInteger(cap10_12) || cap10_12 < 1 || cap10_12 > 30
+    !Number.isInteger(cap1_3) || cap1_3 < 1 || cap1_3 > 20 ||
+    !Number.isInteger(cap4_6) || cap4_6 < 1 || cap4_6 > 20 ||
+    !Number.isInteger(cap7_9) || cap7_9 < 1 || cap7_9 > 20 ||
+    !Number.isInteger(cap10_12) || cap10_12 < 1 || cap10_12 > 20
   ) {
     return NextResponse.json({ error: "قيم غير صالحة، راجع الحدود المسموحة لكل حقل" }, { status: 400 });
   }
