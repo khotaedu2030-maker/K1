@@ -845,7 +845,10 @@ header.transparent + #main-content > main > .hero-editorial-v28:first-child{marg
 .admin-os-sidebar{width:236px;flex-shrink:0;background:var(--card);border-inline-end:1px solid var(--line);padding:16px 10px;display:flex;flex-direction:column;gap:2px}
 .admin-os-sidebar-head{display:none}
 .admin-os-close-btn{display:none}
-.admin-os-nav-link{display:block;padding:10px 14px;border-radius:10px;color:var(--n);text-decoration:none;font-size:14px;font-weight:600;transition:background var(--motion-fast) var(--ease-premium)}
+.admin-os-nav-link{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;color:var(--n);text-decoration:none;font-size:14px;font-weight:600;transition:background var(--motion-fast) var(--ease-premium)}
+.admin-os-nav-badge{display:inline-flex;gap:3px;align-items:center;justify-content:center;flex-shrink:0;border-radius:999px;background:#fff3d4;color:#855b0a;font-size:11px;font-weight:800;min-width:20px;padding:3px 6px;line-height:1.25;font-variant-numeric:tabular-nums}
+.admin-os-nav-link.active .admin-os-nav-badge{background:#fff;color:#865d06}
+.admin-os-badge-error{border-radius:999px;background:#f4e7d4;color:#8b561e;padding:2px 6px;font-size:11px;font-weight:800}
 .admin-os-nav-link:hover{background:var(--bg)}
 .admin-os-nav-link.active{background:var(--t);color:#fff}
 .admin-os-content{flex:1;min-width:0;padding:28px 24px}
