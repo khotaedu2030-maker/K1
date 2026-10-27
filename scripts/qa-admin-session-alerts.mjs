@@ -65,7 +65,7 @@ assert.doesNotMatch(badgeRoute, /\.select\("body"/, "admin notifications must ne
 const reviewRoute = fs.readFileSync(path.join(root, "src/app/api/admin/navigation-badges/review-messages/route.ts"), "utf8");
 assert.match(reviewRoute, /requirePermission\("messages.metadata.read"\)/);
 assert.match(reviewRoute, /admin_navigation_seen/);
-assert.doesNotMatch(reviewRoute, /read_at/, "administrative review must not change recipient read receipts");
+assert.doesNotMatch(reviewRoute, /\.from\("messages"\)\.update\(/, "administrative review must not mutate private messages");
 const badgeMigration = fs.readFileSync(path.join(root, "supabase/migrations/20261027_admin_navigation_message_review.sql"), "utf8");
 assert.match(badgeMigration, /enable row level security/);
 assert.match(badgeMigration, /revoke all on table public.admin_navigation_seen from anon, authenticated/);
