@@ -65,6 +65,7 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
 
   const selectedPlan = availablePlans.find((p) => p.id === effectivePlanId);
   const selectedCohort = matchingCohorts.find((c) => c.id === cohortId) ?? null;
+  const selectedCohortId = selectedCohort?.id ?? null;
 
   function selectGrade(g: number) {
     setGrade(g);
@@ -82,9 +83,9 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
     const params = new URLSearchParams();
     params.set("grade", String(grade));
     if (effectivePlanId) params.set("plan", effectivePlanId);
-    if (selectedCohort) params.set("cohort", selectedCohort.id);
+    if (selectedCohortId) params.set("cohort", selectedCohortId);
     router.replace(`/motabaa/plans?${params.toString()}`, { scroll: false });
-  }, [grade, effectivePlanId, selectedCohort?.id, router]);
+  }, [grade, effectivePlanId, selectedCohortId, router]);
 
   const step1Done = true; // الصف يُختار دائمًا (قيمة افتراضية 1) — يبقى "مكتملًا" دومًا
   const step2Done = Boolean(selectedPlan);
