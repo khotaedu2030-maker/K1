@@ -34,11 +34,11 @@ type NumericDefinition = {
 };
 
 const SECTIONS: { key: SectionKey; icon: string; name: string; subtitle: string }[] = [
-  { key: "registration", icon: "◉", name: "التسجيل والحجز", subtitle: "فتح التسجيل وحجز المقاعد" },
+  { key: "registration", icon: "◉", name: "طلبات التسجيل والحجز", subtitle: "استقبال طلبات التسجيل وحجز المقاعد" },
   { key: "groups", icon: "▦", name: "المجموعات والسعات", subtitle: "الأعداد الافتراضية لكل مرحلة" },
   { key: "attendance", icon: "◷", name: "الحضور والجلسات", subtitle: "مهلة تعديل الحضور" },
   { key: "policies", icon: "≋", name: "التجميد والتعويض", subtitle: "ضوابط الاشتراكات" },
-  { key: "messaging", icon: "☷", name: "الرسائل وساعات الهدوء", subtitle: "جدول تقييد المراسلة" },
+  { key: "messaging", icon: "☷", name: "أوقات التواصل والرد", subtitle: "تنظيم توقعات وقت الرد على الرسائل" },
   { key: "other", icon: "⚙", name: "إعدادات أخرى", subtitle: "الصلاحيات والربط والخدمات" },
 ];
 
@@ -47,7 +47,7 @@ const NUMERIC: Partial<Record<SectionKey, NumericDefinition[]>> = {
     { key: "seat_hold_hours", label: "مدة حجز المقعد المؤقت", description: "مدة الاحتفاظ بالحجز الجديد قبل انتهائه", min: 1, max: 72, unit: "ساعة" },
   ],
   groups: [
-    { key: "default_capacity_1_3", label: "الصفوف 1–3", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 30, unit: "طالب" },
+    { key: "default_capacity_1_3", label: "الصفوف 1–3", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 20, unit: "طالب" },
     { key: "default_capacity_4_6", label: "الصفوف 4–6", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 30, unit: "طالب" },
     { key: "default_capacity_7_9", label: "الصفوف 7–9", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 30, unit: "طالب" },
     { key: "default_capacity_10_12", label: "الصفوف 10–12", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 30, unit: "طالب" },
@@ -173,13 +173,13 @@ export default function SettingsForm({ initial }: { initial: Settings }) {
       <section className="kh-settings-panel" aria-label={selected.name}>
         <div className="kh-settings-panel-head">
           <div><span className="kh-settings-overline">إعدادات المنصة</span><h2>{selected.name}</h2><p>{selected.subtitle}</p></div>
-          <span className="kh-settings-live">متصل ببيئة الاختبار</span>
+          <span className="kh-settings-live">إعدادات قابلة للحفظ</span>
         </div>
 
         {active === "registration" && (
           <div className="kh-settings-card">
             <label className="kh-settings-item" htmlFor="kh-setting-registration">
-              <span><strong>السماح بتسجيل اشتراكات جديدة</strong><small>عند الإيقاف، تُرفض محاولات التسجيل الجديدة من الخادم. لا تُلغى الطلبات السابقة.</small></span>
+              <span><strong>السماح بتقديم طلبات اشتراك جديدة</strong><small>إيقافه يمنع إنشاء طلب اشتراك جديد. لا يمنع إنشاء حساب ولي أمر أو يلغِي الطلبات السابقة.</small></span>
               <input id="kh-setting-registration" className="kh-settings-switch" type="checkbox" role="switch" checked={values.registration_enabled} onChange={(e) => change("registration_enabled", e.target.checked)} />
             </label>
           </div>
@@ -199,10 +199,12 @@ export default function SettingsForm({ initial }: { initial: Settings }) {
           </div>
         )}
 
-        {active === "groups" && <p className="kh-settings-note">السعة الافتراضية تسري عند إنشاء مجموعة جديدة فقط. لتغيير سعة مجموعة موجودة افتح <Link href="/admin/groups">إدارة المجموعات</Link>.</p>}
-        {active === "attendance" && <p className="kh-settings-note">هذه المهلة تتحكم في تعديل تقارير الحضور؛ ولا تعدّل الجلسات المكتملة أو تقاريرها بأثر رجعي.</p>}
+        {active === "groups" && <p className="kh-settings-note">السعة الافتراضية (1–20) تسري عند إنشاء مجموعة جديدة فقط، ولا تغير سعة مجموعة موجودة. للتعديل افتح <Link href="/admin/groups">إدارة المجموعات</Link>.</p>}
+        {active === "attendance" && <p className="kh-settings-note">هذه المهلة تحدد قبول تعديل تقرير الحضور من الخادم بعد الجلسة، ولا تعدّل التقارير السابقة تلقائيًا.</p>}
 
         {active === "messaging" && (
+          <>
+          <p className="kh-settings-note">يمكن لولي الأمر والمعلم إرسال الرسائل في أي وقت. خلال الفترة المحددة تظهر رسالة تنبه لاحتمال تأخر الرد، ولا تُمنع الرسائل أو رموز OTP أو تذكيرات الجلسات. لا توجد حاليًا خدمة إشعارات فورية يمكن كتمها من هنا.</p>
           <div className="kh-settings-card">
             {TIME.map((field) => (
               <label key={field.key} className="kh-settings-item" htmlFor={field.key}>
@@ -211,6 +213,8 @@ export default function SettingsForm({ initial }: { initial: Settings }) {
               </label>
             ))}
           </div>
+          <p className="kh-settings-note">يُحتسب الوقت بتوقيت الرياض وبالدقيقة. إذا تساوى وقت البداية والنهاية فلن تكون هناك فترة هدوء.</p>
+          </>
         )}
 
         {active === "other" && (
@@ -228,7 +232,7 @@ export default function SettingsForm({ initial }: { initial: Settings }) {
         {active !== "other" && <p className="kh-settings-note">التعديل على بيئة Staging الحالية. قد يستغرق تطبيق بعض القيم التشغيلية دقيقة بسبب ذاكرة التخزين المؤقت.</p>}
 
         <div className="kh-settings-actions" aria-live="polite">
-          <span className="kh-settings-state">{dirty ? "لديك تغييرات لم تُحفَظ" : success ? "تم حفظ إعداداتك بنجاح" : "جميع التعديلات محفوظة"}</span>
+          <span className="kh-settings-state">{dirty ? "لديك تغييرات لم تُحفَظ" : success ? "تم حفظ إعداداتك بنجاح" : "لم تُجرَ تعديلات جديدة"}</span>
           {dirty && <button type="button" className="btn outline small" disabled={loading} onClick={() => { setValues({ ...baseline }); setError(null); setSuccess(false); }}>تراجع عن التغييرات</button>}
           <button type="submit" className="btn small" disabled={!dirty || loading}>{loading ? "جارٍ الحفظ..." : "حفظ التعديلات"}</button>
         </div>
