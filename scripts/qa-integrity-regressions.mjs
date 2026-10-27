@@ -73,7 +73,8 @@ assert.match(settingsForm, /pauseMinDays: values\.pause_min_days/, "pause contro
 assert.match(settingsForm, /"حفظ التعديلات"/, "settings UI must have a real save action");
 assert.match(settingsForm, /disabled=\{!dirty \|\| loading\}/, "save must be inactive when no changes exist");
 assert.match(settingsForm, /"\/admin\/admins"/, "role changes must remain in dedicated authorized administration");
-assert.match(settingsRuntime, /Number\.isInteger\(Number\(String\(data\.quiet_hours_start\)/, "midnight must be a valid persisted quiet hour");
+assert.match(settingsRuntime, /quietClockMinutes\(data\.quiet_hours_start/, "minute-accurate quiet-hours setting must be consumed");
+assert.match(settingsRuntime, /quietHoursStartMinutes: startMinutes/, "midnight must be preserved without coercing to a default");
 assert.match(settingsSeed, /on conflict \(id\) do nothing/, "settings migration must not overwrite live customizations");
 assert.match(settingsSeed, /'20:00'::time/, "seed must preserve current runtime quiet hours");
 const adminSettings = read("src/app/api/admin/settings/route.ts");
