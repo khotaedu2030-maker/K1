@@ -52,7 +52,8 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
   const product = productForBand(gradeBand);
 
   const availablePlans = useMemo(() => plans.filter((p) => p.product === product), [plans, product]);
-  const effectivePlanId = planId ?? availablePlans[0]?.id ?? null;
+  // A stale ?plan= from another grade must not mark the plan step complete.
+  const effectivePlanId = availablePlans.find((p) => p.id === planId)?.id ?? availablePlans[0]?.id ?? null;
 
   const matchingCohorts = useMemo(
     () =>
@@ -81,13 +82,13 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
     const params = new URLSearchParams();
     params.set("grade", String(grade));
     if (effectivePlanId) params.set("plan", effectivePlanId);
-    if (cohortId) params.set("cohort", cohortId);
+    if (selectedCohort) params.set("cohort", selectedCohort.id);
     router.replace(`/motabaa/plans?${params.toString()}`, { scroll: false });
-  }, [grade, effectivePlanId, cohortId, router]);
+  }, [grade, effectivePlanId, selectedCohort?.id, router]);
 
   const step1Done = true; // الصف يُختار دائمًا (قيمة افتراضية 1) — يبقى "مكتملًا" دومًا
-  const step2Done = Boolean(effectivePlanId);
-  const step3Done = Boolean(cohortId);
+  const step2Done = Boolean(selectedPlan);
+  const step3Done = Boolean(selectedCohort);
   const currentStepNum = !step1Done ? 1 : !step2Done ? 2 : !step3Done ? 3 : 4;
   const steps: [string, string][] = [
     ["01", "الصف"],
@@ -151,7 +152,20 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
               <h2>اختر الخطة</h2>
             </div>
             {availablePlans.length === 0 ? (
-              <p style={{ color: "var(--gray)" }}>لا توجد خطط متاحة لهذا الصف حاليًا.</p>
+              <div className="dashcard" role="status" style={{ padding: "22px 20px" }}>
+                <b style={{ display: "block", marginBottom: 8 }}>
+                  {product === "focus_room"
+                    ? "برنامج غرفة التركيز للمتوسط والثانوي غير متاح للاشتراك حاليًا."
+                    : "لم تُطرح باقة تسجيل لهذه المرحلة حتى الآن."}
+                </b>
+                <p style={{ color: "var(--gray)", margin: "0 0 14px" }}>
+                  لا توجد خطة معتمدة للصف {getGradeLabelArabic(grade)} في الكتالوج الحالي. يمكنك إنشاء حساب ولي الأمر
+                  الآن، لكن اختيار الاشتراك والمجموعة ينتظر إتاحة البرنامج. لن نحجز لك مقعدًا أو نحصّل رسومًا.
+                </p>
+                <Link className="btn outline small" href="/signup">
+                  إنشاء حساب ولي الأمر
+                </Link>
+              </div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>
                 {availablePlans.map((p, i) => {
@@ -203,18 +217,25 @@ export default function PlansSelector({ plans, cohorts }: { plans: PlanRow[]; co
             </div>
             {matchingCohorts.length === 0 ? (
               <div className="dashcard" style={{ textAlign: "center", padding: "28px 20px" }}>
-                <p style={{ margin: 0, fontWeight: 700 }}>لا توجد مجموعة متاحة لهذه الخطة حاليًا.</p>
-                <a
-                  href="#plan-step"
-                  className="btn outline small"
-                  style={{ marginTop: 14, display: "inline-flex" }}
-                  onClick={() => {
-                    setPlanId(null);
-                    setCohortId(null);
-                  }}
-                >
-                  اختر خطة أخرى
-                </a>
+                <p style={{ margin: 0, fontWeight: 700 }}>
+                  {availablePlans.length === 0
+                    ? "اختيار المجموعة غير متاح قبل توفير خطة لهذا الصف."
+                    : "لا توجد مجموعة متاحة لهذه الخطة حاليًا."}
+                </p>
+                {availablePlans.length > 1 ? (
+                  <a
+                    href="#plan-step"
+                    className="btn outline small"
+                    style={{ marginTop: 14, display: "inline-flex" }}
+                    onClick={() => { setPlanId(null); setCohortId(null); }}
+                  >
+                    عرض الخطط الأخرى
+                  </a>
+                ) : (
+                  <Link className="btn outline small" href="/signup" style={{ marginTop: 14, display: "inline-flex" }}>
+                    إنشاء حساب ولي الأمر
+                  </Link>
+                )}
               </div>
             ) : (
               <div>
