@@ -81,7 +81,7 @@ export default async function PilotActivationAdminPage() {
         const teacher = cohort?.teacher_id ? teacherById.get(cohort.teacher_id) ?? null : null;
         const plan = cohort?.plan_id ? planById.get(cohort.plan_id) ?? null : null;
         const expired = Boolean(sub.hold_expires_at && new Date(sub.hold_expires_at).getTime() <= Date.now());
-        const issues = teachingReadinessIssues(cohort, teacher, plan);
+        const issues = teachingReadinessIssues(cohort ?? null, teacher, plan);
         if (expired) issues.push("انتهت مهلة حجز هذا المقعد.");
         if (lookupFailed) issues.push("تعذّر فحص الجاهزية من قاعدة البيانات.");
         const ready = issues.length === 0;
