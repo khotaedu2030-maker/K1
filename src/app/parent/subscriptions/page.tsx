@@ -3,6 +3,7 @@ import Shell from "@/components/Shell";
 import PauseRequestForm from "./PauseRequestForm";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+import { areOnlinePaymentsEnabled } from "@/lib/payment-settings";
 
 // نستخدم هنا فقط (تنسيق تاريخ عربي بسيط لتاريخ خام YYYY-MM-DD، بلا وقت) — لا علاقة له
 // بمنطق الاشتراك نفسه، عرض فقط.
@@ -48,6 +49,7 @@ type SubscriptionRow = {
 };
 
 export default async function P() {
+  const paymentsEnabled = areOnlinePaymentsEnabled();
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -80,6 +82,7 @@ export default async function P() {
     : { data: [] as PauseRow[] };
 
   const childName = new Map((children ?? []).map((c) => [c.id, c.first_name]));
+  const pendingLabel = paymentsEnabled ? statusLabel.pending_payment : "الطلب محفوظ — بانتظار التفعيل";
   const pausesBySub = new Map<string, PauseRow[]>();
   for (const p of (pauses ?? []) as PauseRow[]) {
     if (!pausesBySub.has(p.subscription_id)) pausesBySub.set(p.subscription_id, []);
@@ -105,7 +108,12 @@ export default async function P() {
           {((subscriptions ?? []) as SubscriptionRow[]).map((s) => (
             <div className="dashcard" key={s.id} style={{ marginBottom: 16 }}>
               <b>{childName.get(s.child_id)} — {supabaseRelationOne(s.plans)?.name}</b>
-              <div className="taskline"><span>الحالة</span><span className="badge">{statusLabel[s.status] ?? s.status}</span></div>
+              <div className="taskline"><span>الحالة</span><span className="badge">{s.status === "pending_payment" ? pendingLabel : (statusLabel[s.status] ?? s.status)}</span></div>
+              {!paymentsEnabled && s.status === "pending_payment" && (
+                <p style={{ color: "var(--gray)", fontSize: 13, marginTop: 8 }}>
+                  الدفع الإلكتروني متوقف حاليًا، والاشتراك لم يُفعَّل بعد. يمكنك متابعة حالة الطلب هنا.
+                </p>
+              )}
               {s.start_date && <div className="taskline"><span>تاريخ البداية</span><span>{formatPlainDateArabic(s.start_date)}</span></div>}
               {s.renewal_date && <div className="taskline"><span>نهاية الدورة الحالية</span><span>{formatPlainDateArabic(s.renewal_date)}</span></div>}
 
