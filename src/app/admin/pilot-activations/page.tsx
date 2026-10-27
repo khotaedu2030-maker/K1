@@ -51,7 +51,7 @@ export default async function PilotActivationAdminPage() {
   // Preflight fails closed on lookup errors, rather than showing a usable
   // activation control. The RPC independently rechecks everything atomically.
   const baseLookupFailed = Boolean(teacherResult.error || planResult.error);
-  const teachers: TeacherForTeaching[] = await Promise.all((teacherResult.data ?? []).map(async (teacher) => {
+  const teachers: (TeacherForTeaching & { authLookupFailed: boolean })[] = await Promise.all((teacherResult.data ?? []).map(async (teacher) => {
     if (!teacher.user_id) return { ...teacher, verifiedLogin: false, authLookupFailed: false };
     const { data: authRecord, error: authError } = await admin.auth.admin.getUserById(teacher.user_id);
     return { ...teacher, verifiedLogin: Boolean(authRecord.user?.email_confirmed_at), authLookupFailed: Boolean(authError) };
