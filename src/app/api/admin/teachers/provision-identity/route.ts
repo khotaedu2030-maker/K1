@@ -68,6 +68,10 @@ export async function POST(req: Request) {
   if (createError || !authUser) {
     const perPage = 1000;
     const markedMatches: NonNullable<typeof created.user>[] = [];
+    // A previously registered parent/admin is never eligible for automatic
+    // teacher provisioning. Keep that security boundary and explain collisions
+    // to authorized operators without modifying the existing identity.
+    const emailMatches: NonNullable<typeof created.user>[] = [];
     let page = 1;
     let paginationError: string | undefined;
     while (true) {
@@ -77,6 +81,7 @@ export async function POST(req: Request) {
         break;
       }
       for (const candidate of existing.users) {
+        if (candidate.email?.trim().toLowerCase() === email) emailMatches.push(candidate);
         if (hasProvisionProof(candidate, teacherId, email)) markedMatches.push(candidate);
       }
       if (existing.users.length < perPage) break;
@@ -84,6 +89,23 @@ export async function POST(req: Request) {
     }
 
     if (paginationError || markedMatches.length !== 1) {
+      if (!paginationError && emailMatches.length === 1) {
+        const existingUserId = emailMatches[0].id;
+        const [{ data: parentRole, error: parentError }, { data: adminRole, error: adminError }] = await Promise.all([
+          admin.from("parents").select("id").eq("user_id", existingUserId).maybeSingle(),
+          admin.from("admins").select("id").eq("user_id", existingUserId).maybeSingle(),
+        ]);
+        if (parentError || adminError) {
+          return NextResponse.json({ error: "تعذّر التحقق من تعارض صلاحيات البريد. لا يمكن ربط الحساب تلقائيًا." }, { status: 503 });
+        }
+        if (parentRole || adminRole) {
+          return NextResponse.json({
+            error: parentRole
+              ? "البريد المستخدم في طلب المعلم مرتبط بحساب ولي أمر. استخدم بريدًا مستقلًا لتقديم طلب معلم جديد؛ لن نغيّر صلاحيات ولي الأمر."
+              : "البريد المستخدم في طلب المعلم مرتبط بحساب إدارة. استخدم بريدًا مستقلًا لتقديم طلب معلم جديد.",
+          }, { status: 409 });
+        }
+      }
       console.error("[admin-teacher-provision] Auth identity creation/recovery failed:", createError?.message ?? paginationError);
       return NextResponse.json({ error: "يوجد حساب بهذا البريد أو تعذّر إنشاء الحساب؛ راجع الربط يدويًا" }, { status: 409 });
     }
