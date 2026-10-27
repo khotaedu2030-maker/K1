@@ -48,9 +48,9 @@ const NUMERIC: Partial<Record<SectionKey, NumericDefinition[]>> = {
   ],
   groups: [
     { key: "default_capacity_1_3", label: "الصفوف 1–3", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 20, unit: "طالب" },
-    { key: "default_capacity_4_6", label: "الصفوف 4–6", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 30, unit: "طالب" },
-    { key: "default_capacity_7_9", label: "الصفوف 7–9", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 30, unit: "طالب" },
-    { key: "default_capacity_10_12", label: "الصفوف 10–12", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 30, unit: "طالب" },
+    { key: "default_capacity_4_6", label: "الصفوف 4–6", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 20, unit: "طالب" },
+    { key: "default_capacity_7_9", label: "الصفوف 7–9", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 20, unit: "طالب" },
+    { key: "default_capacity_10_12", label: "الصفوف 10–12", description: "السعة الافتراضية عند إنشاء مجموعة جديدة", min: 1, max: 20, unit: "طالب" },
   ],
   attendance: [
     { key: "attendance_lock_hours", label: "مهلة تعديل الحضور", description: "آخر موعد لتعديل تقرير الحضور بعد الجلسة", min: 1, max: 168, unit: "ساعة" },
