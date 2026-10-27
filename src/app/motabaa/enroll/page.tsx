@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Shell from "@/components/Shell";
-import EnrollForm from "./EnrollForm";
+import EnrollForm, { type AuthenticatedParent } from "./EnrollForm";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getGradeLabelArabic, parseAndValidateGrade } from "@/lib/grade-config";
 import { formatDaysList, formatCohortDisplayName } from "@/lib/plan-display";
@@ -8,6 +8,9 @@ import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relat
 import { resolveGradeBand } from "@/lib/grade-config";
 import { getRuntimeSettings } from "@/lib/platform-settings";
 import Link from "next/link";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { toSaudiLocalDisplayPhone } from "@/lib/phone";
+import { getActiveStaffRole } from "@/lib/parent-role-boundary";
 
 type EnrollmentCohort = {
   title: string;
@@ -111,7 +114,49 @@ async function EnrollContent({ searchParams }: { searchParams: Promise<{ grade?:
     );
   }
 
-  return <EnrollForm grade={grade} cohortId={cohortId} details={details} />;
+  // Reuse only authenticated account details bound to the verified session.
+  // Guest checkout retains its existing OTP-first path; no guest receives profile data.
+  let account: AuthenticatedParent | null = null;
+  const auth = await createSupabaseServerClient();
+  const { data: { user } } = await auth.auth.getUser();
+  if (user) {
+    try {
+      if (await getActiveStaffRole(user.id)) {
+        return (
+          <div className="container">
+            <h1 className="title" style={{ fontSize: 30 }}>هذا الحساب مخصص لفريق خُطى</h1>
+            <p className="lead">سجّل الدخول بحساب ولي الأمر لإضافة طفل.</p>
+            <Link className="btn outline" href="/login">دخول ولي الأمر</Link>
+          </div>
+        );
+      }
+      const { data: parent, error: profileError } = await auth
+        .from("parents")
+        .select("full_name, phone")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      const fullName = parent?.full_name?.trim() ?? "";
+      const localPhone = toSaudiLocalDisplayPhone(parent?.phone ?? "") ?? "";
+      account = {
+        email: (user.email ?? "").trim().toLowerCase(),
+        fullName,
+        phone: localPhone,
+        savedProfile: Boolean(fullName.length >= 2 && localPhone),
+      };
+    } catch (error) {
+      console.error("[enroll] authenticated parent profile lookup failed:", error instanceof Error ? error.message : "unknown");
+      return (
+        <div className="container">
+          <h1 className="title" style={{ fontSize: 30 }}>تعذّر تحميل حسابك</h1>
+          <p className="lead">حاول تحديث الصفحة لإكمال تسجيل الطفل دون إنشاء حساب جديد.</p>
+          <Link className="btn outline" href="/parent">العودة إلى لوحة ولي الأمر</Link>
+        </div>
+      );
+    }
+  }
+
+  return <EnrollForm grade={grade} cohortId={cohortId} details={details} account={account} />;
 }
 
 export default function P({ searchParams }: { searchParams: Promise<{ grade?: string; cohort?: string }> }) {
