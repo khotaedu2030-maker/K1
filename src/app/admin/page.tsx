@@ -23,6 +23,7 @@ async function getOverviewData() {
   const [
     { count: children },
     { count: activeSubs },
+    { count: pendingSubs },
     { count: pausedSubs },
     { data: todaySessions },
     { count: pendingApplications },
@@ -30,10 +31,12 @@ async function getOverviewData() {
     { count: newPremiumRequests },
     { count: unusedMakeupCredits },
     { count: activeTeachers },
+    { data: operationalCohorts },
     { data: recentCompletedSessions },
   ] = await Promise.all([
     supabase.from("children").select("*", { count: "exact", head: true }),
     supabase.from("subscriptions").select("*", { count: "exact", head: true }).eq("status", "active"),
+    supabase.from("subscriptions").select("*", { count: "exact", head: true }).eq("status", "pending_payment"),
     supabase.from("subscriptions").select("*", { count: "exact", head: true }).eq("status", "paused"),
     supabase
       .from("sessions")
@@ -45,6 +48,7 @@ async function getOverviewData() {
     supabase.from("premium_requests").select("*", { count: "exact", head: true }).eq("status", "new"),
     supabase.from("makeup_credits").select("*", { count: "exact", head: true }).eq("status", "available"),
     supabase.from("teachers").select("*", { count: "exact", head: true }).eq("active", true),
+    supabase.from("cohorts").select("id,title,teacher_id,meeting_url").eq("status", "open"),
     supabase
       .from("sessions")
       .select("id, cohort_id, session_date")
@@ -58,6 +62,7 @@ async function getOverviewData() {
   return {
     children: children ?? 0,
     activeSubs: activeSubs ?? 0,
+    pendingSubs: pendingSubs ?? 0,
     pausedSubs: pausedSubs ?? 0,
     todaySessions: todaySessions ?? [],
     pendingApplications: pendingApplications ?? 0,
@@ -65,6 +70,7 @@ async function getOverviewData() {
     newPremiumRequests: newPremiumRequests ?? 0,
     unusedMakeupCredits: unusedMakeupCredits ?? 0,
     activeTeachers: activeTeachers ?? 0,
+    cohortsMissingOperations: (operationalCohorts ?? []).filter((cohort) => !cohort.teacher_id || !cohort.meeting_url?.trim()).length,
     attendanceReview,
   };
 }
@@ -92,6 +98,8 @@ export default async function AdminOverviewPage() {
         ? [{ label: `${formatSessionTime(s.starts_at)} — ${supabaseRelationOne(s.cohorts)?.title ?? "—"} — ${alert}`, href: "/admin/sessions" }]
         : [];
     }),
+    d.pendingSubs > 0 && { label: `${d.pendingSubs} طلب تسجيل محفوظ بانتظار التفعيل — راجع جاهزية المجموعة أولًا`, href: "/admin/pilot-activations" },
+    d.cohortsMissingOperations > 0 && { label: `${d.cohortsMissingOperations} مجموعة بلا معلم أو رابط جلسة — استكمل التجهيز`, href: "/admin/groups" },
     d.pendingApplications > 0 && { label: `${d.pendingApplications} طلب معلم جديد بانتظار المراجعة`, href: "/admin/teacher-applications" },
     d.newContactRequests > 0 && { label: `${d.newContactRequests} رسالة تواصل جديدة`, href: "/admin/requests" },
     d.newPremiumRequests > 0 && { label: `${d.newPremiumRequests} طلب اهتمام جديد`, href: "/admin/requests" },
@@ -106,8 +114,10 @@ export default async function AdminOverviewPage() {
       <div className="admin-kpi-grid">
         <div className="admin-kpi-card"><strong>{d.children}</strong><span>الأبناء المسجّلون</span></div>
         <div className="admin-kpi-card"><strong>{d.activeSubs}</strong><span>اشتراكات فعّالة</span></div>
+        <div className="admin-kpi-card"><strong>{d.pendingSubs}</strong><span>طلبات محفوظة بانتظار التفعيل</span></div>
         <div className="admin-kpi-card"><strong>{d.pausedSubs}</strong><span>اشتراكات موقوفة</span></div>
         <div className="admin-kpi-card"><strong>{d.activeTeachers}</strong><span>معلمون نشطون</span></div>
+        <div className="admin-kpi-card"><strong>{d.cohortsMissingOperations}</strong><span>مجموعات تحتاج تجهيزًا</span></div>
         <div className="admin-kpi-card"><strong>{d.todaySessions.length}</strong><span>جلسات اليوم</span></div>
         <div className="admin-kpi-card"><strong>{d.unusedMakeupCredits}</strong><span>أرصدة تعويض غير مستخدَمة</span></div>
       </div>
