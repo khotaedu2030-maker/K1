@@ -1,4 +1,5 @@
 import AdminShell from "@/components/AdminShell";
+import ReviewActivityButton from "./ReviewActivityButton";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
@@ -31,8 +32,10 @@ export default async function AdminMessagesPage() {
       </div>
       <p style={{ color: "var(--gray)", fontSize: 13, marginBottom: 16 }}>
         بيانات وصفية فقط (بلا محتوى المحادثات) حفاظًا على الخصوصية — عدد المحادثات وحالتها،
-        لا نص الرسائل نفسه.
+        لا نص الرسائل نفسه. التنبيه الجانبي يعني وصول نشاط جديد منذ آخر مراجعة إدارية،
+        وليس عدد رسائل لم يقرأها ولي الأمر أو المعلم.
       </p>
+      <div style={{ marginBottom: 20 }}><ReviewActivityButton /></div>
       {(threads ?? []).length === 0 ? (
         <p className="admin-empty-state">لا توجد محادثات.</p>
       ) : (
