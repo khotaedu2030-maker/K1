@@ -30,7 +30,7 @@ export default async function PilotActivationAdminPage() {
   const enabled = pilotActivationEnabled();
   const admin = createSupabaseAdminClient();
   const { data, error } = enabled ? await admin.from("subscriptions")
-    .select("id,created_at,hold_expires_at,children(first_name,grade),parents(full_name),cohorts(id,title,status,teacher_id,meeting_url,plan_id,product,days_of_week,start_time,end_time)")
+    .select("id,created_at,hold_expires_at,children(first_name,grade),parents(full_name),cohorts(id,title,status,capacity,teacher_id,meeting_url,plan_id,product,days_of_week,start_time,end_time)")
     .eq("status", "pending_payment")
     .order("created_at", { ascending: true })
     .limit(50)
