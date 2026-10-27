@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { declaredBodyExceeds, readJsonBodyLimited } from "@/lib/api-rate-limit";
 import { requirePermission } from "@/lib/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { checkNewTeacherEmail } from "@/lib/teacher-email-eligibility";
 
 const VALID_STATUSES = ["new", "reviewing", "shortlisted", "rejected", "accepted"];
 
@@ -22,6 +23,15 @@ export async function POST(req: Request) {
   }
 
   const admin = createSupabaseAdminClient();
+  if (status === "accepted") {
+    const { data: application, error: applicationError } = await admin.from("teacher_applications")
+      .select("email").eq("id", applicationId).maybeSingle();
+    if (applicationError) return NextResponse.json({ error: "تعذّر فحص بيانات الطلب" }, { status: 503 });
+    if (!application) return NextResponse.json({ error: "طلب المعلم غير موجود" }, { status: 404 });
+    const eligible = await checkNewTeacherEmail(admin, application.email);
+    if (!eligible.ok) return NextResponse.json({ error: eligible.reason }, { status: eligible.status });
+  }
+
   const { data: updated, error } = await admin
     .from("teacher_applications")
     .update({ status })
