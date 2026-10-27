@@ -9,8 +9,10 @@ export type RuntimeSettings = {
   makeupMonthlyLimit: number;
   pauseMinDays: number;
   pauseMaxDays: number;
-  quietHoursStart: number; // ساعة 0-23
+  quietHoursStart: number; // backward-compatible hour component
   quietHoursEnd: number;
+  quietHoursStartMinutes: number; // exact Riyadh wall-clock minute, 0..1439
+  quietHoursEndMinutes: number;
   registrationEnabled: boolean;
   attendanceLockHours: number;
   // Phase 9 correction — كانت هذه الأربعة FOUNDATION فقط (مخزَّنة، لا مستهلك). الآن ACTIVE:
@@ -28,6 +30,8 @@ const DEFAULTS: RuntimeSettings = {
   pauseMaxDays: 28, // = القيمة الافتراضية الفعلية لعمود platform_settings.pause_max_days منذ تصحيح Phase 1 (سياسة 1-4 أسابيع)
   quietHoursStart: 20, // = QUIET_HOURS.startHour الحالي
   quietHoursEnd: 8, // = QUIET_HOURS.endHour الحالي
+  quietHoursStartMinutes: 20 * 60,
+  quietHoursEndMinutes: 8 * 60,
   registrationEnabled: true, // = السلوك الحالي قبل وجود هذا الإعداد أصلًا (التسجيل مفتوح دائمًا)
   // على عكس بقية الإعدادات أعلاه، لا "سلوك مُشفَّر قديم" لقفل الحضور كان موجودًا لنحافظ عليه —
   // 24 ساعة هي السياسة المعتمَدة والقيمة الافتراضية الفعلية لعمود attendance_lock_hours نفسه
@@ -44,6 +48,15 @@ const DEFAULTS: RuntimeSettings = {
   defaultCapacity7_9: 5,
   defaultCapacity10_12: 5,
 };
+
+// DB 'time' columns include seconds; preserve configured HH:MM precision, even at 00:00.
+function quietClockMinutes(raw: unknown, fallbackMinutes: number): number {
+  const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(String(raw ?? ""));
+  if (!match) return fallbackMinutes;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return hour < 24 && minute < 60 ? hour * 60 + minute : fallbackMinutes;
+}
 
 let cache: { value: RuntimeSettings; fetchedAt: number } | null = null;
 const CACHE_TTL_MS = 60_000; // دقيقة واحدة — يكفي لتفادي استعلام متكرر بلا داعٍ على كل رسالة/طلب تجميد، بلا مخاطرة بقاء قديم طويلًا
@@ -78,12 +91,16 @@ export async function getRuntimeSettings(): Promise<RuntimeSettings> {
       return DEFAULTS;
     }
 
+    const startMinutes = quietClockMinutes(data.quiet_hours_start, DEFAULTS.quietHoursStartMinutes);
+    const endMinutes = quietClockMinutes(data.quiet_hours_end, DEFAULTS.quietHoursEndMinutes);
     const value: RuntimeSettings = {
       makeupMonthlyLimit: data.makeup_monthly_limit ?? DEFAULTS.makeupMonthlyLimit,
       pauseMinDays: data.pause_min_days ?? DEFAULTS.pauseMinDays,
       pauseMaxDays: data.pause_max_days ?? DEFAULTS.pauseMaxDays,
-      quietHoursStart: Number.isInteger(Number(String(data.quiet_hours_start).slice(0, 2))) ? Number(String(data.quiet_hours_start).slice(0, 2)) : DEFAULTS.quietHoursStart,
-      quietHoursEnd: Number.isInteger(Number(String(data.quiet_hours_end).slice(0, 2))) ? Number(String(data.quiet_hours_end).slice(0, 2)) : DEFAULTS.quietHoursEnd,
+      quietHoursStart: Math.floor(startMinutes / 60),
+      quietHoursEnd: Math.floor(endMinutes / 60),
+      quietHoursStartMinutes: startMinutes,
+      quietHoursEndMinutes: endMinutes,
       registrationEnabled: data.registration_enabled ?? DEFAULTS.registrationEnabled,
       attendanceLockHours: data.attendance_lock_hours ?? DEFAULTS.attendanceLockHours,
       defaultCapacity1_3: data.default_capacity_1_3 ?? DEFAULTS.defaultCapacity1_3,
