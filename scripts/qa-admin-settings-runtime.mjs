@@ -66,7 +66,7 @@ const cohortApi = read("src/app/api/admin/cohorts/route.ts");
 assert.match(settingsForm, /baseline\.default_capacity_4_6/, "only changed settings should be saved");
 assert.match(settingsForm, /name: "أوقات التواصل والرد"/, "communication settings label must reflect real behavior");
 assert.match(settingsForm, /لا تُمنع الرسائل أو رموز OTP/, "quiet hours must not be advertised as blocking messages");
-assert.match(settingsForm, /max: 20, unit: "طالب"/, "default capacities should honor the cohort creation maximum");
+assert.equal((settingsForm.match(/max: 20, unit: "طالب"/g) ?? []).length, 4, "all four grade bands should honor the 20-seat cohort creation maximum");
 assert.match(settingsApi, /cap4_6 > 20/, "server settings validation must also cap capacity at 20");
 assert.match(cohortApi, /capacity > 20/, "group creation and settings must enforce the same cap");
 console.log("PASS admin settings persistence contract, quiet-hour minute boundaries and 20-seat cohort maximum");
