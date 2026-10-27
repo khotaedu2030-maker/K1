@@ -12,7 +12,7 @@ assert.match(src,/اختيار المجموعة غير متاح قبل توفي�
 assert.match(src,/availablePlans\.find\(\(p\) => p\.id === planId\)/);
 assert.match(src,/step2Done = Boolean\(selectedPlan\)/);
 assert.match(src,/step3Done = Boolean\(selectedCohort\)/);
-assert.match(src,/if \(selectedCohort\) params\.set\("cohort", selectedCohort\.id\)/);
+assert.match(src,/if \(selectedCohortId\) params\.set\("cohort", selectedCohortId\)/);
 assert.doesNotMatch(src,/لا توجد خطط متاحة لهذا الصف حاليًا/);
 assert.doesNotMatch(src,/اختر خطة أخرى/);
 console.log("PASS truthful no-plan/no-group checkout state and stale URL stepper guards");
