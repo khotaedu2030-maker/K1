@@ -89,9 +89,10 @@ export default function CompleteEnrollmentPage() {
   }, [router]);
 
   useEffect(() => {
-    // A single initial attempt; the retry button calls finishEnrollment explicitly.
-    // ref prevents duplicate POSTs during React development Strict Mode.
-    void finishEnrollment();
+    // Start after mount, not synchronously inside the effect's rendering phase.
+    // React Strict Mode cleanup cancels the superseded initial attempt.
+    const timeout = window.setTimeout(() => { void finishEnrollment(); }, 0);
+    return () => window.clearTimeout(timeout);
   }, [finishEnrollment]);
 
   return (
