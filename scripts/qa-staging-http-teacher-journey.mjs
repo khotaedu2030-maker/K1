@@ -32,7 +32,7 @@ const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_RO
 const makeBrowserAuth = () => createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, {
   auth: { persistSession:false, autoRefreshToken:false, detectSessionInUrl:false },
 });
-const created = {users:[],teachers:[],admins:[],parent:null,children:[],cohort:null,sessions:[],studentModes:[]};
+const created = {users:[],teachers:[],admins:[],parent:null,children:[],cohort:null,sessions:[],studentModes:[],pilotAdminUserId:null};
 const rateLimitKeys = new Set();
 const tag = randomUUID().slice(0,8);
 let childProcess = null, problems = [], checks = 0;
@@ -101,7 +101,7 @@ async function bootServer() {
   const port=await listenPort();
   localhost="http://127.0.0.1:"+port;
   childProcess=spawn(process.execPath,["node_modules/next/dist/bin/next","start","-H","127.0.0.1","-p",String(port)],{
-    cwd:resolve("."),env:{...env,NODE_ENV:"production"},stdio:"ignore",
+    cwd:resolve("."),env:{...env,NODE_ENV:"production",KHOTA_FREE_PILOT_ACTIVATION_ENABLED:"true"},stdio:"ignore",
   });
   for(let tries=0;tries<100;tries++){
     if(childProcess.exitCode!==null)fail("Local Next.js server exited before ready");
@@ -145,6 +145,9 @@ async function cleanup(){
     }
   }
   for(const modeId of created.studentModes)await erase("student_mode_sessions","id",modeId);
+  // Audit and generated schedules are confined to this synthetic admin and group.
+  if(created.pilotAdminUserId)await erase("admin_actions","admin_user_id",created.pilotAdminUserId);
+  if(created.cohort)await erase("sessions","cohort_id",created.cohort);
   for(const sid of created.sessions)await erase("sessions","id",sid);
   for(const child of created.children)await erase("children","id",child);
   if(created.parent)await erase("parents","id",created.parent);
@@ -172,12 +175,15 @@ try{
   const parent=await identity("parent");
   const ops=await identity("ops-manager");
   const finance=await identity("finance-admin");
+  const pilotAdmin=await identity("pilot-super-admin");
+  created.pilotAdminUserId=pilotAdmin.id;
   const t1=await insert("teachers",{user_id:teacher.id,full_name:"معلم اختبار HTTP",active:true});
   const t2=await insert("teachers",{user_id:unrelated.id,full_name:"معلم بعيد",active:true});
   created.teachers.push(t1,t2);
   const opsId=await insert("admins",{user_id:ops.id,full_name:"مدير عمليات QA",role:"operations_manager",active:true});
   const financeId=await insert("admins",{user_id:finance.id,full_name:"مسؤول مالية QA",role:"finance_admin",active:true});
-  created.admins.push(opsId,financeId);
+  const pilotAdminRow=await insert("admins",{user_id:pilotAdmin.id,full_name:"مدير النظام التجريبي",role:"super_admin",active:true});
+  created.admins.push(opsId,financeId,pilotAdminRow);
   created.parent=await insert("parents",{
     user_id:parent.id,full_name:"ولي أمر HTTP",phone:"+966500000000",
   });
@@ -510,6 +516,97 @@ try{
   verify(subList.status===200 && subList.html.includes("بانتظار الدفع") &&
     subList.html.includes("طالب تسجيل مؤقت"),
     "Parent subscriptions list reflects pending enrollment rather than active");
+
+  // Free-pilot verification is local-server-only; hosted Staging flag remains OFF.
+  // The earlier subscriptionId is still pending_payment. No invoice is created.
+  rateLimitKeys.add(limiterKey("pilot-activation:admin",pilotAdmin.id));
+  rateLimitKeys.add(limiterKey("pilot-activation:admin",ops.id));
+  rateLimitKeys.add(limiterKey("pilot-activation:admin",finance.id));
+  rateLimitKeys.add(limiterKey("pilot-activation:subscription",subscriptionId));
+  const trialReason="تفعيل مقعد اختبار مصطنع ضمن تجربة أول 20 طالبًا مع سجل اعتماد إداري واضح";
+  const trialBody={subscriptionId,reason:trialReason};
+  const unauthTrial=await request("/api/admin/pilot-activate",{method:"POST",body:trialBody});
+  verify(unauthTrial.status===401,"Guests must not grant pilot entitlements");
+  const financeTrial=await request("/api/admin/pilot-activate",{
+    method:"POST",cookieHeader:finance.cookieHeader,body:trialBody,
+  });
+  verify(financeTrial.status===403,"Finance users must not grant a free pilot entitlement");
+  const opsTrial=await request("/api/admin/pilot-activate",{
+    method:"POST",cookieHeader:ops.cookieHeader,body:trialBody,
+  });
+  verify(opsTrial.status===403,"Operations users must not grant a free pilot entitlement");
+  const notReadyTrial=await request("/api/admin/pilot-activate",{
+    method:"POST",cookieHeader:pilotAdmin.cookieHeader,body:trialBody,
+  });
+  verify(notReadyTrial.status===409 &&
+    notReadyTrial.html.includes("Teams"),
+    "Super admin must be blocked until the cohort has a verified Teams link");
+  const {data:preTrial,error:preTrialError}=await admin.from("subscriptions")
+    .select("status").eq("id",subscriptionId).single();
+  verify(!preTrialError && preTrial?.status==="pending_payment",
+    "Blocked grant must not change subscription status");
+  const {error:linkError}=await admin.from("cohorts")
+    .update({meeting_url:"https://teams.microsoft.com/l/meetup-join/qa-synthetic-only"})
+    .eq("id",created.cohort);
+  if(linkError)fail("Could not ready synthetic cohort Teams URL");
+
+  // A malformed schedule must fail in the atomic RPC before any DB write.
+  const rejectedRpc=await admin.rpc("activate_pilot_trial_atomic",{
+    p_subscription_id:subscriptionId,p_admin_user_id:pilotAdmin.id,p_reason:trialReason,
+    p_start_date:riyadhDate(new Date()),p_renewal_date:riyadhDate(new Date(Date.now()+30*86400000)),
+    p_sessions:[{cohort_id:created.cohort,teacher_id:t1,session_date:riyadhDate(new Date()),
+      starts_at:new Date().toISOString(),ends_at:new Date(Date.now()+3600000).toISOString(),
+      meeting_url:"https://invalid.example.invalid",status:"scheduled"}],
+  });
+  verify(!rejectedRpc.error && rejectedRpc.data?.[0]?.ok===false &&
+    ["invalid_schedule_rows","invalid_schedule"].includes(rejectedRpc.data[0].error_code),
+    "Atomic trial RPC rejects mismatched schedule before updating subscription");
+  const {data:stillPending,error:pendingError}=await admin.from("subscriptions")
+    .select("status").eq("id",subscriptionId).single();
+  verify(!pendingError && stillPending?.status==="pending_payment",
+    "Rejected atomic schedule does not mutate the pending subscription");
+
+  const grant=await request("/api/admin/pilot-activate",{
+    method:"POST",cookieHeader:pilotAdmin.cookieHeader,body:trialBody,
+  });
+  verify(grant.status===200 && JSON.parse(grant.html).freePilot===true &&
+    JSON.parse(grant.html).alreadyActive===false,
+    "Staging super admin may activate synthetic pilot without paid transaction");
+  const {data:activated,error:activeError}=await admin.from("subscriptions")
+    .select("status,start_date,renewal_date").eq("id",subscriptionId).single();
+  verify(!activeError && activated?.status==="active" &&
+    !!activated.start_date && !!activated.renewal_date,
+    "Atomic grant transitions only this subscription to active and records dates");
+  const {count:pilotAudit,error:pilotAuditError}=await admin.from("admin_actions")
+    .select("id",{count:"exact",head:true}).eq("admin_user_id",pilotAdmin.id)
+    .eq("action","pilot_trial_activation").eq("entity_id",subscriptionId);
+  verify(!pilotAuditError && pilotAudit===1,
+    "One accountable audit log must record free-pilot authorization");
+  const {count:trialPayments,error:trialPaymentsError}=await admin.from("payments")
+    .select("id",{count:"exact",head:true}).eq("subscription_id",subscriptionId);
+  verify(!trialPaymentsError && trialPayments===0,
+    "Free pilot does not create an invoice, payment or paid status");
+  const {count:trialSessions,error:trialSessionsError}=await admin.from("sessions")
+    .select("id",{count:"exact",head:true}).eq("cohort_id",created.cohort);
+  verify(!trialSessionsError && trialSessions>created.sessions.length,
+    "Trial grant populates the group's first-month schedule");
+  const retryGrant=await request("/api/admin/pilot-activate",{
+    method:"POST",cookieHeader:pilotAdmin.cookieHeader,body:trialBody,
+  });
+  verify(retryGrant.status===200 && JSON.parse(retryGrant.html).alreadyActive===true,
+    "Repeating an approved trial does not create a second entitlement");
+  const {count:auditAfterRetry}=await admin.from("admin_actions")
+    .select("id",{head:true,count:"exact"}).eq("admin_user_id",pilotAdmin.id)
+    .eq("action","pilot_trial_activation").eq("entity_id",subscriptionId);
+  const {count:sessionsAfterRetry}=await admin.from("sessions")
+    .select("id",{head:true,count:"exact"}).eq("cohort_id",created.cohort);
+  verify(auditAfterRetry===1 && sessionsAfterRetry===trialSessions,
+    "Idempotent trial retry adds neither sessions nor audit records");
+  const forbiddenTrial=await request("/api/admin/pilot-activate",{
+    method:"POST",cookieHeader:pilotAdmin.cookieHeader,
+    body:{subscriptionId:randomUUID(),reason:trialReason},
+  });
+  verify(forbiddenTrial.status===404,"Unknown subscriptions fail without grants");
     console.log("PASS live Staging localhost HTTP integration: "+checks+
     " assertions using actual Next proxy, Supabase SSR cookies, teacher/parent pages, CSRF, role checks, teacher POST, rate limits and DB.");
 }catch(e){
