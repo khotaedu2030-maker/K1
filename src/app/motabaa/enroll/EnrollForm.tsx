@@ -48,48 +48,57 @@ export default function EnrollForm({
       return;
     }
 
+    if (parentName.trim().length < 2 || childName.trim().length < 2) {
+      setError("أدخل اسم ولي الأمر واسم الطفل بصورة صحيحة.");
+      return;
+    }
     setLoading(true);
 
-    // نفس صيغة +966 المخزَّنة — يضمن مطابقة رقم الجوال بصيغة واحدة موحَّدة في جدول parents.
-    const internationalPhone = normalizeSaudiPhone(phone);
-    const payload = { parentName, email: normalizedEmail, phone: internationalPhone, childName, grade, cohortId };
+    // Keep the form recoverable even on weak mobile connections or Supabase outages:
+    // previously a rejected getSession/fetch or an invalid JSON response left it spinning forever.
+    try {
+      const internationalPhone = normalizeSaudiPhone(phone);
+      const payload = {
+        parentName: parentName.trim(), email: normalizedEmail, phone: internationalPhone,
+        childName: childName.trim(), grade, cohortId,
+      };
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        setError("تعذّر التحقق من جلسة الدخول. تحقق من اتصال الإنترنت وأعد المحاولة.");
+        return;
+      }
+      if (!sessionData.session) {
+        sessionStorage.setItem("khota_pending_enrollment", JSON.stringify(payload));
+        router.push(`/signup?next=${encodeURIComponent("/motabaa/enroll/complete")}&email=${encodeURIComponent(normalizedEmail)}`);
+        return;
+      }
 
-    // /api/enroll يتطلب جلسة Auth حقيقية؛ لا نحجز مقعدًا قبل التحقق من البريد.
-    // المستخدم الذي بدأ من صفحة الاشتراك قد يكون جديدًا؛ /signup يدعم إنشاء الحساب
-    // وكذلك التحقق من بريد حساب موجود، مع استمرار البيانات المحفوظة بعد نجاح OTP.
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData.session) {
-      sessionStorage.setItem("khota_pending_enrollment", JSON.stringify(payload));
+      const sessionEmail = (sessionData.session.user.email ?? "").trim().toLowerCase();
+      if (sessionEmail && sessionEmail !== normalizedEmail) {
+        setError("البريد المدخل لا يطابق الحساب الذي سجلت الدخول به. استخدم بريد الحساب أو سجّل الخروج أولًا.");
+        return;
+      }
+
+      const res = await fetch("/api/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "تعذّر إتمام التسجيل، حاول مرة أخرى.");
+        return;
+      }
+      if (typeof data.subscriptionId !== "string" || !data.subscriptionId) {
+        setError("تعذّر تأكيد طلب التسجيل الآن. أعد المحاولة للتحقق من حالة الحجز.");
+        return;
+      }
+      router.push(`/motabaa/enroll/payment?sub=${encodeURIComponent(data.subscriptionId)}`);
+    } catch {
+      setError("انقطع الاتصال أثناء التسجيل. تحقق من الشبكة ثم أعد المحاولة، ولن تُكرر إعادة المحاولة حجز المقعد.");
+    } finally {
       setLoading(false);
-      router.push(`/signup?next=${encodeURIComponent("/motabaa/enroll/complete")}&email=${encodeURIComponent(normalizedEmail)}`);
-      return;
     }
-
-    // جلسة موجودة فعليًا — إن كان بريد الحساب المسجَّل دخوله مختلفًا عن البريد المكتوب بالنموذج،
-    // لا نستدعي /api/enroll إطلاقًا (سيرفضه server-side بـ409 على أي حال، لكن نمنع المحاولة
-    // ونوضّح السبب للمستخدم مباشرة بدل رسالة خطأ عامة).
-    const sessionEmail = (sessionData.session.user.email ?? "").trim().toLowerCase();
-    if (sessionEmail && sessionEmail !== normalizedEmail) {
-      setLoading(false);
-      setError(`أنت مسجَّل دخولك ببريد مختلف (${sessionEmail}). استخدم هذا البريد نفسه أعلاه، أو سجّل الخروج أولًا.`);
-      return;
-    }
-
-    const res = await fetch("/api/enroll", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    setLoading(false);
-
-    if (!res.ok) {
-      setError(data.error ?? "تعذّر إتمام التسجيل، حاول مرة أخرى.");
-      return;
-    }
-
-    router.push(`/motabaa/enroll/payment?sub=${data.subscriptionId}`);
   }
 
   return (
