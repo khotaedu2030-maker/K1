@@ -125,19 +125,21 @@ export default function SettingsForm({ initial }: { initial: Settings }) {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         cache: "no-store",
+        // Save only changed fields. The server merges with its latest settings so
+        // editing one section won't overwrite unrelated changes from another admin.
         body: JSON.stringify({
-          makeupMonthlyLimit: values.makeup_monthly_limit,
-          pauseMinDays: values.pause_min_days,
-          pauseMaxDays: values.pause_max_days,
-          quietHoursStart: values.quiet_hours_start.slice(0, 5),
-          quietHoursEnd: values.quiet_hours_end.slice(0, 5),
-          registrationEnabled: values.registration_enabled,
-          seatHoldHours: values.seat_hold_hours,
-          attendanceLockHours: values.attendance_lock_hours,
-          defaultCapacity1_3: values.default_capacity_1_3,
-          defaultCapacity4_6: values.default_capacity_4_6,
-          defaultCapacity7_9: values.default_capacity_7_9,
-          defaultCapacity10_12: values.default_capacity_10_12,
+          ...(values.makeup_monthly_limit !== baseline.makeup_monthly_limit ? { makeupMonthlyLimit: values.makeup_monthly_limit } : {}),
+          ...(values.pause_min_days !== baseline.pause_min_days ? { pauseMinDays: values.pause_min_days } : {}),
+          ...(values.pause_max_days !== baseline.pause_max_days ? { pauseMaxDays: values.pause_max_days } : {}),
+          ...(values.quiet_hours_start.slice(0, 5) !== baseline.quiet_hours_start.slice(0, 5) ? { quietHoursStart: values.quiet_hours_start.slice(0, 5) } : {}),
+          ...(values.quiet_hours_end.slice(0, 5) !== baseline.quiet_hours_end.slice(0, 5) ? { quietHoursEnd: values.quiet_hours_end.slice(0, 5) } : {}),
+          ...(values.registration_enabled !== baseline.registration_enabled ? { registrationEnabled: values.registration_enabled } : {}),
+          ...(values.seat_hold_hours !== baseline.seat_hold_hours ? { seatHoldHours: values.seat_hold_hours } : {}),
+          ...(values.attendance_lock_hours !== baseline.attendance_lock_hours ? { attendanceLockHours: values.attendance_lock_hours } : {}),
+          ...(values.default_capacity_1_3 !== baseline.default_capacity_1_3 ? { defaultCapacity1_3: values.default_capacity_1_3 } : {}),
+          ...(values.default_capacity_4_6 !== baseline.default_capacity_4_6 ? { defaultCapacity4_6: values.default_capacity_4_6 } : {}),
+          ...(values.default_capacity_7_9 !== baseline.default_capacity_7_9 ? { defaultCapacity7_9: values.default_capacity_7_9 } : {}),
+          ...(values.default_capacity_10_12 !== baseline.default_capacity_10_12 ? { defaultCapacity10_12: values.default_capacity_10_12 } : {}),
         }),
       });
       const data = await response.json().catch(() => ({}));
