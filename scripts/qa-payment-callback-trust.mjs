@@ -15,4 +15,10 @@ assert.doesNotMatch(client,/const done = completed \|\| callbackStatus === "paid
 assert.match(client,/callbackStatus === "paid" && !done/);
 assert.match(client,/subscriptionStatus !== "pending_payment"/);
 assert.match(client,/تم حفظ طلب تسجيلك/);
+assert.match(page,/paymentsEnabled \? "أكمل اشتراكك" : "طلب تسجيل طفلك"/);
+const subscriptions=fs.readFileSync("src/app/parent/subscriptions/page.tsx","utf8");
+assert.match(subscriptions,/areOnlinePaymentsEnabled/);
+assert.match(subscriptions,/paymentsEnabled \? statusLabel\.pending_payment : "الطلب محفوظ — بانتظار التفعيل"/);
+assert.match(subscriptions,/getGradeLabelArabic/);
+assert.match(client,/الاشتراك ليس مفعّلًا بعد/);
 console.log("PASS checkout success requires server-verified active ownership and never trusts paid=1 URL");
