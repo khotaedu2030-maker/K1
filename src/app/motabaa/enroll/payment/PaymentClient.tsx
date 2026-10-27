@@ -160,7 +160,7 @@ export default function PaymentClient({
           <div role="status" style={{ padding: 16, borderRadius: 14, background: "var(--cream)", border: "1px solid var(--line)", marginBottom: 16 }}>
             <span className="badge">الدفع الإلكتروني متوقف مؤقتًا</span>
             <h2 style={{ fontSize: 20, margin: "12px 0 6px" }}>تم حفظ طلب تسجيلك</h2>
-            <p style={{ color: "var(--gray)", margin: 0 }}>سيتواصل معك فريق خُطى لإكمال الاشتراك. لن يُطلب منك دفع أي مبلغ من هذه الصفحة حاليًا.</p>
+            <p style={{ color: "var(--gray)", margin: 0 }}>طلبك محفوظ ويمكنك متابعة حالته من لوحة ولي الأمر. الاشتراك ليس مفعّلًا بعد، ولن يُطلب منك دفع أي مبلغ من هذه الصفحة حاليًا.</p>
           </div>
         )}
 
