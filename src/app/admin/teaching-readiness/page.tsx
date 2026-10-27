@@ -23,7 +23,7 @@ export default async function TeachingReadinessPage() {
   ]);
   const baseLookupFailed = [cohortResult, teacherResult, planResult, pendingResult, activeResult, sessionResult].some((r) => Boolean(r.error));
 
-  const teachers: (TeacherForTeaching & { full_name: string })[] = await Promise.all((teacherResult.data ?? []).map(async (t) => {
+  const teachers: (TeacherForTeaching & { full_name: string; authLookupFailed: boolean })[] = await Promise.all((teacherResult.data ?? []).map(async (t) => {
     if (!t.user_id) return { ...t, verifiedLogin: false, authLookupFailed: false };
     const { data: authRecord, error: authError } = await admin.auth.admin.getUserById(t.user_id);
     return { ...t, verifiedLogin: Boolean(authRecord.user?.email_confirmed_at), authLookupFailed: Boolean(authError) };
