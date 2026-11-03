@@ -44,7 +44,7 @@ export default function P() {
           </Reveal>
         </EditorialSplit>
 
-        <EditorialSplit image="/images/khota-progress.webp" alt="ولي أمر يتابع تقدّم ابنه بعد الجلسة" objectPosition="32% 30%" reverse contentBg="var(--card)">
+        <EditorialSplit image="/images/khota-progress.webp" alt="ولي أمر يتابع تقدّم ابنه بعد الجلسة" objectPosition="16% 30%" reverse contentBg="var(--card)">
           <Reveal>
             <span className="eyebrow">نهاية الجلسة، وما بعدها</span>
             <h2 style={{ fontSize: "clamp(26px,3.2vw,40px)" }}>مراجعة الإنجاز، ثم تصلك أنت.</h2>

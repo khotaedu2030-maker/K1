@@ -1,4 +1,5 @@
 import Image from "next/image";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import Reveal from "@/components/Reveal";
@@ -13,7 +14,9 @@ const heroStories: HeroStory[] = [
     label: "بعد المدرسة",
     image: "/images/khota-hero.webp",
     alt: "طالب يرتب أولوياته الدراسية في بيئة منزلية هادئة",
-    objectPosition: "50% 12%",
+    objectPosition: "30% 12%",
+    objectPositionMobile: "24% 20%",
+    light: true,
     h1: ["بعد المدرسة،", "تبدأ خُطى."],
     lead: "خُطى تساعد الطالب على ترتيب أولوياته، إنجاز مهامه، والاستعداد للغد، مع متابعة واضحة ومطمئنة لولي الأمر.",
     ctaLabel: "ابدأ مع خُطى",
@@ -35,7 +38,9 @@ const heroStories: HeroStory[] = [
     label: "لولي الأمر",
     image: "/images/khota-progress.webp",
     alt: "ولي أمر يتابع تقدّم ابنه من المنزل",
-    objectPosition: "32% 25%",
+    objectPosition: "30% 25%",
+    objectPositionMobile: "15% 25%",
+    light: true,
     h1: ["وأنت تعرف", "كيف يتقدّم."],
     lead: "بطاقة مختصرة تصلك بعد كل جلسة — بلا ملاحقة يومية.",
     ctaLabel: "شاهد لوحة ولي الأمر",
@@ -89,7 +94,7 @@ export default async function Home() {
     <Shell transparentHeader>
       <main>
         {/* ---------- Scene 01: Hero + Story Rail ---------- */}
-        <section className="hero-editorial-v28">
+        <section className="hero-editorial-v28 hero-split-m">
           <HeroStoryRail stories={heroStories} />
         </section>
 
@@ -171,7 +176,8 @@ export default async function Home() {
                     alt="ولي أمر يتابع تقدّم ابنه من المنزل"
                     fill
                     sizes="(max-width: 850px) 84vw, 520px"
-                    style={{ objectFit: "cover", objectPosition: "32% 30%" }}
+                    className="cover-photo"
+                    style={{ "--op": "20% 30%" } as CSSProperties}
                     loading="lazy"
                   />
                 </div>
@@ -182,13 +188,14 @@ export default async function Home() {
 
         {/* ---------- Scene 07: المعلمون — لحظة سينمائية هادئة، مقياس مختلف جذريًا ---------- */}
         <section className="quiet-cinematic">
-          <div className="bg">
+          <div className="bg" data-light="true">
             <Image
               src="/images/khota-teacher.webp"
               alt="معلمة سعودية تقدّم جلسة تعليمية عن بُعد"
               fill
               sizes="100vw"
-              style={{ objectFit: "cover", objectPosition: "45% 20%" }}
+              className="cover-photo"
+              style={{ "--op": "45% 30%", "--op-m": "12% 12%" } as CSSProperties}
               loading="lazy"
             />
           </div>
@@ -244,7 +251,7 @@ export default async function Home() {
         {/* ---------- Scene 10: CTA ختامي ---------- */}
         <section className="cta-cinematic">
           <div className="bg">
-            <Image src="/images/khota-about.webp" alt="مكتب دراسة هادئ" fill sizes="100vw" style={{ objectFit: "cover" }} loading="lazy" />
+            <Image src="/images/khota-about.webp" alt="مكتب دراسة هادئ" fill sizes="100vw" className="cover-photo" style={{ "--op": "50% 55%", "--op-m": "28% 50%" } as CSSProperties} loading="lazy" />
           </div>
           <div className="container cta-cinematic-content">
             <Reveal>

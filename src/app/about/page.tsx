@@ -1,4 +1,5 @@
 import Image from "next/image";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import Reveal from "@/components/Reveal";
@@ -40,7 +41,7 @@ export default function P() {
 
         <section className="cta-cinematic" style={{ minHeight: "50vh" }}>
           <div className="bg">
-            <Image src="/images/khota-about.webp" alt="مكتب دراسة هادئ" fill sizes="100vw" style={{ objectFit: "cover" }} loading="lazy" />
+            <Image src="/images/khota-about.webp" alt="مكتب دراسة هادئ" fill sizes="100vw" className="cover-photo" style={{ "--op": "50% 55%", "--op-m": "28% 50%" } as CSSProperties} loading="lazy" />
           </div>
           <div className="container cta-cinematic-content">
             <Reveal>

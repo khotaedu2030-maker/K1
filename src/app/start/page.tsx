@@ -1,4 +1,5 @@
 import Image from "next/image";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 
@@ -14,7 +15,8 @@ export default function P() {
             alt="أم وابنها في جلسة متابعة دراسية منزلية"
             fill
             sizes="(max-width: 850px) 100vw, 50vw"
-            style={{ objectFit: "cover", objectPosition: "45% 15%" }}
+            className="cover-photo"
+            style={{ "--op": "30% 15%", "--op-m": "28% 15%" } as CSSProperties}
             priority
           />
         </div>
