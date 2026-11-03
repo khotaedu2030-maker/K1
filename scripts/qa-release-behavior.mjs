@@ -416,7 +416,7 @@ function attendanceSeed(existing) {
     parents: [{ id: "p1", user_id: "u1" }],
     children: [{ id: "kid1", parent_id: "p1" }],
     subscriptions: [{ id: "s1", child_id: "kid1", cohort_id: "c1", status: "active" }],
-    sessions: [{ id: "sess1", cohort_id: "c1", teacher_id: "t1", starts_at: new Date(now - 300_000).toISOString(), ends_at: new Date(now + 1800_000).toISOString(), meeting_url: "https://meet.example/x" }],
+    sessions: [{ id: "sess1", cohort_id: "c1", teacher_id: "t1", starts_at: new Date(now - 300_000).toISOString(), ends_at: new Date(now + 1800_000).toISOString(), meeting_url: "https://teams.microsoft.com/l/meetup-join/khota-qa" }],
     attendance: existing ? [existing] : [],
   };
 }
@@ -433,9 +433,21 @@ for (const [who, load, body] of [["parent", loadParentMark, { sessionId: "sess1"
     const db = memDb(attendanceSeed(null), []);
     const res = await load(db)({ __body: body });
     assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.equal(res.body.meetingUrl, "https://meet.example/x");
+    assert.equal(res.body.meetingUrl, "https://teams.microsoft.com/l/meetup-join/khota-qa");
     assert.equal(db.t.attendance.length, 1);
     assert.equal(db.t.attendance[0].status, "present");
+  });
+  await check(`${who} attendance mark rejects missing or unsafe Teams links before saving attendance`, async () => {
+    for (const unsafeUrl of [null, "javascript:alert(1)", "https://teams.microsoft.com.evil.test/l/meetup-join/x"]) {
+      const seed = attendanceSeed(null);
+      seed.sessions[0].meeting_url = unsafeUrl;
+      const log = [];
+      const db = memDb(seed, log);
+      const res = await load(db)({ __body: body });
+      assert.equal(res.status, 409, JSON.stringify(res.body));
+      assert.equal(db.t.attendance.length, 0);
+      assert.ok(!log.includes("attendance.upsert"), "must not mark a student present for missing or unsafe link");
+    }
   });
   await check(`${who} attendance mark cannot overwrite a teacher-finalized decision`, async () => {
     const db = memDb(attendanceSeed(teacherAbsent), []);

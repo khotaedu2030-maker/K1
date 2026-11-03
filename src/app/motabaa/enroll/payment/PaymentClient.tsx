@@ -12,18 +12,21 @@ type PaymentSummary = {
 
 export default function PaymentClient({
   subscriptionId,
+  subscriptionStatus,
   amountSar,
   summary,
   paymentsEnabled,
 }: {
   subscriptionId: string;
+  subscriptionStatus: string;
   amountSar: number | null;
   summary: PaymentSummary;
   paymentsEnabled: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // الـcallback يثبت الدفع على الخادم قبل إعادته لهذه الصفحة؛ query يعكس النتيجة ولا يتحقق منها.
+  // Query flags are untrusted user input, NEVER proof of payment.
+  // A successful invoice must be reflected in the server-read subscription status.
   const callbackStatus = searchParams.get("paid") === "1"
     ? "paid"
     : searchParams.get("failed") === "1"
@@ -35,12 +38,14 @@ export default function PaymentClient({
   const [completed, setCompleted] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [dismissedCallbackStatus, setDismissedCallbackStatus] = useState<string | null>(null);
-  const done = completed || callbackStatus === "paid";
-  const callbackError = callbackStatus === "failed"
-    ? "تعذّر تأكيد الدفع. حاول مرة أخرى، أو تواصل معنا إذا استمرت المشكلة."
-    : callbackStatus === "cancelled"
-      ? "تم إلغاء عملية الدفع."
-      : null;
+  const done = completed || subscriptionStatus === "active";
+  const callbackError = callbackStatus === "paid" && !done
+    ? "لم يتم تأكيد تفعيل الاشتراك بعد. حالة الاشتراك ما زالت بانتظار التحقق من الخادم؛ راجع حالة الطلب أو أعد تحميل الصفحة."
+    : callbackStatus === "failed"
+      ? "تعذّر تأكيد الدفع. حاول مرة أخرى، أو تواصل معنا إذا استمرت المشكلة."
+      : callbackStatus === "cancelled"
+        ? "تم إلغاء عملية الدفع."
+        : null;
   const error = localError ?? (callbackStatus !== dismissedCallbackStatus ? callbackError : null);
   const [redirecting, setRedirecting] = useState(false);
   // إقرارات ما قبل الدفع — غير محدَّدة افتراضيًا، يجب تفعيل الاثنتين قبل تمكين أي زر دفع.
@@ -103,12 +108,29 @@ export default function PaymentClient({
   if (done) {
     return (
       <div className="dashcard" style={{ textAlign: "center" }}>
-        <span className="badge">تم الاشتراك بنجاح</span>
+        <span className="badge">تم تفعيل الاشتراك</span>
         <h2 style={{ color: "var(--t)", marginTop: 12 }}>تم حجز مقعد طفلك في خُطى.</h2>
         <p style={{ color: "var(--gray)" }}>جدول الحصص جاهز الآن في لوحة ولي الأمر.</p>
         <button className="btn" onClick={() => router.push("/parent/schedule")} style={{ marginTop: 10 }}>
           الانتقال إلى لوحة ولي الأمر ←
         </button>
+      </div>
+    );
+  }
+
+  if (subscriptionStatus !== "pending_payment") {
+    const label = subscriptionStatus === "paused" ? "الاشتراك مجمّد"
+      : subscriptionStatus === "expired" ? "الاشتراك منتهٍ"
+      : subscriptionStatus === "cancelled" ? "الاشتراك ملغى"
+      : "حالة الاشتراك قيد المراجعة";
+    return (
+      <div className="dashcard" role="status" style={{ textAlign: "center" }}>
+        <span className="badge">{label}</span>
+        <h2 style={{ marginTop: 12 }}>لا يمكن استكمال الدفع لهذا الاشتراك بحالته الحالية.</h2>
+        <p style={{ color: "var(--gray)" }}>راجع الاشتراكات المرتبطة بحسابك لمعرفة الحالة الأحدث.</p>
+        <Link className="btn outline" href="/parent/subscriptions" style={{ marginTop: 10 }}>
+          عرض اشتراكاتي
+        </Link>
       </div>
     );
   }
@@ -138,7 +160,7 @@ export default function PaymentClient({
           <div role="status" style={{ padding: 16, borderRadius: 14, background: "var(--cream)", border: "1px solid var(--line)", marginBottom: 16 }}>
             <span className="badge">الدفع الإلكتروني متوقف مؤقتًا</span>
             <h2 style={{ fontSize: 20, margin: "12px 0 6px" }}>تم حفظ طلب تسجيلك</h2>
-            <p style={{ color: "var(--gray)", margin: 0 }}>سيتواصل معك فريق خُطى لإكمال الاشتراك. لن يُطلب منك دفع أي مبلغ من هذه الصفحة حاليًا.</p>
+            <p style={{ color: "var(--gray)", margin: 0 }}>طلبك محفوظ ويمكنك متابعة حالته من لوحة ولي الأمر. الاشتراك ليس مفعّلًا بعد، ولن يُطلب منك دفع أي مبلغ من هذه الصفحة حاليًا.</p>
           </div>
         )}
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
+import { formatSessionDay, formatSessionTime } from "@/lib/arabic-time";
 import SessionReportForm from "./SessionReportForm";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
@@ -92,7 +93,7 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sess
           <span className="eyebrow">{supabaseRelationOne(reportSession.cohorts)?.title ?? "الجلسة"}</span>
           <h1 className="title" style={{ fontSize: 32 }}>تقرير الجلسة السريع</h1>
           <p className="lead">
-            {new Date(reportSession.starts_at).toLocaleString("ar-SA", { weekday: "long", hour: "2-digit", minute: "2-digit" })}
+            {`${formatSessionDay(reportSession.starts_at)}، ${formatSessionTime(reportSession.starts_at)}`}
           </p>
 
           {students.length === 0 ? (

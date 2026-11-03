@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Shell from "@/components/Shell";
+import { formatSessionDate, formatSessionDay, formatSessionTime } from "@/lib/arabic-time";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 
@@ -58,9 +59,7 @@ export default async function P() {
                 <div>
                   <b>{supabaseRelationOne(s.cohorts)?.title ?? "مجموعة"}</b>
                   <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
-                    {new Date(s.starts_at).toLocaleString("ar-SA", {
-                      weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
-                    })}
+                    {`${formatSessionDay(s.starts_at)}، ${formatSessionDate(s.starts_at)}، ${formatSessionTime(s.starts_at)}`}
                   </p>
                 </div>
                 <Link className="btn small" href={`/teacher/session-report?session=${s.id}`}>

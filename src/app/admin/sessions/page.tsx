@@ -1,4 +1,6 @@
 import AdminShell from "@/components/AdminShell";
+import { formatSessionTime } from "@/lib/arabic-time";
+import { formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
 import SubstituteTeacherControl from "./SubstituteTeacherControl";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -20,7 +22,7 @@ export default async function AdminSessionsPage({ searchParams }: { searchParams
 
   const params = await searchParams;
   const range = params.range ?? "today";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatRiyadhCalendarDate(getRiyadhCalendarDate(new Date()));
 
   const supabase = createSupabaseAdminClient();
   let query = supabase
@@ -67,7 +69,7 @@ export default async function AdminSessionsPage({ searchParams }: { searchParams
               return (
                 <tr key={s.id}>
                   <td>{new Date(s.session_date).toLocaleDateString("ar-SA")}</td>
-                  <td>{s.starts_at ? new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                  <td>{s.starts_at ? formatSessionTime(s.starts_at) : "—"}</td>
                   <td>{supabaseRelationOne(s.cohorts)?.title ?? "—"}</td>
                   <td>
                     {supabaseRelationOne(s.teachers)?.full_name ?? "—"}

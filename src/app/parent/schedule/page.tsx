@@ -10,6 +10,7 @@ import { resolveParentContext } from "@/lib/pilot-parent";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { formatDaysList, formatSessionCount } from "@/lib/plan-display";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
+import { groupParentCohortChildren, summarizeFamilyWeek } from "@/lib/parent-family-schedule";
 
 type DashboardSubscription = {
   child_id: string;
@@ -82,7 +83,7 @@ export default async function P() {
     : { data: [] };
 
   const cohortIds = [...new Set((subs ?? []).map((s) => s.cohort_id).filter(Boolean))] as string[];
-  const childByCohort = new Map((subs ?? []).map((s) => [s.cohort_id, s.child_id]));
+  const childrenByCohort = groupParentCohortChildren(subs ?? [], childName);
 
   // ملخّص "الخطة الحالية" — من أول اشتراك فعّال يحمل بيانات خطة كاملة، لعرض متّسق مع بقية
   // الرحلة (نفس الحقول: الخطة/الأيام/عدد الجلسات/السعر) بلا أي تغيير في منطق الاشتراكات نفسه.
@@ -142,11 +143,7 @@ export default async function P() {
     ? {
         id: nextRow.id,
         cohortId: nextRow.cohort_id,
-        childId: childByCohort.get(nextRow.cohort_id) ?? null,
-        childName: (() => {
-          const cid = childByCohort.get(nextRow.cohort_id);
-          return cid ? childName.get(cid) ?? null : null;
-        })(),
+        children: childrenByCohort.get(nextRow.cohort_id) ?? [],
         programTitle: supabaseRelationOne(nextRow.cohorts)?.title ?? null,
         startsAt: nextRow.starts_at,
         endsAt: nextRow.ends_at,
@@ -158,12 +155,12 @@ export default async function P() {
   // لكن يجب ألا تختفي من القائمة؛ نتجاوز أول جلسة فقط عندما عُرضت فعليًا كبطاقة رئيسية.
   const remainingUpcoming = nextSession ? upcoming.slice(1) : upcoming;
   const upcomingRows: SessionRow[] = remainingUpcoming.map((s) => {
-    const cid = childByCohort.get(s.cohort_id);
+    const names = (childrenByCohort.get(s.cohort_id) ?? []).map((child) => child.name);
     return {
       id: s.id,
       startsAt: s.starts_at,
       programTitle: supabaseRelationOne(s.cohorts)?.title ?? null,
-      childName: cid ? childName.get(cid) ?? null : null,
+      childName: names.length ? names.join("، ") : null,
       status: s.status,
     };
   });
@@ -171,21 +168,24 @@ export default async function P() {
   // ---------- ملخص هذا الأسبوع (بيانات حقيقية فقط) ----------
   const weekStart = riyadhWeekStartUTC(now);
   const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const weekSessions = sessions.filter((s) => {
-    const t = new Date(s.starts_at);
-    return t >= weekStart && t < weekEnd;
-  });
+  // الاستعلام الرئيسي يعرض القادمة فقط، فلا يجوز اشتقاق ملخص الأسبوع منه.
+  // لكل ابن في المجموعة جلسة محسوبة مستقلة عند تجميع الأسرة.
+  const { data: weekSessions } = await admin.from("sessions")
+    .select("id, cohort_id, starts_at, status")
+    .in("cohort_id", cohortIds)
+    .gte("starts_at", weekStart.toISOString())
+    .lt("starts_at", weekEnd.toISOString())
+    .order("starts_at", { ascending: true })
+    .limit(250);
 
   let weeklyStats = null;
-  if (weekSessions.length > 0) {
-    const weekSessionIds = weekSessions.map((s) => s.id);
-    const { data: weekAttendance } = await admin
-      .from("attendance")
-      .select("session_id, status")
-      .in("session_id", weekSessionIds);
-    const attendedCount = (weekAttendance ?? []).filter((a) => a.status === "present").length;
-    const upcomingThisWeek = weekSessions.filter((s) => s.status === "scheduled" && new Date(s.starts_at) >= now).length;
-    weeklyStats = { totalSessions: weekSessions.length, attended: attendedCount, upcoming: upcomingThisWeek };
+  if ((weekSessions ?? []).length > 0) {
+    const weekSessionIds = (weekSessions ?? []).map((s) => s.id);
+    const { data: weekAttendance } = await admin.from("attendance")
+      .select("session_id, child_id, status")
+      .in("session_id", weekSessionIds)
+      .in("child_id", childIds);
+    weeklyStats = summarizeFamilyWeek(weekSessions ?? [], weekAttendance ?? [], childrenByCohort, now);
   }
 
   // ---------- رحلة الطفل (أحدث بطاقة إنجاز حقيقية لأول طفل) ----------
@@ -250,7 +250,7 @@ export default async function P() {
             <div className="app-dashboard-side">
               {currentPlan && (
                 <div className="dashcard">
-                  <b>الخطة الحالية</b>
+                  <b>{childIds.length > 1 ? "إحدى خطط الأبناء الحالية" : "الخطة الحالية"}</b>
                   <div style={{ marginTop: 10 }}>
                     <div className="taskline" style={{ justifyContent: "space-between" }}><span style={{ color: "var(--gray)" }}>الخطة</span><span>{currentPlan.name ?? "—"}</span></div>
                     {currentPlan.days && <div className="taskline" style={{ justifyContent: "space-between" }}><span style={{ color: "var(--gray)" }}>الأيام</span><span>{currentPlan.days}</span></div>}
@@ -262,7 +262,7 @@ export default async function P() {
                 </div>
               )}
               <WeeklySummary stats={weeklyStats} />
-              <ChildJourney pulse={pulse} />
+              <ChildJourney pulse={pulse} childName={firstChildId ? childName.get(firstChildId) ?? null : null} />
               {(credits ?? []).map((c) => (
                 <RedeemCreditCard
                   key={c.id}

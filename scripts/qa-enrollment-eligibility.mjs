@@ -1,0 +1,21 @@
+// Regression: public enrolment must not request PII for invalid cohort selection.
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const src=fs.readFileSync("src/app/motabaa/enroll/page.tsx","utf8");
+assert.match(src,/parseAndValidateGrade/);
+assert.match(src,/resolveGradeBand\(grade\)/);
+assert.match(src,/enrollmentCohort\.status !== "open"/);
+assert.match(src,/plan\.active/);
+assert.match(src,/plan\.price_sar/);
+assert.match(src,/cohort_available_seats/);
+assert.match(src,/settings\.registrationEnabled/);
+assert.match(src,/unavailableReason/);
+assert.match(src,/if \(unavailableReason\) \{/);
+assert.match(src,/return <EnrollForm grade=\{grade\}/);
+const script=fs.readFileSync("scripts/qa-staging-http-teacher-journey.mjs","utf8");
+assert.match(script,/Wrong grade cannot collect parent identity/);
+assert.match(script,/Unverified guest cannot reserve a seat/);
+assert.match(script,/Enrollment must remain pending payment/);
+assert.match(script,/Idempotent enrollment may not duplicate the seat hold/);
+assert.match(script,/Payment paused checkout must not claim active subscription/);
+console.log("PASS enrollment checkout eligibility and pending-payment-only HTTP regression guards");

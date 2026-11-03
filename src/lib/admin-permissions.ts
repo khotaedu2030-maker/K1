@@ -13,6 +13,7 @@ export type AdminPermission =
   | "teacher_application.review"
   | "makeup.manage"
   | "subscription.review"
+  | "pilot.activate"
   | "parent.context.read"
   | "payment.read"
   | "admin.manage"
@@ -33,6 +34,7 @@ const ALL_PERMISSIONS: readonly AdminPermission[] = [
   "teacher_application.review",
   "makeup.manage",
   "subscription.review",
+  "pilot.activate",
   "parent.context.read",
   "payment.read",
   "admin.manage",

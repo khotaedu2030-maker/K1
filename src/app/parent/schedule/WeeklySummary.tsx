@@ -16,7 +16,7 @@ export default function WeeklySummary({ stats }: { stats: WeeklyStats }) {
       <div className="kpi kpi-3" style={{ marginTop: 14 }}>
         <div>
           <strong>{stats.totalSessions}</strong>
-          <span>الجلسات</span>
+          <span>جلسات الأبناء</span>
         </div>
         <div>
           <strong>{stats.attended}</strong>

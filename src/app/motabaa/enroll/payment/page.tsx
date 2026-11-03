@@ -11,6 +11,7 @@ import { areOnlinePaymentsEnabled } from "@/lib/payment-settings";
 
 type PaymentSubscription = {
   parent_id: string;
+  status: string;
   children: SupabaseRelation<{ grade: number | null }>;
   cohorts: SupabaseRelation<{
     title: string;
@@ -31,7 +32,9 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
     program: string; grade: string | null; plan: string | null;
     days: string | null; sessionsPerMonth: number | null; cohortTitle: string | null; time: string | null;
   } | null = null;
-  let ownershipMismatch = false;
+  let unavailable = false;
+  let lookupError = false;
+  let subscriptionStatus: string | null = null;
   const paymentsEnabled = areOnlinePaymentsEnabled();
 
   if (subscriptionId) {
@@ -45,17 +48,19 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
 
     try {
       const supabase = createSupabaseAdminClient();
-      const { data: subscription } = await supabase
+      const { data: subscription, error: queryError } = await supabase
         .from("subscriptions")
-        .select("parent_id, children(grade), cohorts(title, product, days_of_week, start_time, end_time), plans(name, price_sar, sessions_per_month)")
+        .select("parent_id, status, children(grade), cohorts(title, product, days_of_week, start_time, end_time), plans(name, price_sar, sessions_per_month)")
         .eq("id", subscriptionId)
         .maybeSingle();
 
+      if (queryError) throw queryError;
       const sub = subscription as PaymentSubscription | null;
-      if (sub && sub.parent_id !== context!.parentId) {
-        // لا يُسمَح بعرض/دفع اشتراك يعود لولي أمر آخر — لا نكشف أي تفاصيل عنه.
-        ownershipMismatch = true;
-      } else if (sub) {
+      if (!sub || sub.parent_id !== context.parentId) {
+        // Treat unknown and unowned IDs alike; never claim a missing booking was saved.
+        unavailable = true;
+      } else {
+        subscriptionStatus = sub.status;
         const child = supabaseRelationOne(sub.children);
         const cohort = supabaseRelationOne(sub.cohorts);
         const plan = supabaseRelationOne(sub.plans);
@@ -71,7 +76,8 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
         };
       }
     } catch {
-      // بلا اتصال حقيقي بقاعدة البيانات — تُعرض شاشة الدفع بلا تفاصيل إضافية بدل الانهيار
+      // Fail closed on DB read failures; never render an optimistic saved/paid status.
+      lookupError = true;
     }
   }
 
@@ -79,13 +85,16 @@ export default async function P({ searchParams }: { searchParams: Promise<{ sub?
     <Shell>
       <main className="section">
         <div className="narrow">
-          <span className="eyebrow">الخطوة الأخيرة</span>
-          <h1 className="title" style={{ fontSize: 34 }}>أكمل اشتراكك</h1>
-          {ownershipMismatch ? (
-            <p>هذا الاشتراك غير متاح لحسابك.</p>
-          ) : subscriptionId ? (
+          <span className="eyebrow">{paymentsEnabled ? "الخطوة الأخيرة" : "متابعة الطلب"}</span>
+          <h1 className="title" style={{ fontSize: 34 }}>{paymentsEnabled ? "أكمل اشتراكك" : "طلب تسجيل طفلك"}</h1>
+          {lookupError ? (
+            <p role="alert">تعذّر التحقق من حالة الاشتراك الآن. أعد تحميل الصفحة بعد قليل.</p>
+          ) : unavailable ? (
+            <p>هذا الاشتراك غير متاح لحسابك. راجع <a href="/parent/subscriptions" style={{ textDecoration: "underline" }}>طلباتك</a>.</p>
+          ) : subscriptionId && subscriptionStatus ? (
             <Suspense fallback={null}>
-              <PaymentClient subscriptionId={subscriptionId} amountSar={amountSar} summary={summary} paymentsEnabled={paymentsEnabled} />
+              <PaymentClient subscriptionId={subscriptionId} subscriptionStatus={subscriptionStatus}
+                amountSar={amountSar} summary={summary} paymentsEnabled={paymentsEnabled} />
             </Suspense>
           ) : (
             <p>رابط غير صالح — ابدأ التسجيل من جديد من صفحة الخطط.</p>

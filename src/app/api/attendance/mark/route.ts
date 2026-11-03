@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isTeamsMeetingUrl } from "@/lib/teaching-readiness";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { resolveParentIdentityForUser } from "@/lib/require-parent";
@@ -81,6 +82,11 @@ export async function POST(req: Request) {
 
   if (now < opensAt || now > closesAt) {
     return NextResponse.json({ error: "الجلسة ليست متاحة للدخول الآن" }, { status: 409 });
+  }
+
+  // A missing or unsafe meeting link must not produce a false attendance record.
+  if (!isTeamsMeetingUrl(session.meeting_url)) {
+    return NextResponse.json({ error: "رابط Microsoft Teams غير جاهز لهذه الجلسة" }, { status: 409 });
   }
 
   const { error } = await admin

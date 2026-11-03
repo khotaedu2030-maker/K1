@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import StudentShell from "@/components/StudentShell";
 import { getActiveStudentSession } from "@/lib/student-mode";
 import { getToneLevel } from "@/lib/grade-config";
+import { formatSessionDay, formatSessionTime } from "@/lib/arabic-time";
+import { getRiyadhCalendarDate, riyadhWallClockToUtcInstant } from "@/lib/riyadh-time";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 
@@ -41,7 +43,7 @@ export default async function P() {
         .from("sessions")
         .select("id, starts_at, status, cohorts(title, teacher_id, teachers(full_name))")
         .in("cohort_id", cohortIds)
-        .gte("starts_at", new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
+        .gte("starts_at", riyadhWallClockToUtcInstant(getRiyadhCalendarDate(new Date()), 0, 0).toISOString())
         .order("starts_at", { ascending: true })
         .limit(14)
     : { data: [] };
@@ -63,10 +65,10 @@ export default async function P() {
           <div className="student-card" key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <b style={{ fontSize: junior ? 18 : 15 }}>
-                {new Date(s.starts_at).toLocaleDateString("ar-SA", { weekday: "long" })}
+                {formatSessionDay(s.starts_at)}
               </b>
               <p style={{ margin: "4px 0 0", color: "var(--gray)" }}>
-                {new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                {formatSessionTime(s.starts_at)}
                 {!junior && cohort?.title ? ` • ${cohort.title}` : ""}
                 {!junior && supabaseRelationOne(cohort?.teachers)?.full_name ? ` • ${supabaseRelationOne(cohort?.teachers)?.full_name}` : ""}
               </p>

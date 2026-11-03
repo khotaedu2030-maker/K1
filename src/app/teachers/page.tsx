@@ -1,4 +1,5 @@
 import Image from "next/image";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import Reveal from "@/components/Reveal";
@@ -7,14 +8,15 @@ export default function P() {
   return (
     <Shell transparentHeader>
       <main>
-        <section className="hero-editorial-v28" style={{ minHeight: "68vh" }}>
-          <div className="bg">
+        <section className="hero-editorial-v28 hero-split-m" style={{ minHeight: "68vh" }}>
+          <div className="bg" data-light="true">
             <Image
               src="/images/khota-teacher.webp"
               alt="معلمة سعودية تقدّم جلسة تعليمية عن بُعد"
               fill
               sizes="100vw"
-              style={{ objectFit: "cover", objectPosition: "45% 20%" }}
+              className="cover-photo"
+              style={{ "--op": "30% 20%", "--op-m": "15% 20%" } as CSSProperties}
               priority
             />
           </div>

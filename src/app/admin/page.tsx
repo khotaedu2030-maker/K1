@@ -1,16 +1,17 @@
 import Link from "next/link";
 import AdminShell from "@/components/AdminShell";
+import { formatSessionTime } from "@/lib/arabic-time";
 import { getAdminIdentity } from "@/lib/admin-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { getSessionTeacherAlert, type SessionTeacherAlertInput } from "@/lib/admin-session-alerts";
+import { getRecentAttendanceReview } from "@/lib/admin-attendance-review";
+import { supabaseRelationOne, type SupabaseRelation } from "@/lib/supabase-relations";
 import { addRiyadhCalendarDays, formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
 
-type TodaySession = {
+type TodaySession = SessionTeacherAlertInput & {
   id: string;
   starts_at: string;
-  status: string;
-  teacher_id: string | null;
-  cohorts: { title: string }[];
-  teachers: { full_name: string; active: boolean }[];
+  cohorts: SupabaseRelation<{ title: string | null }>;
 };
 
 async function getOverviewData() {
@@ -22,6 +23,7 @@ async function getOverviewData() {
   const [
     { count: children },
     { count: activeSubs },
+    { count: pendingSubs },
     { count: pausedSubs },
     { data: todaySessions },
     { count: pendingApplications },
@@ -29,10 +31,12 @@ async function getOverviewData() {
     { count: newPremiumRequests },
     { count: unusedMakeupCredits },
     { count: activeTeachers },
+    { data: operationalCohorts },
     { data: recentCompletedSessions },
   ] = await Promise.all([
     supabase.from("children").select("*", { count: "exact", head: true }),
     supabase.from("subscriptions").select("*", { count: "exact", head: true }).eq("status", "active"),
+    supabase.from("subscriptions").select("*", { count: "exact", head: true }).eq("status", "pending_payment"),
     supabase.from("subscriptions").select("*", { count: "exact", head: true }).eq("status", "paused"),
     supabase
       .from("sessions")
@@ -44,25 +48,21 @@ async function getOverviewData() {
     supabase.from("premium_requests").select("*", { count: "exact", head: true }).eq("status", "new"),
     supabase.from("makeup_credits").select("*", { count: "exact", head: true }).eq("status", "available"),
     supabase.from("teachers").select("*", { count: "exact", head: true }).eq("active", true),
+    supabase.from("cohorts").select("id,title,teacher_id,meeting_url").eq("status", "open"),
     supabase
       .from("sessions")
-      .select("id")
+      .select("id, cohort_id, session_date")
       .eq("status", "completed")
       .lt("session_date", today)
       .gte("session_date", weekAgo),
   ]);
 
-  const recentSessionIds = (recentCompletedSessions ?? []).map((session: { id: string }) => session.id);
-  const { data: recentAttendance } = recentSessionIds.length
-    ? await supabase.from("attendance").select("session_id").in("session_id", recentSessionIds)
-    : { data: [] as { session_id: string }[] };
-
-  const sessionsWithAttendance = new Set((recentAttendance ?? []).map((row: { session_id: string }) => row.session_id));
-  const unrecordedAttendanceSessions = recentSessionIds.filter((id) => !sessionsWithAttendance.has(id)).length;
+  const attendanceReview = await getRecentAttendanceReview(recentCompletedSessions ?? []);
 
   return {
     children: children ?? 0,
     activeSubs: activeSubs ?? 0,
+    pendingSubs: pendingSubs ?? 0,
     pausedSubs: pausedSubs ?? 0,
     todaySessions: todaySessions ?? [],
     pendingApplications: pendingApplications ?? 0,
@@ -70,7 +70,8 @@ async function getOverviewData() {
     newPremiumRequests: newPremiumRequests ?? 0,
     unusedMakeupCredits: unusedMakeupCredits ?? 0,
     activeTeachers: activeTeachers ?? 0,
-    unrecordedAttendanceSessions,
+    cohortsMissingOperations: (operationalCohorts ?? []).filter((cohort) => !cohort.teacher_id || !cohort.meeting_url?.trim()).length,
+    attendanceReview,
   };
 }
 
@@ -91,12 +92,14 @@ export default async function AdminOverviewPage() {
   const d = await getOverviewData();
 
   const actionQueue = [
-    ...d.todaySessions
-      .filter((s: TodaySession) => s.status === "scheduled" && (!s.teacher_id || !s.teachers[0] || s.teachers[0].active === false))
-      .map((s: TodaySession) => ({
-        label: `${new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })} — ${s.cohorts[0]?.title ?? "—"} — ${!s.teacher_id || !s.teachers[0] ? "بدون معلم" : `المعلم المعيّن (${s.teachers[0].full_name}) غير نشط`}`,
-        href: "/admin/sessions",
-      })),
+    ...d.todaySessions.flatMap((s: TodaySession) => {
+      const alert = getSessionTeacherAlert(s);
+      return alert
+        ? [{ label: `${formatSessionTime(s.starts_at)} — ${supabaseRelationOne(s.cohorts)?.title ?? "—"} — ${alert}`, href: "/admin/sessions" }]
+        : [];
+    }),
+    d.pendingSubs > 0 && { label: `${d.pendingSubs} طلب تسجيل محفوظ بانتظار التفعيل — راجع جاهزية المجموعة أولًا`, href: "/admin/pilot-activations" },
+    d.cohortsMissingOperations > 0 && { label: `${d.cohortsMissingOperations} مجموعة بلا معلم أو رابط جلسة — استكمل التجهيز`, href: "/admin/groups" },
     d.pendingApplications > 0 && { label: `${d.pendingApplications} طلب معلم جديد بانتظار المراجعة`, href: "/admin/teacher-applications" },
     d.newContactRequests > 0 && { label: `${d.newContactRequests} رسالة تواصل جديدة`, href: "/admin/requests" },
     d.newPremiumRequests > 0 && { label: `${d.newPremiumRequests} طلب اهتمام جديد`, href: "/admin/requests" },
@@ -111,8 +114,10 @@ export default async function AdminOverviewPage() {
       <div className="admin-kpi-grid">
         <div className="admin-kpi-card"><strong>{d.children}</strong><span>الأبناء المسجّلون</span></div>
         <div className="admin-kpi-card"><strong>{d.activeSubs}</strong><span>اشتراكات فعّالة</span></div>
+        <div className="admin-kpi-card"><strong>{d.pendingSubs}</strong><span>طلبات محفوظة بانتظار التفعيل</span></div>
         <div className="admin-kpi-card"><strong>{d.pausedSubs}</strong><span>اشتراكات موقوفة</span></div>
         <div className="admin-kpi-card"><strong>{d.activeTeachers}</strong><span>معلمون نشطون</span></div>
+        <div className="admin-kpi-card"><strong>{d.cohortsMissingOperations}</strong><span>مجموعات تحتاج تجهيزًا</span></div>
         <div className="admin-kpi-card"><strong>{d.todaySessions.length}</strong><span>جلسات اليوم</span></div>
         <div className="admin-kpi-card"><strong>{d.unusedMakeupCredits}</strong><span>أرصدة تعويض غير مستخدَمة</span></div>
       </div>
@@ -142,8 +147,8 @@ export default async function AdminOverviewPage() {
             <div style={{ marginTop: 10 }}>
               {d.todaySessions.slice(0, 8).map((s: TodaySession) => (
                 <div className="taskline" key={s.id}>
-                  <span>{new Date(s.starts_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })} — {s.cohorts[0]?.title ?? "—"}</span>
-                  <span>{s.status}{s.status === "scheduled" && (!s.teacher_id || !s.teachers[0]) ? " — بدون معلم" : s.status === "scheduled" && s.teachers[0]?.active === false ? ` — ${s.teachers[0].full_name} (غير نشط)` : ""}</span>
+                  <span>{formatSessionTime(s.starts_at)} — {supabaseRelationOne(s.cohorts)?.title ?? "—"}</span>
+                  <span>{s.status}{getSessionTeacherAlert(s) ? ` — ${getSessionTeacherAlert(s)}` : ""}</span>
                 </div>
               ))}
             </div>
@@ -151,13 +156,19 @@ export default async function AdminOverviewPage() {
         </div>
       </div>
 
-      {d.unrecordedAttendanceSessions > 0 && (
+      {(d.attendanceReview.unrecordedSessionIds.length > 0 || d.attendanceReview.partialSessionIds.length > 0 || d.attendanceReview.error) && (
         <div className="dashcard" style={{ marginTop: 20, borderColor: "var(--p)" }}>
-          <span className="badge" style={{ color: "var(--p)" }}>تنبيه تشغيلي</span>
-          <p style={{ marginTop: 8 }}>
-            {d.unrecordedAttendanceSessions} جلسة مكتملة خلال آخر 7 أيام بلا أي سجل حضور —
-            راجع <Link href="/admin/attendance" style={{ color: "var(--t)", fontWeight: 700 }}>صفحة الحضور</Link>.
-          </p>
+          <span className="badge" style={{ color: "var(--p)" }}>تنبيه تشغيلي للحضور</span>
+          {d.attendanceReview.error ? (
+            <p style={{ marginTop: 8 }}>تعذّر التحقق من اكتمال سجلات الحضور. يرجى مراجعة صفحة الحضور.</p>
+          ) : (
+            <p style={{ marginTop: 8 }}>
+              {d.attendanceReview.unrecordedSessionIds.length} جلسة مكتملة بلا أي سجل حضور،
+              و{d.attendanceReview.partialSessionIds.length} جلسة قد يكون حضور بعض طلابها غير مسجّل
+              (وفق الاشتراكات الفعّالة حاليًا) خلال آخر 7 أيام.
+            </p>
+          )}
+          <Link href="/admin/attendance" style={{ color: "var(--t)", fontWeight: 700 }}>مراجعة سجلات الحضور</Link>
         </div>
       )}
     </AdminShell>

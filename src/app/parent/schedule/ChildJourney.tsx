@@ -11,11 +11,11 @@ export type PulseSnapshot = {
   updatedAt: string;
 } | null;
 
-export default function ChildJourney({ pulse }: { pulse: PulseSnapshot }) {
+export default function ChildJourney({ pulse, childName }: { pulse: PulseSnapshot; childName: string | null }) {
   if (!pulse) {
     return (
       <div className="dashcard">
-        <b>تقدّم الطالب</b>
+        <b>{childName ? "تقدّم " + childName : "تقدّم الطالب"}</b>
         <p style={{ color: "var(--gray)", marginTop: 8 }}>ستظهر هنا تحديثات تقدّم طفلك بعد أول جلسة.</p>
         <p style={{ color: "var(--gray)", fontSize: 13, marginTop: 4 }}>نلخص لك ما أنجزه وما يحتاج متابعة منك.</p>
       </div>
@@ -33,7 +33,7 @@ export default function ChildJourney({ pulse }: { pulse: PulseSnapshot }) {
 
   return (
     <div className="dashcard">
-      <b>تقدّم الطالب</b>
+      <b>{childName ? "تقدّم " + childName : "تقدّم الطالب"}</b>
       <div className="taskline">
         <span className="ok">✓</span>
         <div>

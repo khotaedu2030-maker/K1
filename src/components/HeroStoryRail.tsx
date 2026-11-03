@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -9,6 +9,8 @@ export type HeroStory = {
   image: string;
   alt: string;
   objectPosition: string;
+  objectPositionMobile?: string;
+  light?: boolean;
   h1: [string, string];
   lead: string;
   ctaLabel: string;
@@ -49,7 +51,7 @@ export default function HeroStoryRail({ stories }: { stories: HeroStory[] }) {
 
   return (
     <>
-      <div className="bg">
+      <div className="bg" data-light={story.light ? "true" : "false"}>
         {stories.map((s, i) => (
           <Image
             key={s.image}
@@ -57,7 +59,8 @@ export default function HeroStoryRail({ stories }: { stories: HeroStory[] }) {
             alt={s.alt}
             fill
             sizes="100vw"
-            style={{ objectFit: "cover", objectPosition: s.objectPosition, opacity: i === active ? 1 : 0, transition: "opacity 700ms var(--ease-premium)" }}
+            className="cover-photo"
+            style={{ "--op": s.objectPosition, "--op-m": s.objectPositionMobile ?? s.objectPosition, opacity: i === active ? 1 : 0, transition: "opacity 700ms var(--ease-premium)" } as CSSProperties}
             priority={i === 0}
             loading={i === 0 ? "eager" : "lazy"}
           />
