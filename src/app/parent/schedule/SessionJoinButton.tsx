@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { beginMeetingJoin, cancelMeetingJoin, finishMeetingJoin } from "@/lib/meeting-join";
 
 type Status = "too-early" | "joinable" | "ended";
 
@@ -39,22 +40,33 @@ export default function SessionJoinButton({
   if (now > end) status = "ended";
 
   async function join() {
+    // Reserve the tab synchronously on click, before awaiting the attendance API.
+    const pendingTab = beginMeetingJoin(window);
     setError(null);
     setLoading(true);
-    const res = await fetch("/api/attendance/mark", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, childId }),
-    });
-    const data = await res.json();
-    setLoading(false);
-
-    if (!res.ok) {
-      setError(data.error ?? "تعذّر الدخول إلى الجلسة.");
-      return;
-    }
-    if (data.meetingUrl) {
-      window.open(data.meetingUrl, "_blank", "noopener,noreferrer");
+    try {
+      const res = await fetch("/api/attendance/mark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, childId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        cancelMeetingJoin(pendingTab);
+        setError(typeof data.error === "string" ? data.error : "تعذّر الدخول إلى الجلسة.");
+        return;
+      }
+      const outcome = finishMeetingJoin(window, pendingTab, data.meetingUrl);
+      if (outcome !== "opened") {
+        setError(outcome === "closed"
+          ? "أُغلقت نافذة الجلسة. اضغط دخول الجلسة للمحاولة مجددًا."
+          : "رابط Microsoft Teams غير جاهز بعد. تواصل مع إدارة خُطى.");
+      }
+    } catch {
+      cancelMeetingJoin(pendingTab);
+      setError("تعذّر الاتصال. حاول مرة أخرى.");
+    } finally {
+      setLoading(false);
     }
   }
 
