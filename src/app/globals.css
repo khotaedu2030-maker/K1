@@ -926,3 +926,18 @@ header.transparent + #main-content > main > .hero-editorial-v28:first-child{marg
 .kh-settings-error{color:#b42318;font-weight:600;font-size:13px;margin:12px 0}.kh-settings-success{color:var(--t);font-weight:700;font-size:12px;margin:12px 0}
 @media(max-width:860px){.kh-settings{grid-template-columns:1fr}.kh-settings-menu{position:static}.kh-settings-panel{padding:16px;min-height:0}}
 @media(max-width:480px){.kh-settings-item{align-items:flex-start;gap:14px;padding:14px}.kh-settings-item small{font-size:11px}.kh-settings-panel-head h2{font-size:20px}.kh-settings-value input{width:68px}.kh-settings-live{font-size:10px}}
+
+/* Photo refresh (light photographs): focal points per breakpoint, text scrims, mobile image/text split */
+.cover-photo{object-fit:cover;object-position:var(--op,50% 50%)}
+@media(max-width:850px){.cover-photo{object-position:var(--op-m,var(--op,50% 50%))}}
+.hero-editorial-v28 .bg::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;opacity:0;transition:opacity 700ms var(--ease-premium);background:linear-gradient(270deg,rgba(13,27,42,.9) 0%,rgba(13,27,42,.8) 36%,rgba(13,27,42,.45) 54%,rgba(13,27,42,.1) 68%,transparent 78%)}
+.hero-editorial-v28 .bg[data-light="true"]::before{opacity:1}
+.hero-editorial-v28 .bg[data-light="true"]::after{background:linear-gradient(0deg,rgba(13,27,42,.78) 0%,rgba(13,27,42,.34) 26%,transparent 52%)}
+.quiet-cinematic .bg[data-light="true"]::after{background:linear-gradient(0deg,rgba(13,27,42,.9) 0%,rgba(13,27,42,.6) 30%,rgba(13,27,42,.1) 60%,transparent 78%),linear-gradient(270deg,rgba(13,27,42,.88) 0%,rgba(13,27,42,.78) 38%,rgba(13,27,42,.4) 56%,transparent 72%)}
+@media(max-width:850px){
+  .hero-editorial-v28.hero-split-m{background:var(--n);padding-top:calc(min(52svh,460px) - 36px)}
+  .hero-split-m .bg{inset:0 0 auto 0;height:min(52svh,460px)}
+  .hero-split-m .bg::before{opacity:0!important}
+  .hero-editorial-v28.hero-split-m .bg::after,.hero-editorial-v28.hero-split-m .bg[data-light="true"]::after{background:linear-gradient(0deg,var(--n) 0%,rgba(13,27,42,.55) 24%,transparent 58%)}
+}
+@media(max-width:850px){.quiet-cinematic .bg[data-light="true"]::after{background:linear-gradient(0deg,rgba(13,27,42,.94) 0%,rgba(13,27,42,.8) 50%,rgba(13,27,42,.35) 75%,transparent 95%)}}
