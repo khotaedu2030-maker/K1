@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { beginMeetingJoin, cancelMeetingJoin, finishMeetingJoin } from "@/lib/meeting-join";
 import { formatSessionDay, formatSessionTime } from "@/lib/arabic-time";
 import { formatRiyadhCalendarDate, getRiyadhCalendarDate } from "@/lib/riyadh-time";
 
@@ -43,29 +44,43 @@ export default function StudentSessionCard({ session, junior }: { session: Sessi
   const status = now > end ? "ended" : now >= opensAt ? "joinable" : "early";
 
   async function join() {
-    if (!session) return;
+    if (!session || loading) return;
+    const pendingTab = beginMeetingJoin(window);
     setLoading(true);
     setError(null);
-    const res = await fetch("/api/student/attendance/mark", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id }),
-    });
-    const data = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(data.error ?? "تعذّر الدخول.");
-      return;
+    try {
+      const res = await fetch("/api/student/attendance/mark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        cancelMeetingJoin(pendingTab);
+        setError(typeof data.error === "string" ? data.error : "تعذّر الدخول.");
+        return;
+      }
+      const outcome = finishMeetingJoin(window, pendingTab, data.meetingUrl);
+      if (outcome === "opened") {
+        setJoined(true);
+      } else {
+        setError(outcome === "closed"
+          ? "أُغلقت نافذة الجلسة. جرّب الدخول مجددًا."
+          : "رابط Microsoft Teams غير جاهز بعد. تواصل مع إدارة خُطى.");
+      }
+    } catch {
+      cancelMeetingJoin(pendingTab);
+      setError("تعذّر الاتصال. حاول مرة أخرى.");
+    } finally {
+      setLoading(false);
     }
-    setJoined(true);
-    if (data.meetingUrl) window.open(data.meetingUrl, "_blank", "noopener,noreferrer");
   }
 
-  if (status === "ended" || joined) {
+  if (status === "ended") {
     return (
       <div className="session-hero done">
-        <span>{junior ? "🎉" : "جلسة اليوم"}</span>
-        <span className="big-time">تمت الجلسة ✓</span>
+        <span>{junior ? "جلسة اليوم" : session.title}</span>
+        <span className="big-time">انتهى وقت الدخول إلى الجلسة</span>
       </div>
     );
   }
@@ -79,14 +94,14 @@ export default function StudentSessionCard({ session, junior }: { session: Sessi
           {formatSessionTime(start)}
         </span>
       ) : (
-        <span className="big-time">جاهز الآن!</span>
+        <span className="big-time">{joined ? "تم تسجيل حضورك ✓" : "جاهز الآن!"}</span>
       )}
       {status === "early" && (
         <span style={{ opacity: 0.8 }}>باقي {formatCountdown(start.getTime() - now.getTime())}</span>
       )}
       {status === "joinable" && (
         <button className="btn join-pulse" onClick={join} disabled={loading}>
-          {loading ? "جارٍ الدخول..." : "دخول الجلسة الآن ←"}
+          {loading ? "جارٍ الدخول..." : joined ? "فتح رابط الجلسة مجددًا ←" : "دخول الجلسة الآن ←"}
         </button>
       )}
       {error && <p style={{ color: "var(--p)", marginTop: 10 }}>{error}</p>}
