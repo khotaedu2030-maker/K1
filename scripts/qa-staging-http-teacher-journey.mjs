@@ -556,9 +556,15 @@ try{
   const notReadyTrial=await request("/api/admin/pilot-activate",{
     method:"POST",cookieHeader:pilotAdmin.cookieHeader,body:trialBody,
   });
+  let notReadyReason = "(not JSON)";
+  try {
+    const payload = JSON.parse(notReadyTrial.html);
+    notReadyReason = typeof payload?.error === "string" ? payload.error.slice(0, 120) : "(no error field)";
+  } catch { /* diagnostic string only, no secrets or response body */ }
   verify(notReadyTrial.status===409 &&
     notReadyTrial.html.includes("Teams"),
-    "Super admin must be blocked until the cohort has a verified Teams link");
+    "Super admin must be blocked until the cohort has a verified Teams link (HTTP " +
+      notReadyTrial.status + "; reason: " + notReadyReason + ")");
   const {data:preTrial,error:preTrialError}=await admin.from("subscriptions")
     .select("status").eq("id",subscriptionId).single();
   verify(!preTrialError && preTrial?.status==="pending_payment",
