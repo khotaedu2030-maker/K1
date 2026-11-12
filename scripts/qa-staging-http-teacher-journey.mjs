@@ -530,9 +530,10 @@ try{
     !unknownPaidView.html.includes("تم حفظ طلب تسجيلك"),
     "An unknown subscription id must not claim a valid saved seat or payment");
   const subList=await request("/parent/subscriptions",{cookieHeader:parent.cookieHeader});
-  verify(subList.status===200 && subList.html.includes("بانتظار الدفع") &&
-    subList.html.includes("طالب تسجيل مؤقت"),
-    "Parent subscriptions list reflects pending enrollment rather than active");
+  verify(subList.status===200 && subList.html.includes("الطلب محفوظ — بانتظار التفعيل") &&
+    subList.html.includes("طالب تسجيل مؤقت") &&
+    !subList.html.includes("تم تفعيل الاشتراك"),
+    "Parent subscriptions list reflects pending activation while payments are disabled");
 
   // Free-pilot verification is local-server-only; hosted Staging flag remains OFF.
   // The earlier subscriptionId is still pending_payment. No invoice is created.
@@ -555,9 +556,15 @@ try{
   const notReadyTrial=await request("/api/admin/pilot-activate",{
     method:"POST",cookieHeader:pilotAdmin.cookieHeader,body:trialBody,
   });
+  let notReadyReason = "(not JSON)";
+  try {
+    const payload = JSON.parse(notReadyTrial.html);
+    notReadyReason = typeof payload?.error === "string" ? payload.error.slice(0, 120) : "(no error field)";
+  } catch { /* diagnostic string only, no secrets or response body */ }
   verify(notReadyTrial.status===409 &&
     notReadyTrial.html.includes("Teams"),
-    "Super admin must be blocked until the cohort has a verified Teams link");
+    "Super admin must be blocked until the cohort has a verified Teams link (HTTP " +
+      notReadyTrial.status + "; reason: " + notReadyReason + ")");
   const {data:preTrial,error:preTrialError}=await admin.from("subscriptions")
     .select("status").eq("id",subscriptionId).single();
   verify(!preTrialError && preTrial?.status==="pending_payment",
