@@ -530,9 +530,10 @@ try{
     !unknownPaidView.html.includes("تم حفظ طلب تسجيلك"),
     "An unknown subscription id must not claim a valid saved seat or payment");
   const subList=await request("/parent/subscriptions",{cookieHeader:parent.cookieHeader});
-  verify(subList.status===200 && subList.html.includes("بانتظار الدفع") &&
-    subList.html.includes("طالب تسجيل مؤقت"),
-    "Parent subscriptions list reflects pending enrollment rather than active");
+  verify(subList.status===200 && subList.html.includes("الطلب محفوظ — بانتظار التفعيل") &&
+    subList.html.includes("طالب تسجيل مؤقت") &&
+    !subList.html.includes("تم تفعيل الاشتراك"),
+    "Parent subscriptions list reflects pending activation while payments are disabled");
 
   // Free-pilot verification is local-server-only; hosted Staging flag remains OFF.
   // The earlier subscriptionId is still pending_payment. No invoice is created.
